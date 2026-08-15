@@ -1,0 +1,308 @@
+# Phân tích Tài liệu & Quản lý Kiểm thử Tự động (AI Test Case Generator & Management System)
+
+Xây dựng ứng dụng web Full-stack toàn diện cho phép người dùng đăng ký/đăng nhập, tải lên tài liệu yêu cầu nghiệp vụ (PDF/TXT/DOCX), sử dụng AI (Google Gemini, OpenAI GPT, Claude, DeepSeek...) để tự động phân tích và sinh ra bộ Test Case chuẩn. Đồng thời, hệ thống cung cấp giao diện quản lý thực thi kiểm thử (chọn Server, Hệ điều hành, nhập Kết quả thực tế, Đánh giá Pass/Fail/Blocked, Ghi chú, gắn nhãn cảnh báo trực quan cho các case thất bại), lưu trữ toàn bộ dữ liệu vào cơ sở dữ liệu PostgreSQL và hỗ trợ xuất báo cáo Excel (.xlsx) với định dạng chuyên nghiệp.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Tính năng MỚI cần xác nhận – Database Setup & Initialization (Tương tự Odoo Database Manager):**
+>
+> Khi hệ thống khởi động lần đầu hoặc chưa có kết nối Database hợp lệ, thay vì báo lỗi, hệ thống sẽ tự động chuyển hướng đến **trang Setup Database** cho phép:
+> 1. **Nhập thông tin Database Server**: Host/IP, Port, Username, Password.
+> 2. **Chọn Database đã tồn tại** hoặc **Tạo mới Database**: Nhập tên Database mong muốn, hệ thống tự tạo DB trên server PostgreSQL.
+> 3. **Tự động chạy Migration**: Sau khi kết nối/tạo DB thành công, tự động chạy Prisma migrate để tạo toàn bộ bảng schema.
+> 4. **Tạo Admin Account đầu tiên**: Cho phép tạo tài khoản admin ngay trong quá trình setup.
+> 5. **Lưu cấu hình**: Ghi lại thông tin kết nối vào file `.env` hoặc config file để các lần khởi động sau tự động kết nối.
+>
+> **Cơ chế hoạt động:**
+> - Server khởi động → Kiểm tra kết nối DB
+>   - ✅ Kết nối OK → Chạy bình thường (Auth, Dashboard, v.v.)
+>   - ❌ Kết nối thất bại → API trả trạng thái `SETUP_REQUIRED` → Frontend hiển thị trang Setup Database
+> - Trang Setup cho phép nhập lại thông tin DB mới bất kỳ lúc nào từ Settings (chỉ Admin).
+
+> [!IMPORTANT]
+> **Các thành phần kiến trúc chính cần xác nhận:**
+> 1. **Cơ sở dữ liệu (PostgreSQL)**: Toàn bộ dữ liệu sẽ được lưu trữ và quản lý trên PostgreSQL (thông qua Prisma ORM). Bao gồm bảng `TestExecution` có cột **Server** và **Hệ điều hành**.
+> 2. **Hỗ trợ Đa nhà cung cấp AI (Multi-Provider AI Engine)**: Google Gemini, OpenAI, Claude, DeepSeek và Custom endpoint.
+> 3. **Xác thực & Bảo mật (Authentication)**: JWT token + bcrypt.
+> 4. **Quản lý Thực thi Test Case & Nhận diện Case Thất bại**: Drawer chi tiết, nhập Server/OS, badge cảnh báo FAILED.
+> 5. **Xuất Excel Chuẩn Đẹp**: `.xlsx` đầy đủ định dạng chuyên nghiệp.
+
+---
+
+## Kiến trúc Hệ thống & Cơ sở Dữ liệu
+
+### Luồng Database Setup (Tương tự Odoo)
+
+```mermaid
+flowchart TD
+    A["🚀 Server Khởi động"] --> B{"Kiểm tra DATABASE_URL trong .env"}
+    B -- "Có cấu hình" --> C{"Test kết nối PostgreSQL"}
+    B -- "Không có / Trống" --> F["⚠️ API trả SETUP_REQUIRED"]
+    C -- "✅ Kết nối OK" --> D["Kiểm tra Schema (Prisma)"]
+    C -- "❌ Kết nối thất bại" --> F
+    D -- "Schema OK" --> E["✅ Chạy bình thường"]
+    D -- "Schema chưa có / cũ" --> G["Auto Migrate Schema"]
+    G --> E
+    F --> H["Frontend hiển thị trang Setup Database"]
+    H --> I["Người dùng nhập:<br/>• DB Host / IP<br/>• Port (5432)<br/>• DB Username<br/>• DB Password<br/>• Tên Database"]
+    I --> J{"Database đã tồn tại?"}
+    J -- "Có" --> K["Kết nối đến DB hiện có"]
+    J -- "Không" --> L["Tạo mới Database trên Server"]
+    L --> K
+    K --> M["Chạy Prisma Migration (tạo bảng)"]
+    M --> N["Tạo tài khoản Admin đầu tiên"]
+    N --> O["Ghi cấu hình vào .env"]
+    O --> P["🔄 Reload kết nối → Chạy bình thường"]
+```
+
+### PostgreSQL Schema
+
+```mermaid
+erDiagram
+    USERS ||--o{ DOCUMENTS : uploads
+    USERS ||--o{ TEST_EXECUTIONS : executes
+    DOCUMENTS ||--o{ TEST_SUITES : generates
+    TEST_SUITES ||--o{ TEST_CASES : contains
+    TEST_CASES ||--o{ TEST_EXECUTIONS : tracked_by
+    USERS ||--o{ AI_CONFIGS : configures
+
+    USERS {
+        uuid id PK
+        string email
+        string password_hash
+        string full_name
+        string role
+        timestamp created_at
+    }
+
+    DOCUMENTS {
+        uuid id PK
+        uuid user_id FK
+        string filename
+        string file_type
+        text raw_content
+        string status
+        timestamp created_at
+    }
+
+    TEST_SUITES {
+        uuid id PK
+        uuid document_id FK
+        string name
+        string module_name
+        text summary
+        text assumptions
+        timestamp created_at
+    }
+
+    TEST_CASES {
+        uuid id PK
+        uuid test_suite_id FK
+        string test_case_code "TC_KH_001"
+        string module
+        string platform "App | CMS | Web"
+        string title
+        string test_type "Luồng chuẩn | Luồng ngoại lệ | Giá trị biên"
+        text preconditions
+        text steps
+        text expected_result
+        string priority "Cao | Trung bình | Thấp"
+        int order_index
+        timestamp created_at
+    }
+
+    TEST_EXECUTIONS {
+        uuid id PK
+        uuid test_case_id FK
+        uuid executed_by FK
+        string server "DEV | STAGING | UAT | PROD"
+        string os "Windows 11 | macOS | Android 14 | iOS 17 | Ubuntu"
+        string status "PASSED | FAILED | BLOCKED | UNTESTED"
+        text actual_result
+        text evaluation
+        text notes
+        timestamp executed_at
+        timestamp updated_at
+    }
+
+    AI_CONFIGS {
+        uuid id PK
+        uuid user_id FK
+        string provider "gemini | openai | anthropic | deepseek | custom"
+        string api_key
+        string model_name
+        string base_url
+        boolean is_active
+    }
+```
+
+---
+
+## Proposed Changes
+
+### 0. Database Setup & Initialization Module (Tính năng MỚI) ⭐
+
+> [!IMPORTANT]
+> Module này cho phép hệ thống tự khởi tạo database từ giao diện web — tương tự cách Odoo hoạt động khi lần đầu cài đặt.
+
+#### [NEW] [databaseSetup.ts](file:///d:/Java%20lean/TestCase/server/src/services/databaseSetup.ts)
+Service xử lý logic khởi tạo Database:
+- **`testConnection(host, port, user, password, dbName)`**: Kiểm tra kết nối đến PostgreSQL server bằng `pg` driver (không qua Prisma).
+- **`listDatabases(host, port, user, password)`**: Liệt kê danh sách database có trên server (query `pg_database`).
+- **`createDatabase(host, port, user, password, dbName)`**: Tạo mới database bằng lệnh `CREATE DATABASE` thông qua kết nối admin.
+- **`runMigration(databaseUrl)`**: Chạy `prisma migrate deploy` programmatically để tạo toàn bộ bảng schema.
+- **`createAdminUser(databaseUrl, email, password, fullName)`**: Tạo tài khoản Admin đầu tiên (hash password bcrypt) trực tiếp vào DB mới.
+- **`updateEnvFile(databaseUrl)`**: Ghi lại `DATABASE_URL` vào file `.env` server.
+- **`reloadPrismaClient()`**: Disconnect Prisma hiện tại → Tạo lại instance với URL mới → Reconnect.
+
+#### [MODIFY] [database.ts](file:///d:/Java%20lean/TestCase/server/src/config/database.ts)
+- Thêm function `checkDatabaseConnection()` – kiểm tra Prisma có kết nối được DB không (try `prisma.$connect()`).
+- Thêm trạng thái `isDatabaseReady: boolean` để toàn bộ API middleware có thể kiểm tra.
+- Export function `reinitializePrisma(newUrl)` – cho phép reinitialize Prisma Client khi user setup DB mới.
+
+#### [NEW] [setupRoutes.ts](file:///d:/Java%20lean/TestCase/server/src/routes/setupRoutes.ts) & [setupController.ts](file:///d:/Java%20lean/TestCase/server/src/controllers/setupController.ts)
+API endpoints cho Database Setup:
+- `GET /api/setup/status` – Kiểm tra trạng thái hệ thống:
+  ```json
+  { "status": "SETUP_REQUIRED" | "READY", "message": "..." }
+  ```
+- `POST /api/setup/test-connection` – Test kết nối PostgreSQL (nhận host, port, user, password):
+  ```json
+  // Request
+  { "host": "192.168.1.100", "port": 5432, "user": "postgres", "password": "xxx" }
+  // Response
+  { "connected": true, "databases": ["postgres", "testcase_db", ...] }
+  ```
+- `POST /api/setup/create-database` – Tạo mới Database:
+  ```json
+  // Request
+  { "host": "...", "port": 5432, "user": "...", "password": "...", "dbName": "my_testcase_db" }
+  // Response
+  { "success": true, "message": "Database my_testcase_db created!" }
+  ```
+- `POST /api/setup/initialize` – Chạy full setup (kết nối + migrate + tạo admin):
+  ```json
+  // Request
+  {
+    "host": "192.168.1.100", "port": 5432, "user": "postgres", "password": "xxx",
+    "dbName": "testcase_db",
+    "adminEmail": "admin@company.com",
+    "adminPassword": "Admin@123",
+    "adminFullName": "System Admin"
+  }
+  // Response
+  { "success": true, "message": "Database initialized and Admin account created!" }
+  ```
+
+#### [MODIFY] [index.ts](file:///d:/Java%20lean/TestCase/server/src/index.ts)
+- Thêm middleware `dbCheckMiddleware` – chặn tất cả API (trừ `/api/setup/*` và `/api/health`) nếu DB chưa sẵn sàng, trả về `503 { status: "SETUP_REQUIRED" }`.
+- Mount `setupRoutes` vào `/api/setup`.
+- Khi server khởi động: gọi `checkDatabaseConnection()` → log trạng thái.
+
+#### [NEW] [DatabaseSetupPage.tsx](file:///d:/Java%20lean/TestCase/client/src/pages/Setup/DatabaseSetupPage.tsx)
+Trang Setup Database trên Frontend:
+- **Form nhập thông tin kết nối** (giao diện đẹp, tương tự Odoo):
+  - Database Host / IP Address (input text, placeholder: `localhost` hoặc `192.168.1.100`)
+  - Port (input number, default: `5432`)
+  - Database Username (input text, placeholder: `postgres`)
+  - Database Password (input password)
+  - Database Name (input text hoặc dropdown chọn từ danh sách nếu đã test kết nối)
+- **Nút "Test Kết nối"**: Gọi API test connection, hiển thị ✅/❌ và danh sách DB hiện có.
+- **Nút "Tạo Database Mới"**: Nếu DB Name chưa tồn tại, cho phép tạo mới.
+- **Form tạo Admin Account** (hiển thị sau khi kết nối thành công):
+  - Email Admin
+  - Mật khẩu Admin
+  - Họ tên Admin
+- **Nút "Khởi tạo Hệ thống"**: Gọi API initialize → hiển thị progress → redirect đến Login.
+- **Stepper UI**: Hiển thị các bước setup dạng wizard (Step 1: Kết nối DB → Step 2: Tạo/Chọn DB → Step 3: Tạo Admin → Step 4: Hoàn tất).
+
+#### [MODIFY] [App.tsx](file:///d:/Java%20lean/TestCase/client/src/App.tsx)
+- Thêm logic kiểm tra trạng thái hệ thống khi app load:
+  - Gọi `GET /api/setup/status`
+  - Nếu `SETUP_REQUIRED` → redirect tới `/setup`
+  - Nếu `READY` → tiếp tục flow Auth bình thường
+
+---
+
+### 1. Backend Service (Node.js + Express + PostgreSQL + Prisma)
+
+#### [EXISTING] [schema.prisma](file:///d:/Java%20lean/TestCase/server/prisma/schema.prisma)
+- Đã có đầy đủ schema: `User`, `Document`, `TestSuite`, `TestCase`, `TestExecution` (có `server` và `os`), `AiConfig`.
+
+#### [NEW] [aiService.ts](file:///d:/Java%20lean/TestCase/server/src/services/ai/aiService.ts)
+- Multi-provider Adapter: Gemini, OpenAI, DeepSeek, Claude.
+- System Prompt chuẩn hóa cấu trúc Test Case JSON.
+
+#### [EXISTING] [documentParser.ts](file:///d:/Java%20lean/TestCase/server/src/services/documentParser.ts)
+- Bộ giải mã nội dung tài liệu: PDF (`pdf-parse`), DOCX (`mammoth`), TXT.
+
+#### [EXISTING] [excelExporter.ts](file:///d:/Java%20lean/TestCase/server/src/services/excelExporter.ts)
+- Module xuất file Excel (.xlsx) với định dạng chuyên nghiệp, bao gồm cột Server, OS.
+
+#### [EXISTING] [routes & controllers](file:///d:/Java%20lean/TestCase/server/src/routes/)
+- `authRoutes.ts`, `aiRoutes.ts`, `testCaseRoutes.ts`, `executionRoutes.ts`, `exportRoutes.ts` đã được tạo.
+
+---
+
+### 2. Frontend Application (React + Vite + Tailwind CSS + Lucide Icons)
+
+#### [NEW] [Setup Page](file:///d:/Java%20lean/TestCase/client/src/pages/Setup/) ⭐
+- **DatabaseSetupPage.tsx** – Trang khởi tạo database (mô tả ở mục 0 bên trên).
+
+#### [NEW] [Auth Pages](file:///d:/Java%20lean/TestCase/client/src/pages/Auth/)
+- Đăng ký (`/register`) và Đăng nhập (`/login`).
+
+#### [NEW] [Dashboard & Suites](file:///d:/Java%20lean/TestCase/client/src/pages/Dashboard/)
+- Danh sách Test Suite, thống kê Pass Rate, Failed cases theo Server/OS.
+
+#### [NEW] [AI Generation Studio](file:///d:/Java%20lean/TestCase/client/src/pages/Generate/)
+- Kéo thả file, chọn AI Provider & Model, tuỳ chỉnh Prompt.
+
+#### [NEW] [Test Case Detail & Execution](file:///d:/Java%20lean/TestCase/client/src/pages/SuiteDetail/)
+- Bảng Test Case với badge FAILED, Drawer chi tiết, form nhập Server/OS/Actual Result.
+
+#### [NEW] [Settings](file:///d:/Java%20lean/TestCase/client/src/pages/Settings/)
+- Quản lý API Keys.
+- **Quản lý Database Connection** (chỉ Admin): Xem thông tin kết nối hiện tại, thay đổi cấu hình DB, test lại kết nối.
+
+---
+
+## Kế hoạch Thực hiện (Phases)
+
+| Phase | Nội dung công việc | Kết quả đầu ra |
+| :--- | :--- | :--- |
+| **Phase 0: Database Setup Module** ⭐ | - Xây dựng service `databaseSetup.ts` (test connection, create DB, run migration, create admin).<br>- Tạo API routes `/api/setup/*`.<br>- Thêm middleware kiểm tra trạng thái DB.<br>- Xây dựng trang Frontend `DatabaseSetupPage` dạng wizard.<br>- Logic auto-redirect khi DB chưa kết nối. | Hệ thống tự khởi tạo DB từ giao diện web, tương tự Odoo. |
+| **Phase 1: Setup & Database** | - Cấu hình PostgreSQL + Prisma ORM.<br>- Tạo migration các bảng (User, Document, TestCase, TestExecution với `server`, `os`). | Kết nối DB ổn định, schema sẵn sàng. |
+| **Phase 2: Auth & User Management** | - Backend Auth API (Register, Login, JWT).<br>- Frontend Login/Register. | Đăng ký, đăng nhập thành công. |
+| **Phase 3: Multi-Provider AI Engine** | - AI Service (Gemini, OpenAI, Claude, DeepSeek).<br>- Document Parser (PDF/TXT/DOCX).<br>- System Prompt chuẩn hóa. | AI sinh Test Case JSON chuẩn xác. |
+| **Phase 4: Test Case Execution & Detail View** | - Bảng Test Case, Drawer chi tiết.<br>- Form nhập Server, OS, Actual Result, Status, Notes.<br>- Badge FAILED, highlight, bộ lọc. | Quản lý & thực thi kiểm thử trực quan. |
+| **Phase 5: Excel Export & Dashboard Stats** | - Engine xuất Excel (cột Server, OS, kết quả).<br>- Dashboard thống kê. | Xuất Excel đẹp, xem báo cáo tổng quan. |
+| **Phase 6: Verification & Final Polish** | - Kiểm thử toàn diện e2e.<br>- Tinh chỉnh UI/UX, responsive. | Hệ thống hoàn thiện. |
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Kiểm tra trạng thái `SETUP_REQUIRED` khi chưa có cấu hình DB.
+- Kiểm tra API `POST /api/setup/test-connection` với thông tin hợp lệ và không hợp lệ.
+- Kiểm tra API `POST /api/setup/create-database` tạo mới DB trên PostgreSQL server.
+- Kiểm tra API `POST /api/setup/initialize` chạy full flow: kết nối → migrate → tạo admin.
+- Kiểm tra middleware chặn API khi DB chưa sẵn sàng (trả 503).
+- Kiểm tra kết nối DB và migrate schema (bao gồm cột `server`, `os`).
+- Kiểm tra Auth API (Register, Login, Token).
+- Kiểm tra AI Parser + Excel export.
+
+### Manual Verification
+1. **Kiểm tra Database Setup (Flow mới)**:
+   - Xóa/đổi tên file `.env` → Khởi động server → Frontend phải hiển thị trang Setup Database.
+   - Nhập Host/Port/User/Password → Bấm **"Test Kết nối"** → Xác nhận hiển thị ✅ và danh sách DB.
+   - Nhập tên DB mới → Bấm **"Tạo Database Mới"** → Xác nhận DB được tạo trên server.
+   - Nhập thông tin Admin → Bấm **"Khởi tạo Hệ thống"** → Xác nhận migration chạy, admin được tạo.
+   - Hệ thống tự redirect đến trang Login → Đăng nhập bằng tài khoản Admin vừa tạo.
+2. **Kiểm tra Reconnect**: Sau setup, restart server → Xác nhận hệ thống tự kết nối lại từ `.env` mà không cần setup lại.
+3. **Kiểm tra Xác thực**: Đăng ký → Đăng nhập → JWT token → Session.
+4. **Kiểm tra Sinh Test Case bằng AI**: Upload file → Chọn Provider → Sinh Test Case.
+5. **Kiểm tra Thực thi (Server + OS)**: Mở Drawer → Nhập Server, OS, Actual Result → Chọn FAILED → Lưu → Xác nhận badge đỏ.
+6. **Kiểm tra Xuất Excel**: Bấm Xuất → Mở file `.xlsx` → Xác nhận cột Server, OS, format màu sắc.

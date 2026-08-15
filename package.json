@@ -1,0 +1,19 @@
+{
+  "name": "ai-testcase-system",
+  "version": "1.0.0",
+  "description": "Full-stack AI Test Case Generator and Management System",
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File start-app.ps1",
+    "dev": "node scripts/kill-ports.js && node scripts/clean.js && concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "clean": "node scripts/clean.js",
+    "kill": "node scripts/kill-ports.js",
+    "server:dev": "npm --prefix server run dev",
+    "client:dev": "npm --prefix client run dev",
+    "build": "npm --prefix server run build && npm --prefix client run build",
+    "prisma:generate": "npm --prefix server run prisma:generate",
+    "prisma:push": "npm --prefix server run prisma:push"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
+  }
+}

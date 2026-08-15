@@ -1,0 +1,531 @@
+APP VINAGO
+(Module SẢN PHẨM)
+2. SẢN 
+PHẨM
+Danh mục sản
+phẩm
+Thiết lập hiển
+thị
+Ẩn hiện danh
+sách hiển thị
+Ẩn hiện SP
+Theo đối
+tượng
+Khách Sỉ
+Khách
+Lẻ/người mua
+Danh mục
+tương quan
+HH có đơn
+hàng thì PT tự
+động mởgiá
+SP bán chạy
+SP mới
+Import danh
+sách
+Tựđộng chạy
+theo rule
+SP tương tự
+Linh kiện/phụ
+tùng kèm theo
+DSSP không
+hưởng hoa
+hồng
+Danh mục yêu
+thích
+SP chưa từng
+mua
+Giao diện App
+SL bán
+Đánh giá SP
+Tồn kho theo
+SKU
+Nhận thông
+báo khi có
+hàng
+Tag cháy
+hàng/sắp hết
+hàng
+Chủđộng sắp
+xếp thứtựhiển
+thị
+Hiển thịgiá
+trước và sau
+giảm
+Có SL tối
+đa/đơn hàng
+DS NPP
+Làm trong GĐ1
+Làm trong GĐ sau
+Không làm
+Liên quan giá bán: Có ẩn hiện giá bán trên App
+I/ Cấu trúc Danh mục sản phẩm
+- Lưu ý: 
+• Giai đoạn 1: Danh mục sản phẩm Gốc thuộc TAFITCO (Như hình trên)
+• Giai đoạn 2: Tách danh mục gốc với danh mục trên ứng dụng
+o Danh mục sản phẩm Gốc:
+▪Danh mục hiển thịtrên TAFITCO
+▪Danh mục hiển thịtrên VINAGO
+II/ Danh mục sản phẩm
+1.
+Thiết lập danh mục sản phẩm hiển thị trên VINAGO
+- Danh mục hiển thị trên VINAGO:
+• Xây dựng danh mục hiển thị cho VINAGO dựa trên Cây thư mục sản phẩm Bravo
+• Danh mục bao gồm 4 cấp:
+o
+Cấp 1: Hiển thị tại Left menu trong trang sản phẩm
+▪
+Cho phép gắn các cấp PLSP hoặc Mặt hàng. 
+▪
+Là danh mục đóng/mở trên App.
+▪
+Thứ tự hiển thị từ trên xuống dưới theo thứ tự Bravo.
+▪
+Trên mỗi danh mục được thiết lập 1 bộ câu hỏi khảo sát
+o
+Cấp 2: Hiển thị bên phải trong trang sản phẩm, thuộc cấp con của danh mục Left menu
+▪
+Là cấp PLTTH/PLSP theo các PLSP hoặc Mặt hàng đã gắn trong Cấp 1. 
+▪
+Thứ tự hiển thị từ trên xuống dưới: Mặc định theo thứ tự Bravo và được điều chỉnh 
+▪
+Trường hợp phát sinh PLTTH/PLSP mới sẽ hiển thị trên cùng của danh mục Cấp 1 đó nếu trước đó đã có điều chỉnh 
+vị trí của danh mục Cấp 2.
+Lưu ý: Nếu Danh mục cấp 2 chưa có thao tác điều chỉnh vị trí thì khi phát sinh PLTTH/PLSP mới sẽ hiển thị theo thứ tự 
+Bravo. 
+o
+Cấp 3: Không hiển thị trên App
+▪
+Là cấp Nhóm hàng, thuộc cấp con của Cấp 2 (Cần xác nhận lại: Nếu cấp 2 là PLSP thì cấp 3 phải là PLTTH? => Có tối
+đa 5 cấp phải không? Vậy giao diện hiển thịthếnào?)
+o
+Cấp 4: 
+▪
+Là danh sách sản phẩm theo các cấp đã được gắn ở Cấp 1, 2, 3.
+II/ Danh mục sản phẩm
+1.
+Thiết lập danh mục sản phẩm hiển thị trên VINAGO
+- Danh mục hiển thị trên VINAGO:
+• Thao tác thiết lập trên CMS:
+o Trường dữ liệu: Left menu | Danh mục cấp 2| Danh mục cấp 3| Danh mục cấp 4|…
+▪Left menu: Là danh mục cấp 1. Có thêm nút để tạo hoặc gắn bộ câu hỏi khảo sát (Hiển thị cảnh báo danh mục đã 
+có hay chưa có bộ câu hỏi khảo sát. Thêm trang riêng để thiết lập bộ câu hỏi khảo sát gắn với danh mục sản phẩm)
+▪Danh mục cấp 2: Được thay đổi vị trí trên dưới trong cùng 1 Danh mục Cấp 1
+▪Danh mục cuối: Là danh sách sản phẩm. Đềxuất tách 1 trang riêng đểcập nhật/điều chỉnh khi có nhu cầu
+o Nút chức năng: Tạo mới, Chỉnh sửa, Reset, Xuất dữ liệu, Lịch sử cập nhật, Nút chuyển đổi giữa dạng bảng và dạng cây 
+thư mục
+o (Xác nhận trường dữliệu và Mô tảchi tiết sau)
+• Nguyên tắc hiển thị sản phẩm trên App
+o Hình 1: Được đổi vị trí của PLSP 1 và 2
+o Hình 2: Được đổi vị trí của PLTTH 1 và 2
+Hình 
+MH
+Tên MH
+Tên PLSP 1
+Tên PLSP 2
+Hình 
+PLTTH …
+Hình 
+PLTTH…
+Hình 
+PLTTH 1
+Hình 
+PLTTH 2
+Hình 
+PLTTH 3
+Hình 
+PLTTH …
+Hình 
+PLSP
+Tên PLSP
+Tên PLTTH 1
+Tên PLTTH 2
+Hình SKU
+Hình SKU
+Hình SKU
+Hình SKU
+II/ Danh mục sản phẩm
+1.
+Thiết lập danh mục sản phẩm hiển thị trên VINAGO
+- Danh sách sản phẩm trên VINAGO:
+• Là danh sách thuộc danh mục Cấp 4 trong Danh mục hiển thị tại VINAGO
+• Chi tiết sản phẩm: 
+o Dùng chung các trường dữ liệu sản phẩm trên TAFITCO (Sau này sẽ tách riêng: DSSP gốc (Nhận từ Bravo), DSSP TAFITCO, 
+DSSP VINAGO:
+▪Các cấp danh mục cha (Theo cây thư mục Bravo); 
+▪Thương hiệu (Theo Bravo)
+▪Mã sản phẩm; Tên sản phẩm; Tên rút gọn; Tên gọi khác (Theo Bravo)
+▪Đơn vị tính; Quy cách trong; Quy cách ngoài (Theo Bravo)
+▪Trạng thái sản phẩm; Hiển thị trên App; 
+▪Hình sản phẩm
+▪Quy cách; Đặc điểm 1; Đặc điểm 2
+▪Thông tin chung (Mô tả)
+▪Thông tin bảo hành
+▪Hướng dẫn sửdụng
+▪Thông số kỹ thuật
+o Bổ sung các trường dữ liệu chỉ áp dụng riêng cho VINAGO:
+▪Loại giá: Giá liên hệ; Giá định sẵn
+▪Giá bán: Là giá bán được cập nhật từ bảng giá, áp dụng với số lượng 1/SKU
+▪Giá theo combo: Là giá bán được áp dụng trên số lượng [n]/SKU. Tối đa có 3 combo
+▪Trạng thái bán hàng: Trạng thái hiển thị của sản phẩm tại VINAGO
+II/ Danh mục sản phẩm
+1.
+Thiết lập danh mục sản phẩm hiển thị trên VINAGO
+- Danh sách sản phẩm trên VINAGO:
+• Thao tác trên CMS:
+o Trường dữ liệu: Mã sản phẩm| Tên sản phẩm| Trạng thái bán hàng| …
+o Bấm xem chi tiết hiển thị các thông tin: …
+o
+(Hiển thịthông tin liên quan VINAGO hay qua TAFITCO đểxem?)
+o Nút chức năng: …
+o
+(Xác nhận được điều chỉnh những gì? Hay qua TAFITCO điều chỉnh?)
+o Nút chuyển đổi chế độ xem: Dạng cây thư muc; Dạng bảng
+o Bộ lọc: …
+II/ Danh mục sản phẩm
+2.
+Thiết lập Ẩn/Hiện danh mục sản phẩm trên VINAGO
+-
+Nguyên tắc: 
+•
+Danh mục sản phẩm trên VINAGO mặc định áp dụng theo trạng thái tại Danh mục sản phẩm trong dữ liệu Gốc (Hiện tại đang hiển thị tại “Quản lý 
+danh mục” trên TAFITCO)
+•
+Được thiết lập Ẩn hoặc Hiện các Cấp danh mục hiển thị trong VINAGO, bao gồm: Danh mục Cấp 1, Danh mục Cấp 2 và Danh mục Cấp 3 (Riêng 
+Danh mục Cấp 4 (SKU) được áp dụng theo trạng thái bán hàng trong chi tiết sản phẩm)
+(Lưu ý: Cần xây dựng thêm tool Ẩn/hiện danh mục hiển thị trên TAFITCO)
+•
+Thứ tự xét trạng thái hiển thị của sản phẩm: (Nếu ẩn thì ẩn luôn, nếu hiện mới xét tiếp)
+•
+1. Trạng thái trên danh mục Gốc
+•
+2. Trạng thái theo thiết lập trên từng ứng dụng. Trong đó thứ tự ưu tiên được xét từ Cấp 1 -> Cấp 4 
+=> SP hiển thị App khi Danh mục gốc, Danh mục VINAGO, Trạng thái bán hàng liên quan SP đó đều hiện (Chưa xét rule thiết lập ẩn hiện theo đối tượng)
+(Cần xác nhận lại nhu cầu. Nếu áp dụng thứtựnày thì chỉthiết lập Ẩn, không cần thiết lập Hiện)
+Ví dụ: PLTTH đầu bơm pít tông sứ HYUNDAI
+Tại Danh mục gốc: Trạng thái “Hiện”. Nhu cầu:
+-
+Chỉ bán trên VINAGO
+-
+Không bán trên TAFITCO
+Thiết lập:
+-
+TAFITCO: Ẩn PLTTH này (Làm thêm ẩn hiện tại thiết lập hiển thị)
+-
+VINAGO: Mặc định hiện (Cây thư mục đang hiện)
+Hoặc ngược lại cho bán trên TAFITCO, không bán trên VINAGO
+=> Tại VINAGO được thiết lập ẩn PLTTH đó
+-
+Thao tác trên CMS: 
+•
+Trường dữ liệu: …
+•
+Nút chức năng: …
+•
+Bộ lọc: …
+II/ Danh mục sản phẩm
+3.
+Thiết lập danh sách sản phẩm tương quan (Làm sau)
+- Thiết lập tương quan tự động mở giá phụ tùng (Tự động mở giá (Không ảnh hưởng phần đóng/mở danh mục SP))
+- Tham khảo hướng thiết lập:
+•
+Xây dựng liên kết giữa nhóm A và nhóm B (Chỉ đi 1 chiều từ A -> B): Khi Danh mục nào thuộc nhóm A, đã được đề xuất mở giá 
+và phát sinh đơn hàng (Không xét đơn từ CMS) thì Danh mục ở nhóm B sẽ tự động được mở giá (nếu trước đó chưa có đề xuất mở 
+giá)
+•
+Danh mục được gắn là danh mục hiển thị tại left menu
+Ví dụ: 
+STT
+Danh mục quyết định (A)
+Danh mục ảnh hưởng (B)
+1
+Đầu bơm ty sứ
+Đầu bơm ty thường; Phụ tùng đầu bơm
+2
+Máy cắt cỏ 2 thì
+Phụ tùng máy cắt cỏ
+3
+Máy cắt cỏ 4 thì
+Phụ tùng máy cắt cỏ
+III/ Ẩn hiện sản phẩm theo đối tượng
+1.
+Nguyên tắc thiết lập và áp dụng:
+-
+Nguyên tắc thiết lập: 
+•
+Được thiết lập trên nhóm đối tượng và trên nhóm danh mục sản phẩm/chi tiết sản phẩm:
+o Đối tượng: Chỉ định khách hàng; Phường/Xã; Tỉnh/Thành phố; KVKD; PKD; Cấp bậc; Loại khách hàng
+o Sản phẩm: Thiết lập theo Danh mục sản phẩm gốc (Cây thư mục); Danh sách sản phẩm
+•
+Luồng thiết lập:
+OP1: (Thiết lập giống ẩn hiện giá App. Nhược điểm: Chỉ áp dụng khi Đối tượng là chỉ định đại lý => Thực hiện thiết lập theo đối tượng. 
+Mỗi đối tượng là 1 dòng thiết lập.Tạo phiếu được chọn nhiều đối tượng, hệ thống tự rã theo từng đối tượng)
+Xem xét thêm nhu cầu: Thiết lập cho bộđối tượng thay vì chỉtừng đối tượng. Nếu có cần làm rõ thứtựưu tiên xét vầgiao diện tại danh sách
+thiết lập và phiếu cập nhật
+o Tạo thiết lập theo đối tượng tại mục “Thiết lập Ẩn hiện sản phẩm theo đối tượng”
+o Tạo phiếu cập nhật cho đối tượng đó tại mục “Cập nhật phiếu ẩn hiện sản phẩm theo đối tượng”
+OP2: (Thiết lập giống ẩn hiện sản phẩm theo đối tượng tại TAFITCO. Nhược điểm: Không chủ động điều chỉnh được khi dữ liệu thiết lập 
+của đối tượng quá nhiều) => Đề xuất không sử dụng
+o Tạo thiết lập cho từng đối tượng tại mục “Thiết lập Ẩn hiện sản phẩm theo đối tượng:. Tại đây được cập nhật danh mục/danh sách sản 
+phẩm cần ẩn/hiện trên từng đối tượng
+-
+Thứ tự xét trạng thái hiển thị của sản phẩm: (Nếu ẩn thì ẩn luôn; nếu hiện mới tiếp tục xét tiếp)
+•
+Danh mục sản phẩm Gốc
+•
+Ẩn hiện danh mục sản phẩm
+•
+Ẩn hiện theo đối tượng, trong đó:
+o Đối tượng: Áp dụng theo thứ tự: Chỉ định khách hàng > Phường/Xã > Tỉnh/Thành phố > KVKD > PKD > Cấp bậc > Loại KH
+o Sản phẩm: Sản phẩm > Nhóm hàng > Phân loại theo thương hiệu > Phân loại sản phẩm > Mặt hàng > Thương hiệu
+(Khi có nhiều thiết lập cùng áp dụng, thiết lập có phạm vi đối tượng chi tiết hơn được ưu tiên)
+Ví dụ: HCM -> Hiện SP A; Khách hàng ABC -> Ẩn SP A; Với ABC thuộc HCM
+=> Kết quả: ABC không thấy SP A (Ưu tiên thiết lập theo chỉ định đại lý)
+III/ Ẩn hiện sản phẩm theo đối tượng
+2.
+Danh sách thiết lập Ẩn hiện sản phẩm theo đối tượng (Tạm thời mô tả theo OP1)
+2.1. Thiết lập ẩn hiện sản phẩm theo đối tượng
+- Trường dữ liệu:
+ Tên thiết lập| Mã KH| Tên KH| Phường/Xã| Tỉnh/Thành phố| KVKD| PKD| Cấp bậc| Loại KH| Ngày áp dụng| Ngày kết thúc| Ngày cập 
+nhật| Người cập nhật| Trạng thái
+- Bộ lọc:
+• Thanh tìm kiếm: Theo tên thiết lập
+• Bộ lọc các đối tượng: Khách hàng; Phường/Xã; Tỉnh/Thành phố; KVKD; PKD; Cấp bậc; Loại KH
+• Từ ngày đến ngày: Theo ngày bắt đầu; ngày cập nhật
+• Trạng thái
+- Nút chức năng: Tạo mới; Kích hoạt; Dừng; Xóa
+- Danh sách trạng thái:
+Trạng thái
+Nút chức năng
+Ghi chú
+Nháp
+Kích hoạt, Xóa, Điều chỉnh 
+(Được điều chỉnh tất cả thông tin)
+Cảnh báo khi tạo trùng đối tượng
+Đang áp dụng
+Dừng, Xuất dữ liệu
+Khi bấm dừng có nghĩa là dừng thiết lập. Không ảnh hưởng trạng thái 
+tại danh sách chi tiết
+Tạm dừng
+Kích hoạt, Xuất dữ liệu
+Khi bấm kích hoạt có nghĩa cập nhật lại trạng thái cho thiết lập. Các 
+trạng thái tại danh sách chi tiết không ảnh hưởng
+III/ Ẩn hiện sản phẩm theo đối tượng
+2.
+Danh sách thiết lập Ẩn hiện sản phẩm theo đối tượng (Tạm thời mô tả theo OP1)
+2.1. Thiết lập ẩn hiện sản phẩm theo đối tượng
+- Bấm xem chi tiết hiển thị các thông tin:
+• Thông tin chung:
+o Tên thiết lập
+o Đối tượng
+o Áp dụng cho
+o Ngày áp dụng
+o Ngày kết thúc
+o Trạng thái của thiết lập
+• Danh sách sản phẩm áp dụng:
+• Thanh tìm kiếm: Tìm theo mã/tên sản phẩm/nhóm hàng/PLTTH/PLSP/Mặt hàng/Thương hiệu
+• Trường dữ liệu: Mã sản phẩm| Tên sản phẩm| Nhóm hàng| PLTTH| PLSP| Mặt hàng| Thương hiệu| Trạng thái SP| Ngày áp 
+dụng| Ngày kết thúc| Trạng thái
+III/ Ẩn hiện sản phẩm theo đối tượng
+2.
+Danh sách thiết lập Ẩn hiện sản phẩm theo đối tượng (Tạm thời mô tả theo OP1)
+2.1. Thiết lập ẩn hiện sản phẩm theo đối tượng
+2.1.1. Tạo mới thiết lập:
+- Bấm nút “Tạo mới”: Hiển thị các trường thông tin để nhập:
+• Tên thiết lập (*)
+• Đối tượng (*): Hiển thị danh sách chọn (Chỉ được chọn 1)
+• Áp dụng cho (*): Hiển thị danh sách được kế thừa từ đối tượng vừa chọn (Chỉ được chọn 1) 
+Đề xuất: Được chọn nhiều, sau đó bấm xác nhận thì hệ thống tự sinh ra các dòng theo từng đối tượng 
+-
+Bấm xác nhận. Lúc này hệ thống sinh ra dòng thiết lập với trạng thái là “Nháp”. Có cảnh báo nếu đối tượng đã có thiết lập trước đó
+-
+Bấm xem chi tiết, hiển thị các nút chức năng: Kích hoạt hoặc Xóa hoặc Điều chỉnh.
+• Kích hoạt: Thiết lập chuyển qua trạng thái Đang hoạt động; Cập nhật ngày áp dụng là lúc kích hoạt thiết lập
+• Xóa: Thiết lập không còn hiển thị trong danh sách này
+• Điều chỉnh: Được điều chỉnh lại tất cả các thông tin đã nhập trước đó. Có cảnh báo nếu đối tượng đã có thiết lập trước đó.
+2.1.2. Dừng thiết lập
+-
+Ở trạng thái Đang áp dụng, bấm “Dừng”. Lúc này thiết lập chuyển qua trạng thái “Tạm dừng”, và cập nhật ngày kết thúc là lúc bấm 
+dừng thiết lập
+2.1.3. Xuất dữ liệu:
+-
+Ở trạng thái “Đang áp dụng” hoặc “Tạm dừng”, bấm “Xuất dữ liệu”. Lúc này hệ thống xuất dữ liệu file excel bao gồm các trường thông 
+tin:
+Mã sản phẩm| Tên sản phẩm| Nhóm hàng| PLTTH| PLSP| Mặt hàng| Thương hiệu| Trạng thái SP| Ngày áp dụng| Ngày kết thúc| Trạng thái
+III/ Ẩn hiện sản phẩm theo đối tượng
+2.
+Danh sách thiết lập Ẩn hiện sản phẩm theo đối tượng (Tạm thời mô tả theo OP1)
+2.2. Cập nhật phiếu Ẩn hiện sản phẩm theo đối tượng
+- Trường dữ liệu: Tiêu đề| Loại đối tượng| Tên đối tượng| Ngày áp dụng| Người cập nhật| Trạng thái
+- Bộ lọc: 
+• Thanh tìm kiếm: Theo tiêu đề; Tên đối tượng
+• Loại đối tượng
+• Bộ lọc các đối tượng: Khách hàng; Phường/Xã; Tỉnh/Thành phố; KVKD; PKD; Cấp bậc; Loại KH
+• Thời gian từ đến của ngày áp dụng
+• Trạng thái
+- Nút chức năng: Tạo mới
+- Danh sách trạng thái và nút chức năng
+Trạng thái
+Nút chức năng
+Ghi chú
+Nháp
+Duyệt, Xóa, Nhân bản, Xuất dữ liệu, Điều chỉnh (Được điều chỉnh tất cả thông tin)
+Chờ áp dụng
+Hủy, Nhân bản, Xuất dữ liệu
+Đã áp dụng
+Nhân bản, Xuất dữ liệu
+Hủy
+Nhân bản, Xuất dữ liệu
+III/ Ẩn hiện sản phẩm theo đối tượng
+2.
+Danh sách thiết lập Ẩn hiện sản phẩm theo đối tượng (Tạm thời mô tả theo OP1)
+2.2. Cập nhật phiếu Ẩn hiện sản phẩm theo đối tượng
+2.2.1. Tạo mới phiếu cập nhật
+- Bấm nút “Tạo mới”, hiển thị các trường thông tin để nhập:
+• Tiêu đề
+• Đối tượng (*): Hiển thị danh sách chọn (Chỉ được chọn 1)
+• Áp dụng cho (*): Hiển thị danh sách được kế thừa từ đối tượng vừa chọn (Chỉ được chọn 1)
+Đềxuất: Được chọn nhiều, sau khi phiếu được áp dụng thì hệthống tựkiểm tra dữliệu đểcập nhật đúng đối tượng tại thiết lập ẩn hiện
+SP theo đối tượng (Áp dụng khi nhiều đối tượng cùng chung thiết lập ẩn hiện SP => Xem xét nhu cầu)
+• Ngày áp dụng (*): Được hẹn ngày áp dụng
+• Ngày kết thúc: Không bắt buộc. Không được chọn nhỏ hơn ngày áp dụng
+• Thêm danh mục sản phẩm/danh sách sản phẩm, trong đó:
+Trường dữ liệu: Mã sản phẩm| Tên sản phẩm| Nhóm hàng| PLTTH| PLSP| Mặt hàng| Thương hiệu| Trạng thái SP| Trạng thái| Hành 
+động (Dừng, Xóa)
+o Trạng thái SP: Mặc định Ẩn. Được điều chỉnh
+o Trạng thái trên từng dòng SP/Danh mục SP: Mặc định Đang chạy. 
+o Hành động: Nếu bấm dừng thì chuyển qua trạng thái tạm dừng. Nếu bấm xóa thì xóa dòng đó trong danh sách phiếu
+- Bấm “Xác nhận”, lúc này phiếu được lưu ở trạng thái Nháp. Hệ thống cảnh báo nếu đối tượng chưa có trong danh sách thiết lập ẩn hiện 
+theo đối tượng
+III/ Ẩn hiện sản phẩm theo đối tượng
+2.
+Danh sách thiết lập Ẩn hiện sản phẩm theo đối tượng (Tạm thời mô tả theo OP1)
+2.2. Cập nhật phiếu Ẩn hiện sản phẩm theo đối tượng
+2.2.1. Tạo mới phiếu cập nhật
+2.2.2. Duyệt phiếu cập nhật
+- Ở trạng thái “Nháp”, bấm “Duyệt”. Lúc này hệ thống kiểm tra ngày áp dụng. 
+• Nếu ngày áp dụng là quá khứ/hiện tại thì phiếu chuyển qua trạng thái “Đã áp dụng”; Toàn bộ nội dung phiếu sẽ được cập nhật trong 
+danh sách thiết lập ẩn hiện sản phẩm theo đối tượng. 
+• Nếu ngày áp dụng là tương lai thì phiếu chuyển qua trạng thái “Chờ áp dụng”. Đợi đến thời gian áp dụng, phiếu được chuyển qua 
+trạng thái “Đã áp dụng”.
+2.2.3. Xóa phiếu cập nhật: Ở trạng thái “Nháp”, bấm “Xóa”. Lúc này phiếu không còn hiển thị trong danh sách
+2.2.4. Nhân bản: Ở tất cả trạng thái, bấm “Nhân bản”. Lúc này hệ thống sinh ra 1 phiếu mới với dữ liệu được lấy từ phiếu nhân bản. Được 
+cập nhật thông tin như 1 phiếu tạo mới. Sau khi xác nhận, phiếu được lưu ở trạng thái Nháp
+2.2.5. Điều chỉnh phiếu cập nhật: Ở trạng thái “Nháp”, bấm “Điều chỉnh”. Lúc này được điều chỉnh tất cả các thông tin mà người dùng đã 
+nhập lúc tạo mới/nhân bản.
+2.2.6. Hủy phiếu cập nhật: Ở trạng thái “Chờ áp dụng”, bấm “Hủy”. Lúc này phiếu chuyển qua trạng thái Hủy, nghĩa là phiếu đã vô hiệu 
+lực. Nên khi đến thời gian áp dụng thì phiếu không thay đổi trạng thái.
+2.2.7. Xuất dữ liệu: Ở tất cả trạng thái, bấm “Xuất dữ liệu”. Hệ thống xuất ra 1 file excel bao gồm các trường thông tin: 
+Mã sản phẩm| Tên sản phẩm| Nhóm hàng| PLTTH| PLSP| Mặt hàng| Thương hiệu| Trạng thái SP| Trạng thái
+IV/ Sản phẩm bán chạy
+1.
+Định nghĩa:
+- Sản phẩm bán chạy là sản phẩm có tần suất và SL bán nhiều nhất trong vòng [n] ngày
+- Tối đa [n] sản phẩm
+- Hệ thống được thiết lập chỉ định sản phẩm thuộc danh sách sản phẩm bán chạy
+- Thao tác CMS:
+• Trường dữ liệu: Mã sản phẩm| Tên sản phẩm| Loại tag| Thứ tự| Ngày thiết lập| Nguồn
+• Nút chức năng: Điều chỉnh, Xuất dữ liệu,…
+• Bộ lọc: 
+o Thanh tìm kiếm: Mã/Tên sản phẩm
+o Bộ lọc loại tag
+o Thời gian từ đến theo ngày thiết lập
+o Nguồn: Hệ thống; Tài khoản người dùng
+o …
+2.
+Giao diện App:
+- Thông tin SP trái, giá phải, lướt dọc.
+- Bấm vào xem tất cả thì hiển thị 2 cột như bình thường
+- Thứ tự hiển thị SP: Ưu tiên thiết lập chỉ định > Tần suất bán > SL bán
+V/ Sản phẩm mới
+1.
+Định nghĩa:
+-
+Sản phẩm mới: (Chưa có rule)
+-
+ Không giới hạn số lượng sản phẩm
+-
+Có giới hạn thời gian hiển thị sản phẩm mới
+-
+Tại danh sách sản phẩm: Thêm trường nhân diện SP mới (Xác nhận lại nhu cầu khi có rule SP mới)
+-
+Thao tác CMS:
+OP1: Import dữ liệu
+•
+Trường dữ liệu: Mã sản phẩm| Tên sản phẩm| SP mới nhất| Thứ tự| Ngày cập nhật| Trạng thái sản phẩm| Hiển thị trên App| Trạng thái bán hàng
+•
+Nút chức năng: Import, Chọn SP mới nhất, Ẩn tất cả
+•
+Bộ lọc: 
+o Thanh tìm kiếm: Mã/Tên sản phẩm
+o Bộ lọc Trạng thái/Hiển thị App/Trạng thái bán hàng
+o Sản phẩm mới nhất: Có/Không
+•
+File import: STT| Mã sản phẩm| Tên sản phẩm| Ngày cập nhật 
+o
+Trong đó hệ thống cảnh báo nếu Ngày cập nhật là quá khứ (Có cần cảnh báo khi SP chưa thuộc danh mục hiển thịtrong VINAGO k?)
+OP2: Tự động cập nhật theo 1 nguyên tắc chung (Chưa có)
+2.
+Giao diện App:
+-
+Chỉ thể hiện giá và phần giảm giá nếu có. 
+-
+Không hiển thịSL đã bán, đánh giá sản phẩm (Hệ thống vẫn lưu dữ liệu SL bán và đánh giá của SP mới). 
+-
+Thông tin SP trên, giá dưới, lướt ngang. Bấm vào xem tất cả thì hiển thị 2 cột như bình thường
+VI/ Sản phẩm không tính hoa hồng
+Danh sách sản phẩm không tính hoa hồng được ghi nhận từ 2 luồng:
+- Module Sản phẩm: Thiết lập danh sách sản phẩm không tính hoa hồng
+- Module CS/CT: Thiết lập danh sách loại trừ SP tính hoa hồng
+Thiết lập danh sách sản phẩm không tính hoa hồng:
+1.
+Định nghĩa:
+- Sản phẩm không tính hoa hồng là Sản phẩm được tích lũy để làm điều kiện xét mức hưởng hoa hồng nhưng không được lấy giá trị tích 
+lũy của sản phẩm đó để tính hoa hồng
+- Thiết lập chỉ định theo sản phẩm. Đối tượng áp dụng là tất cả khách hàng (Không có thiết lập theo đối tượng?)
+2. Thao tác CMS:
+- Trường dữ liệu: Mã sản phẩm| Tên sản phẩm| Ngày áp dụng| Trạng thái SP| Hiển thị App| Trạng thái bán hàng
+- Nút chức năng: Import, Điều chỉnh, Xuất dữ liệu, Lịch sử cập nhật
+- Bộ lọc: 
+• Thanh tìm kiếm: Mã/Tên sản phẩm
+• Thời gian từ đến theo ngày áp dụng
+• ...
+- Luồng thao tác: 
+• Tạo một danh sách sản phẩm cố định không được tính hoa hồng. Tạo phiếu cập nhật (Xây dựng trong 1 trang, không tách tool)
+• Được hẹn giờ cập nhật danh sách
+• Hệthống xóa danh sách cũ cập nhật danh sách mới (Hoặc bổsung sản phẩm vào danh sách)
+VII/ Giao diện App
+1.
+Hiển thị nhãn dán (Tag) của sản phẩm
+-
+Cháy hàng:
+- Hiển thị khi Số lượng tồn kho = 0.
+-
+Sắp hết hàng: 
+• Hiển thị khi Số lượng tồn kho khả dụng < Số lượng xuất bán trên đơn hàng lớn nhất trong [n] ngày
+• Hệ thống có thể căn cứ lịch sử xuất kho, loại xuất bán theo đơn hàng để kiểm tra dữ liệu (Lưu ý chỉ lấy SL xuất bán, không lấy SL 
+xuất tặng)
+Ví dụ: Trong 30 ngày gần đây có lịch sử xuất kho theo đơn hàng với số lượng:10, 30, 50, 100 
+thì khi SP có tồn kho khả dụng < 100  sẽ hiển thị tag Sắp hết hàng cho đến khi hết tồn kho hoặc nhập thêm hàng vào kho
+(GiảsửTKKD là 50, SP hiển thịtag sắp hết hàng. Sau đó nhập 40 => TKKD là 90. Lúc này vẫn hiển thịtag Sắp hết hàng?)
+2.
+Hiển thị SL bán của sản phẩm:
+-
+Tạo danh sách sản phẩm được hiển thị thông tin số lượng bán trên App. Áp dụng cho tất cả khách hàng (Không thiết lập theo đối tượng?)
+-
+Áp dụng trong khoảng thời gian Từ - Đến (Hoặc trong vòng n ngày)
+-
+SL bán được tính trên SL xuất kho (Không bao gồm SL xuất tặng)
+3. Hiển thị giá bán theo combo (Thiết lập tại Module Giá bán)
+-
+Lưu ý trường hợp ẩn giá App
+4. Hiển thị giá bán trước và sau giảm (Thiết lập tại Module CS/CT)
+Ngày 12/8: Các nội dung cần xác nhận
+1.
+Tag bán hàng: 
+- Có dùng chung với TAFITCO không? Hay dựng riêng cho VINAGO?
+(Lưu ý trường nhãn dán trong chi tiết sản phẩm và tag cháy hàng)
+2.
+Thương hiệu nổi bật:
+- Có dùng chung với TAFITCO không?
+- Nếu dùng riêng thì thiết lập và hiển thị thế nào?

@@ -1,0 +1,789 @@
+
+=== PAGE 1 ===
+APP VINAGO
+(Module KHÁCH HÀNG)
+
+=== PAGE 2 ===
+I. CÁC THÀNH PHẦN VÀ VAI TRÒ TRONG VINAGO
+Thành phần
+Vai trò
+Ghi chú
+Công ty
+-
+Kiểm soát sản phẩm, giá bán, CS/CT, tồn kho.
+-
+Bán hàng, ghi nhận công nợ, xuất hàng, xuất hóa đơn
+Khách bán Sỉ
+-
+Nhà phân phối. 
+-
+Đặt hàng từApp đểbán cho Khách bán Lẻ
+-
+Mua hàng từApp (Không được mua qua Khách bán Sỉkhác)
+-
+Có hoặc không có phí bảo lãnh
+Có tài khoản App
+Khách bán Lẻ
+-
+Mua hàng từApp hoặc mua qua Khách bán Sỉ
+Có tài khoản App
+Người mua
+-
+Bao gồm Khách bán Sỉ, Khách bán Lẻ, Người mua chưa có App
+-
+Là đối tượng nhận hàng + hóa đơn
+-
+Làm điều kiện đểxét đối tượng tham gia CS/CT dựa trên thông tin xuất hóa đơn
+
+=== PAGE 3 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+Danh sách tài khoản
+• Chứa danh sách các khách hàng đăng ký tài khoản App/ đã
+có tài khoản App (Bao gồm Khách bán Sỉvà Khách bán
+Lẻđã có tài khoản App)
+• Dữliệu kiểm soát trên mã khách hàng
+Danh sách người mua
+• Chứa tất cảthông tin xuất hóa đơn
+• Dữliệu kiểm soát trên mã sốthuế(Nhận thông tin điều
+chỉnh từBravo)
+Tạo từluồng đơn hàng
+
+=== PAGE 4 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.1. Danh sách tài khoản:
+
+=== PAGE 5 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.1. Danh sách tài khoản:
+-
+Trường thông tin đăng ký:
+Trường thông tin
+Giải thích
+Họ và tên *
+Tên người đại diện
+Số điện thoại *
+Không trùng SĐT đăng nhập trong DS tài khoản
+Tên cửa hàng *
+Tên khách hàng
+Tỉnh/thành *
+Thông tin sau sáp nhập
+Phường/xã *
+Thông tin sau sáp nhập
+Địa chỉ *
+Địa chỉ số nhà, đường sau sáp nhập
+Thông tin xuất hóa đơn
+Mã số thuế *
+Mã số thuế (không được trùng trong DS tài khoản)
+Tên đơn vị *
+Căn cứ MST mà người dùng nhập để hiển thị thông tin (Lấy từ Cổng Thuế).
+Nếu không lấy được thì mặc định in hoa khi nhập
+Địa chỉ *
+Căn cứ MST mà người dùng nhập để hiển thị thông tin (Lấy từ Cổng Thuế).
+Có, rã trên 3 cấp (App xử lý)
+Email
+Địa chỉ email nhận hóa đơn/ liên hệ
+Mật khẩu *
+Tối thiểu 6 ký tự (Không ràng thêm điều kiện)
+Nhập lại mật khẩu *
+Kiểm tra khớp với mật khẩu đã nhập
+Hình ảnh *
+Mặc định hình đầu tiên làm avatar (Tối đa 5 hình)
+Bổ sung ngày sinh, giới tính. Không bắt buộc
+Luồng tạo từ CMS: 
+-
+Thêm phần “Loại KH”: Khách bán Sỉ, Khách bán Lẻ
+-
+Thông tin XHĐ: Lấy từ Cổng Thuế
+
+=== PAGE 6 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.1. Danh sách tài khoản:
+-
+Đóng/mở danh mục sản phẩm:
+•
+Mục đích là để hiển thị (chọn)/không hiển thị (không chọn) tại left menu_trang sản phẩm trên App
+•
+Danh mục sản phẩm là danh sách Left menu được thiết lập hiển thị tại CMS (Danh mục cấp 1). (Không xét ẩn hiện SP theo 
+đối tượng khi đăng ký)
+•
+Khi người dùng chọn mở 1 danh mục sản phẩm sẽ hiển thịbộcâu hỏi khảo sát. Mỗi bộ danh mục cấp 1 sẽ có 1 bộ câu hỏi 
+khảo sát tương ứng (Mở bao nhiêu danh mục thì trả lời bấy nhiêu lần bộ câu hỏi khảo sát)
+•
+Bắt buộc chọn ít nhất 1 danh mục sản phẩm khi đăng ký
+-
+Các thông tin hiển thị khi tài khoản ở trạng thái chờ duyệt:
+•
+Trang chủ:
+o
+Banner quảng bá (Nếu có) – Có xét theo đối tượng (Lưu ý bộđối tượng khi thiết lập)
+o
+Sản phẩm mới/SP bán chạy thuộc danh mục đã chọn thì hiển thị với giá liên hệ
+•
+Trang sản phẩm:
+o
+Hiển thị nút đóng/mở Danh mục sản phẩm – có câu hỏi khảo sát theo từng danh mục SP (Không xét ẩn hiện SP theo 
+đối tượng khi tài khoản chưa được duyệt)
+o
+Các danh mục SP đã chọn
+o
+Danh sách sản phẩm theo danh mục đã chọn với giá là giá liên hệ
+•
+Trang CT, Thử thách: Thấy nhưng bị mờ.
+•
+Trang tài khoản: Thấy, bấm vào hiển thị nút đăng xuất
+
+=== PAGE 7 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.1. Danh sách tài khoản:
+-
+Các lưu ý khi tài khoản vừa được duyệt ở trạng thái Đang hoạt động:
+•
+App:
+o
+Hiển thị rõ tất cả các Tab
+o
+Kiểm tra ẩn hiện sản phẩm theo đối tượng để ẩn hoặc hiện sản phẩm/danh mục sản phẩm (Bao gồm giao diện 
+đóng/mở danh mục sản phẩm)
+•
+CMS:
+o
+Mặc định khóa giá bán, CS/CT
+o
+Được điều chỉnh qua Khách bán Sỉ (Tại trạng thái Chờ duyệt mặc định là Khách bán Lẻ)
+o
+Tự sinh ra thông tin người mua hoặc cập nhật thông tin người mua nếu trùng mã số thuế
+-
+Các lưu ý khi tài khoản ở trạng thái Từ chối:
+•
+Không kiểm tra trùng thông tin với những tài khoản này
+
+=== PAGE 8 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.2. Danh sách người mua:
+- Luồng tạo mới người mua
+Tạo từluồng đơn hàng
+
+=== PAGE 9 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.2. Danh sách người mua:
+o
+Tạo trực tiếp trên CMS: Không cho tạo nếu trùng mã số thuế
+ 
+(Luồng trạng thái: Nháp -> Chờ xác nhận -> Bravo -> Đang giao dịch)
+Trường thông tin
+Giải thích
+Mã số thuế *
+Không trùng MST trong DS người mua
+Tên đơn vị *
+Mặc định in hoa (có thể lấy thông tin từ cổng thuế không?)
+Tên KH
+Mặc định theo tên đơn vị
+Tỉnh/Thành *
+Thông tin sau sáp nhập
+Phường/Xã *
+Thông tin sau sáp nhập
+Địa chỉ *
+Thông tin sau sáp nhập
+Email
+Địa chỉ email nhận hóa đơn/liên hệ
+
+=== PAGE 10 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.2. Danh sách người mua:
+o
+Đơn từ App: ĐH tạo từ App với thông tin người mua chưa có trên hệ thống CMS. Hệ thống sẽ tự tạo thông tin người mua 
+mới theo thông tin trên ĐH đã phát sinh
+ 
+(Luồng trạng thái: Chờ xác nhận -> Bravo -> Đang giao dịch)
+o
+Người dùng đăng ký tài khoản App: Tài khoản sau khi được duyệt (trạng thái Chờ duyệt sang Đang hoạt động), MST 
+chưa có thông tin trong DS hệ thống tự tạo mới thông tin người mua theo thông tin XHĐ của tài khoản
+ 
+(Luồng trạng thái: Chờ xác nhận -> Bravo -> Đang giao dịch)
+
+=== PAGE 11 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+1.
+Luồng đăng ký/tạo mới khách hàng:
+1.2. Danh sách người mua:
+-
+Luồng cập nhật thông tin người mua đã có trên CMS
+•
+Khi tài khoản được duyệt và MST đã tồn tại ở DS người 
+mua hệ thống sẽ cập nhật Mã KH, Tên KH, Loại KH, 
+Trạng thái TK. (Lưu ý: Trạng thái người mua, Tên đơn 
+vị, Địa chỉ, Email không thay đổi)
+
+=== PAGE 12 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+2.
+Danh sách khách hàng:
+2.1. Danh sách tài khoản:
+❖Trạng thái và nút chức năng:
+STT
+Mã khách hàng
+Tên khách hàng
+Loại khách hàng
+Mã số thuế
+Trạng thái TK
+Ghi chú
+1
+-
+Khách hàng H
+Khách bán Lẻ
+89012…
+Chờ duyệt
+Khách hàng đăng ký App
+2
+-
+Khách hàng A
+Khách bán Lẻ
+12345…
+Chờ duyệt
+Khách hàng đăng ký App
+3
+[Theo cú pháp]
+Khách hàng B
+Khách bán Sỉ
+23456…
+Đang hoạt động
+4
+[Theo cú pháp]
+… C
+Khách bán Lẻ
+34567…
+Đang hoạt động
+5
+[Theo cú pháp]
+… D
+Khách bán Lẻ
+45678…
+Ngưng hoạt động
+Không vào App được, không mua hàng trực 
+tiếp với Công ty. Có thể mua qua Khách Sỉ
+6
+[Theo cú pháp]
+… E
+Khách bán Sỉ
+56789…
+Ngưng hoạt động
+Không vào App được, không đặt hàng được. 
+(Công ty ngừng hợp tác)
+7
+-
+… F
+Khách bán Lẻ
+67890…
+Từ chối
+Công ty không duyệt tài khoản App
+Trạng thái
+Nút chức năng
+Ghi chú
+Chờ duyệt
+Duyệt, Từ chối, Điều chỉnh
+Đang hoạt động
+Tạm dừng, Điều chỉnh
+Ngưng hoạt động
+Kích hoạt
+Từ chối
+
+=== PAGE 13 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+2.
+Danh sách khách hàng:
+2.1. Danh sách tài khoản: 
+ 
+Mã KH | Tên KH | Loại KH | MST | HMKD | KHN | KVKD| PKD | Cấp bậc| Trạng thái TK....
+❖Bộ lọc:
+-
+Thanh tìm kiếm: Mã/tên KH, Mã số thuế (MST), SĐT đăng nhập
+-
+Loại khách hàng: Khách bán Sỉ; Khách bán Lẻ
+-
+Trạng thái TK: Chờ duyệt; Đang hoạt động; Ngưng hoạt động; Từ chối
+❖Chức năng:
+-
+Tạo mới
+-
+Xuất dữ liệu theo bộ lọc
+❖Bấm xem chi tiết từng tài khoản, hiển thị đầy đủ các thông tin:
+-
+Tổng quan:
+•
+Mã KH, Tên KH, Avatar, Nickname
+•
+Danh sách các trường dữ liệu mà KH đã đăng ký (Tên đại diện, SĐT, Địa chỉ, ….)
+•
+Ngày đăng ký, Ngày duyệt
+•
+Các chức năng: Đóng/mở CS/CT; Khóa/Mở khóa giá bán; …
+-
+Quản lý tài khoản:
+•
+Tài khoản chính: Tên tài khoản| SĐT| Trạng thái| Hành động
+•
+Tài khoản phụ: Tên tài khoản| SĐT| Trạng thái| Danh sách quyền| Hành động
+o
+Mỗi tài khoản phụ có 1 danh sách quyền do Tài khoản chính phân quyền (Admin được quyền điều chỉnh)
+
+=== PAGE 14 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+2.
+Danh sách khách hàng:
+2.1. Danh sách tài khoản:
+-
+Thông tin người mua:
+▪Trường thông tin: MST | Tên XHĐ | Địa chỉ XHĐ | Ngày đơn hàng cuối | Mã KH | Tên KH | Loại KH | Trạng thái (Trạng 
+thái của người mua)
+▪Thông tin XHĐ của chính khách hàng sẽ là dòng đầu tiên (Cần có nhận diện)
+▪Thông tin XHĐ của người mua khác sau khi đã phát sinh đơn hàng và đã ghi nhận công nợ
+-
+Sản phẩm: Có 3 tab (Xem thêm module Sản phẩm)
+•
+Danh mục hiển thị App
+•
+Sản phẩm và giá bán
+•
+Trạng thái giá PLTTH
+-
+Công nợ: Xem thêm module Công nợ
+•
+DTT tổng; DTT tôi mua; DTT tôi bán; DTT xét hoa hồng; DTT tính hoa hồng; DTT không tính hoa hồng
+•
+Tiền thu; Tiền thu tính hoa hồng
+•
+Công nợ tôi mua; công nợ tôi bán; chi tiết công nợ trên từng người mua
+-
+Hoa hồng
+-
+CS/CT
+-
+Thửthách
+
+=== PAGE 15 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+2.
+Danh sách khách hàng:
+2.2. Danh sách người mua:
+STT
+Mã KH
+Tên KH
+Loại KH
+MST
+Tên XHĐ
+Địa chỉ XHĐ
+Trạng thái TK
+Trạng thái
+Ghi chú
+1
+-
+… H
+-
+89012…
+…..
+…..
+-
+Nháp
+Người mua tạo từ CMS
+2
+-
+… I
+-
+90123…
+…..
+…..
+-
+Chờ xác nhận
+Người mua mới, chưa được xác nhận 
+thông tin MST
+3
+-
+Khách hàng A
+-
+12345…
+Công ty ABC
+24 Bến Cát, P. 
+TSN, HCM
+-
+Đang giao dịch
+Đang mua qua khách Sỉ. KH đăng ký 
+App (Key: MST)
+4
+[Theo cú 
+pháp]
+Khách hàng B
+Khách bán Sỉ
+23456…
+Công ty B
+….
+Đang hoạt động
+Đang giao dịch
+5
+[Theo cú 
+pháp]
+… C
+Khách bán Lẻ
+34567…
+Cửa hàng C
+….
+Đang hoạt động
+Đang giao dịch
+Mua qua Khách Sỉ hoặc tự đặt qua 
+App
+6
+[Theo cú 
+pháp]
+… D
+Khách bán Lẻ
+45678…
+…. 
+….
+Ngưng hoạt động
+Đang giao dịch
+Mua qua Khách Sỉ.
+Không mua trực tiếp được nữa
+7
+[Theo cú 
+pháp]
+… E
+Khách bán Sỉ
+56789…
+…..
+….
+Ngưng hoạt động
+Đang giao dịch/
+Ngưng giao dịch
+Công ty ngừng hợp tác. Không được 
+mua thông qua KH của công ty
+8
+-
+… F
+-
+67890…
+…..
+….
+-
+Đang giao dịch
+Đang mua qua khách Sỉ, chưa có TK 
+App
+9
+-
+… G
+-
+78901…
+….
+….
+-
+Ngưng giao dịch
+Khách Sỉ không tìm/chọn được thông 
+tin XHĐ của người mua này
+
+=== PAGE 16 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+2.
+Danh sách khách hàng:
+2.2. Danh sách người mua: (Là dữ liệu để xét đối tượng tham gia CS/CT)
+Mã KH | Tên KH| Loại KH| Mã số thuế| Tên XHĐ| Địa chỉ XHĐ| Trạng thái tài khoản| Trạng thái…
+Trạng thái
+Nút chức năng
+Ghi chú
+Nháp
+Điều chỉnh, Xác nhận
+Chờ xác nhận
+Duyệt, Từ chối, Điều chỉnh
+Sẽ thực hiện truyền nhận Bravo. Hệ thống vẫn làm thêm các nút 
+để chủ động xử lý
+Đang giao dịch
+Tạm dừng, Điều chỉnh
+Ngưng giao dịch
+Kích hoạt
+Đơn hàng cảnh báo không thực hiện giao dịch đối với MST này
+Hủy
+Cần Bravo xử lý trạng thái
+Trạng thái này không check mã số thuế
+
+=== PAGE 17 ===
+II. DANH SÁCH KHÁCH HÀNG VÀ LUỒNG ĐĂNG KÝ
+2.
+Danh sách khách hàng:
+2.2. Danh sách người mua:
+❖Bộ lọc:
+-
+Thanh tìm kiếm: Mã/tên KH, Mã số thuế (MST), SĐT đăng nhập, Tên XHĐ
+-
+Loại khách hàng: Khách bán Sỉ; Khách bán Lẻ
+-
+Trạng thái TK: Chờ duyệt, Đang hoạt động, Ngưng hoạt động, -
+-
+Trạng thái: Chờ xác nhận, Đang giao dịch, Ngưng giao dịch, Hủy
+❖Bấm xem chi tiết hiển thị các thông tin:
+-
+Mã KH/ Tên KH
+-
+Thông tin xuất hóa đơn: MST, Tên, Địa chỉ (Địa chỉ rã 3 cấp theo đơn vị hành chính). 
+-
+Thông tin địa chỉ giao hàng: Người liên hệ | SĐT người liên hệ | Địa chỉ(Xin dữliệu từKho Hàng sau đó lên lại trường
+dữliệu)
+-
+Thông tin công nợ
+Lưu ý:
+-
+Tại danh sách này không được thay đổi loại KH (Cần liệt kê các thông tin được điều chỉnh tại danh sách này)
+-
+Thông tin địa chỉ giao hàng: 
+•
+CMS: Được tạo mới/chỉnh sửa
+•
+Danh sách hiển thị theo danh sách người mua (Lưu ý cho Luồng đơn hàng)
+
+=== PAGE 18 ===
+II. CÁC NGUYÊN TẮC 
+1.
+Thông tin khách hàng
+-
+Mã khách hàng: Hệ thống tự sinh ra mã khách hàng khi khách hàng được duyệt tài khoản.
+•
+Cú pháp mã khách hàng: Chưa có
+-
+Nickname: Hệ thống tự sinh ra nickname khi KH được duyệt tài khoản (Cú pháp mặc định: D0001). KH được chỉnh sửa nickname, tối 
+đa 15 ký tự
+-
+Tên khách hàng: 
+•
+Nếu người mua chưa có tài khoản App thì mặc định tên xuất hóa đơn là tên khách hàng. Admin được chỉnh sửa
+•
+Sau khi có tài khoản App, hệ thống tự cập nhật lại tên khách hàng theo thông tin đăng ký của KH
+-
+Thông tin xuất hóa đơn: Là thông tin xuất bán mà KH chọn khi đặt đơn hàng
+•
+Khách bán Sỉ: Có thể chứa 1 hoặc nhiều thông tin xuất hóa đơn. Trong đó thông tin XHĐ của Khách bán Sỉ là thông tin mặc 
+định
+•
+Khách bán Lẻ: Chỉ chứa duy nhất 1 thông tin xuất hóa đơn của chính Khách bán Lẻ đó (Tuy nhiên, khi từ Sỉ chuyển qua Lẻ thì 
+vẫn chứa các thông tin XHĐ trước đó nhưng không được chọn khi đặt hàng)
+-
+Thông tin địa chỉ nhận hàng:
+•
+Mỗi Người mua có thể chứa 1 hoặc nhiều địa chỉ nhận hàng
+•
+Chọn địa chỉ đầu tiên là địa chỉ mặc định. Admin được điều chỉnh
+-
+Loại khách hàng:
+•
+Được điều chỉnh từ Khách bán Lẻ qua Khách bán Sỉ và ngược lại. Khi chuyển từ Sỉ qua Lẻ thì phí bảo lãnh không được sử dụng. 
+=> Cấn trừ toàn bộ phí bảo lãnh cho các đơn hàng chưa thanh toán, phần dư chuyển về công nợ
+•
+Khi từ Lẻ qua Sỉ: Hệ thống tính lại dữ liệu kể từ lúc chuyển qua Sỉ (Trước đó có dữ liệu cũng không được tính)
+•
+Thêm lịch sử thay đổi phân loại
+•
+Lưu ý cập nhật lại cấp bậc theo loại Khách hàng: Khi từ Sỉ qua Lẻ thì mặc định là Thành viên. Khi từ Lẻ qua Sỉ thì mặc định là 
+Cấp bậc Thạch Anh, dữ liệu xét cấp bậc được tính lại từ đầu
+
+=== PAGE 19 ===
+II. CÁC NGUYÊN TẮC 
+1.
+Thông tin khách hàng
+-
+Cấp bậc
+-
+Khách bán Lẻ: Chỉ là Thành viên, không có cấp bậc
+-
+Khách bán Sỉ: Có 5 cấp bậc. Thạch Anh -> Hổ Phách -> Ngọc Bích -> Hồng Ngọc -> Thiên Thạch 
+(Thạch Anh là mức thấp nhất. Lưu ý cập nhật cấp bậc khi có chuyển đổi loại KH Sỉ <-> Lẻ)
+-
+Các trường dữ liệu và truyền nhận Bravo:
+(Xác nhận các trường sẽnhận/truyền giữa CMS và Bravo)
+STT
+Trường dữ liệu
+CMS
+Bravo
+1
+Mã khách hàng
+Truyền
+Nhận
+2
+Tên khách hàng
+Truyền
+Nhận
+3
+Thông tin xuất hóa đơn
+Nhận
+Truyền
+4
+Địa chỉ giao hàng
+Truyền
+Nhận
+…
+
+=== PAGE 20 ===
+II. CÁC NGUYÊN TẮC 
+2.
+Phân quyền Tài khoản chính/phụ
+-
+Tài khoản chính:
+•
+Tạo/khóa tài khoản phụ
+o
+Không giới hạn SL Tài khoản phụ
+o
+App: Tài khoản chính được tạo tài khoản phụ. Nhập đầy đủ các thông tin: Tên tài khoản| SĐT. Lúc này thông tin tài khoản 
+ở trạng thái “Chờ kích hoạt”
+o
+CMS: Từ chối/Kích hoạt/Chỉnh sửa tài khoản phụ. (Mục đích là để kiểm tra SĐT. Tránh trường hợp TKC tạo TK ảo)
+o
+Kích hoạt: Chuyển qua trạng thái “Đang hoạt động
+o
+Từ chối: Trường hợp muốn tạo lại thì cứ tạo, không check trùng sđt
+•
+Phân quyền tài khoản phụ: Lúc tạo được phân quyền luôn
+o
+Danh sách các quyền: Không thấy thông tin công nợ; Không thấy quyền lợi tài khoản chính; Không thấy giá bán; Không 
+thấy CS/CT; Không thấy thông tin người mua; Không cho phép Đặt hàng (Hiện/mờ nút thêm vào xe hàng/icon thêm 
+nhanh; không thấy xe hàng)
+o
+Mặc định là có quyền. 
+o
+Được chỉnh sửa danh sách phân quyền đối với trạng thái Chờ kích hoạt, Đang hoạt động
+-
+Tài khoản phụ:
+•
+SĐT của tài khoản phụ: Không nhận được OTP (OTP trả về SĐT của tài khoản chính)
+•
+Xem/thao tác theo phân quyền của Tài khoản chính
+•
+Khi đặt hàng cho tuyến dưới thì vẫn được nhập chênh lệch giá bán, kỳ hạn nợ 
+-
+Hệ thống: 
+•
+Quản lý tài khoản chính/phụ
+•
+Tạo/kích hoạt/khóa/điều chỉnh danh sách tài khoản
+
+=== PAGE 21 ===
+II. CÁC NGUYÊN TẮC 
+3.
+Hệ thống cấp bậc: (rule tính toán sẽgửi khi có module Đơn hàng/Công nợ)
+-
+Đối tượng áp dụng: Khách bán Sỉ
+-
+Điều kiện xét cấp bậc
+•
+Thăng cấp bậc:
+o
+Doanh thu thuần (trừ phí giao hàng) theo [n] tháng gần nhất
+o
+Tiền thu theo [n] tháng gần nhất
+o
+Điều kiện (Số lượng người mua hợp lệ) không theo giá trị [n] tháng 
+•
+Giảm cấp bậc:
+o
+Doanh thu thuần (trừ phí giao hàng) theo [n] tháng gần nhất
+o
+Tiền thu theo [n] tháng gần nhất
+-
+Thời gian xét và cập nhật cấp bậc: Cuối tháng (Lúc 23h ngày cuối tháng)
+-
+Hiển thị App: (Xem thêm giao diện App)
+•
+Cấp bậc hiện tại: Cấp bậc và mức chiết khấu hiện tại
+•
+Cấp  bậc kế tiếp: Cấp bậc, mức chiết khấu kế tiếp, điều kiện để đạt cấp bậc kế tiếp (DTT, TT, 
+SL người mua hợp lệ)
+•
+Lưu ý giao diện của Khách bán Lẻ (Chỉ là Thành viên, không có cấp bậc)
+Lưu ý:
+-
+Cuối năm không reset dữ liệu
+-
+Mặc định cập nhật lại bộ lọc công nợ theo năm hiện tại
+Hổ Phách
+Ngọc Bích
+Hồng Ngọc
+Thiên Thạch
+Thạch Anh
+Xác nhận lại mức và điều kiện của từng cấp bậc
+
+=== PAGE 22 ===
+Ngày 10/8: Các nội dung cần lưu ý/làm rõ
+1.
+OTP: Có chung nhà cung cấp với TAFITCO không? Brand SMS là gì?
+2.
+Thông tin xuất hóa đơn khi đăng ký từ App/CMS:
+- Tự lấy từ Cổng Thuế và rã 3 cấp đơn vị hành chính. Sau khi rã vẫn có thể điều chỉnh (Nếu không rã được thì vẫn có chỗ 
+nhập)
+3.
+Khi nào thì sinh ra thông tin người mua mới từ đơn hàng? Khi nào truyền qua Bravo?
+- OP1: Ngay khi có đơn hàng -> CMS sinh ra người mua mới và truyền Bravo
+- OP2: Tại thời điểm đơn hàng truyền qua Bravo (Trạng thái Soạn hàng) -> CMS sinh ra người mua mới và truyền Bravo 
+=> Vận hành và DEV đề xuất OP2 (Nhằm hạn chế DS người mua được sinh ra trên CMS mà sau đó đơn bị hủy)
+4.
+Khi điều chỉnh thông tin người mua, xem chi tiết đơn hàng vẫn hiển thị thông tin người mua cũ. Nhưng khi bấm điều 
+chỉnh đơn hàng thì đơn hàng tự động cập nhật thông tin người mua theo dữ liệu mới nhất
+5.
+Hiện tại xây dựng 2 danh sách: DS tài khoản và DS người mua. 
+- DEV đề xuất sửa “DS tài khoản” = “DS khách hàng” (Nhằm tránh nhầm lẫn với tài khoản chính/phụ)
+=> Vận hành: Đồng ý với DEV, nhưng không biết có gây hiểu nhầm với TCKT không? Nên cần xác nhận lại
+6.
+Cú pháp nickname: D0001 (STT tăng dần)
+- App tự xử lý không cho nhập ký tự đặc biệt
+- DEV lưu ý nếu STT tăng dần thì KH có thể biết được hệ thống đang tồn tại bao nhiêu KH
+=> Vận hành đề xuất: STT random, hệ thống cần đảm bảo không trùng
+
+=== PAGE 23 ===
+Ngày 10/8: Các nội dung cần lưu ý/làm rõ
+7.
+Tài khoản chính khi tạo TK phụ có tạo mật khẩu không? Hay hệ thống tự sinh ra mật khẩu?. Nếu tự sinh ra thì cần nguyên 
+tắc gì không?
+(Bổ sung luồng đăng nhập của TK phụ: Bấm quên mật khẩu. Lúc này OTP trả về SĐT chính)
+8.
+Tài khoản phụ: Có được xem danh sách phân quyền của chính tài khoản phụ đó không?
+9.
+Danh sách Người mua: (DEV có lưu ý về trường thông tin nhận và trạng thái được nhận)
+- CMS: Khi chuyển từ Nháp -> Chờ điều chỉnh: Cần kiểm tra lại MST và cảnh báo nếu trùng MST
+- Xác nhận lại các trường thông tin được chỉnh sửa/truyền nhận trên từng trạng thái
+Ví dụ: 
+1. Ở trạng thái Đang giao dịch: 
+- Bravo có được sửa MST không? 
+- Nếu có thì CMS có nhận dữ liệu này không?
+2. Ở trạng thái Hủy/Ngưng giao dịch:
+-
+Bravo có được điều chỉnh không? CMS có nhận từ Bravo khi ở trạng thái này không? 
+-
+Nếu nhận thì nhận những trường dữ liệu nào?
+10. KVKD, PKD: Gắn trên 2 cấp: Tỉnh thành và Phường xã. Có trường hợp nào chỉ gắn trên 1 cấp không?
+11. Dữ liệu đơn vị hành chính: 
+- Thông tin địa chỉ của cửa hàng/xuất hóa đơn có hiển thị “Thành phố”/”Tỉnh” không? “Phường”/”Xã”/”Đặc khu” không? 
+Ví dụ: Tại mục chọn địa chỉ khi đăng ký App. Hiển thị:
+Thành phố Cần Thơ hay Cần Thơ; Tỉnh Cao Bằng hay Cao Bằng; Côn Đảo hay Đặc khu Côn Đảo?
+
+=== PAGE 24 ===
+Ngày 10/8: Các nội dung cần lưu ý/làm rõ
+12. Trường hợp chuyển loại khách hàng từ Sỉ qua Lẻ rồi chuyển lại Sỉ:
+- Trước đó đang có CT tích lũy cho Sỉ. KH đã tích lũy được 1 phần
+- Sau đó chuyển qua Lẻ. Lúc này KH không còn thỏa điều kiện tham gia CT nữa
+- Chuyển lại thành Sỉ. Lúc này KH thỏa CT. Vậy giá trị tích lũy được tính lại từ đầu hay được cộng giá trị tích lũy trước đó 
+và bắt đầu tích lũy tiếp?
+13. Danh sách thông tin truyền nhận Bravo: Cập nhật sau khi chốt các trường dữ liệu trên CMS. Cần xác nhận trước với 
+TCKT không?
+14. Ở mục giá bán có tính năng ẩn hiện giá PLTTH trên App khi quá n ngày không phát sinh giao dịch: Vậy tính năng này 
+được xét trên Khách hàng hay theo từng người mua?
+- Nếu xét trên KH: Vậy chỉ cần rà trên các đơn hàng phát sinh từ KH đó, không quan tâm đơn hàng đó xuất cho người mua 
+nào
+- Nếu xét trên Người mua: Vậy App nhận diện người mua thế nào để hiển thị/không hiển thị giá bán? Có ảnh hưởng luồng 
+đơn hàng

@@ -1,0 +1,144 @@
+// Prisma Schema for AI Test Case Generator & Management System
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  TESTER
+  VIEWER
+}
+
+enum Priority {
+  CAO
+  TRUNG_BINH
+  THAP
+}
+
+enum TestExecutionStatus {
+  PASSED
+  FAILED
+  BLOCKED
+  UNTESTED
+}
+
+model User {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  passwordHash  String          @map("password_hash")
+  fullName      String          @map("full_name")
+  role          Role            @default(TESTER)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  documents     Document[]
+  executions    TestExecution[]
+  aiConfigs     AiConfig[]
+
+  @@map("users")
+}
+
+model Document {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename    String
+  fileType    String      @map("file_type")
+  fileSize    Int         @default(0) @map("file_size")
+  rawContent  String      @db.Text @map("raw_content")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  testSuites  TestSuite[]
+
+  @@map("documents")
+}
+
+model TestSuite {
+  id          String      @id @default(uuid())
+  documentId  String?     @map("document_id")
+  document    Document?   @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  name        String
+  moduleName  String      @map("module_name")
+  summary     String?     @db.Text
+  assumptions String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  testCases   TestCase[]
+
+  @@map("test_suites")
+}
+
+model TestCase {
+  id             String          @id @default(uuid())
+  testSuiteId    String          @map("test_suite_id")
+  testSuite      TestSuite       @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  testCaseCode   String          @map("test_case_code") // e.g. TC_KH_001
+  module         String
+  platform       String          // App, CMS, Web, etc.
+  title          String
+  testType       String          @map("test_type") // Luồng chuẩn, Luồng ngoại lệ, Giá trị biên
+  preconditions  String          @db.Text
+  steps          String          @db.Text
+  expectedResult String          @db.Text @map("expected_result")
+  priority       String          @default("Cao") // Cao, Trung bình, Thấp
+  orderIndex     Int             @default(0) @map("order_index")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  executions     TestExecution[]
+
+  @@map("test_cases")
+}
+
+model TestExecution {
+  id           String              @id @default(uuid())
+  testCaseId   String              @map("test_case_id")
+  testCase     TestCase            @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  executedById String?             @map("executed_by_id")
+  executedBy   User?               @relation(fields: [executedById], references: [id], onDelete: SetNull)
+  
+  server       String?             // DEV, STAGING, UAT, PROD, IP...
+  os           String?             // Windows 11, macOS, Android 14, iOS 17...
+  status       TestExecutionStatus @default(UNTESTED)
+  actualResult String?             @db.Text @map("actual_result")
+  evaluation   String?             @db.Text
+  notes        String?             @db.Text
+  
+  executedAt   DateTime            @default(now()) @map("executed_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  @@map("test_executions")
+}
+
+model AiConfig {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider   String   // gemini, openai, anthropic, deepseek, custom
+  apiKey     String   @map("api_key")
+  modelName  String   @map("model_name")
+  baseUrl    String?  @map("base_url")
+  isActive   Boolean  @default(false) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("ai_configs")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
