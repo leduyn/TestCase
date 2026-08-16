@@ -15,6 +15,12 @@ enum Role {
   VIEWER
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  PENDING
+}
+
 enum Priority {
   CAO
   TRUNG_BINH
@@ -29,17 +35,21 @@ enum TestExecutionStatus {
 }
 
 model User {
-  id            String          @id @default(uuid())
-  email         String          @unique
-  passwordHash  String          @map("password_hash")
-  fullName      String          @map("full_name")
-  role          Role            @default(TESTER)
-  createdAt     DateTime        @default(now()) @map("created_at")
-  updatedAt     DateTime        @updatedAt @map("updated_at")
+  id                String            @id @default(uuid())
+  email             String            @unique
+  passwordHash      String            @map("password_hash")
+  fullName          String            @map("full_name")
+  role              Role              @default(TESTER)
+  status            UserStatus        @default(ACTIVE)
+  lastLogin         DateTime?         @map("last_login")
+  failedLoginAttempts Int             @default(0) @map("failed_login_attempts")
+  passwordExpiry    DateTime?         @map("password_expiry")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
 
-  documents     Document[]
-  executions    TestExecution[]
-  aiConfigs     AiConfig[]
+  documents         Document[]
+  executions        TestExecution[]
+  aiConfigs         AiConfig[]
 
   @@map("users")
 }

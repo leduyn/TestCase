@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { UserRole } from '../Models/UserModel';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_testcase_ai_2026';
 
@@ -27,11 +28,12 @@ export class AuthController {
           passwordHash,
           fullName,
           role: 'TESTER',
+          status: 'ACTIVE',
         },
       });
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
+        { id: user.id, email: user.email, fullName: user.fullName, role: user.role, status: user.status },
         JWT_SECRET,
         { expiresIn: '7d' }
       );
@@ -39,7 +41,7 @@ export class AuthController {
       return res.status(201).json({
         message: 'Đăng ký tài khoản thành công',
         token,
-        user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
+        user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role, status: user.status },
       });
     } catch (error: any) {
       console.error('Register error:', error);
@@ -62,11 +64,28 @@ export class AuthController {
 
       const isMatch = await bcrypt.compare(password, user.passwordHash);
       if (!isMatch) {
+        // Increment failed login attempts
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            failedLoginAttempts: { increment: 1 },
+            ...(user.failedLoginAttempts >= 3 ? { status: 'INACTIVE' } : {}),
+          },
+        });
         return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác' });
       }
 
+      // Reset failed login attempts on successful login
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          failedLoginAttempts: 0,
+          lastLogin: new Date(),
+        },
+      });
+
       const token = jwt.sign(
-        { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
+        { id: user.id, email: user.email, fullName: user.fullName, role: user.role, status: user.status },
         JWT_SECRET,
         { expiresIn: '7d' }
       );
@@ -74,7 +93,7 @@ export class AuthController {
       return res.json({
         message: 'Đăng nhập thành công',
         token,
-        user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role },
+        user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role, status: user.status },
       });
     } catch (error: any) {
       console.error('Login error:', error);
@@ -90,7 +109,7 @@ export class AuthController {
 
       const user = await prisma.user.findUnique({
         where: { id: req.user.id },
-        select: { id: true, email: true, fullName: true, role: true, createdAt: true },
+        select: { id: true, email: true, fullName: true, role: true, status: true, createdAt: true, lastLogin: true },
       });
 
       if (!user) {
@@ -99,6 +118,86 @@ export class AuthController {
 
       return res.json({ user });
     } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+    }
+  }
+
+  static async updateProfile(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Chưa đăng nhập' });
+      }
+
+      const { fullName, password } = req.body;
+      const updateData: any = {};
+
+      if (fullName) {
+        updateData.fullName = fullName;
+      }
+
+      if (password) {
+        updateData.passwordHash = await bcrypt.hash(password, 10);
+      }
+
+      const user = await prisma.user.update({
+        where: { id: req.user.id },
+        data: updateData,
+        select: { id: true, email: true, fullName: true, role: true, status: true },
+      });
+
+      return res.json({ message: 'Cập nhật thông tin thành công', user });
+    } catch (error: any) {
+      console.error('Update profile error:', error);
+      return res.status(500).json({ message: 'Lỗi máy chủ khi cập nhật', error: error.message });
+    }
+  }
+
+  static async disableAccount(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Chưa đăng nhập' });
+      }
+
+      // Users can only disable their own account, admins can disable any
+      await prisma.user.update({
+        where: { id: req.user.id },
+        data: { status: 'INACTIVE' },
+      });
+
+      return res.json({ message: 'Tài khoản đã bị vô hiệu hóa' });
+    } catch (error: any) {
+      console.error('Disable account error:', error);
+      return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
+    }
+  }
+
+  static async toggleAccountStatus(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // Chỉ admin mới được phép kích hoạt/khóa tài khoản khác
+      if (req.user?.role !== UserRole.ADMIN) {
+        return res.status(403).json({ message: 'Chỉ quản trị viên mới được phép thực hiện hành động này' });
+      }
+
+      const { status } = req.body;
+      if (!status || !['ACTIVE', 'INACTIVE'].includes(status)) {
+        return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id } });
+      if (!user) {
+        return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+      }
+
+      await prisma.user.update({
+        where: { id },
+        data: { status },
+      });
+
+      return res.json({ message: `Tài khoản đã được ${status === 'ACTIVE' ? 'kích hoạt' : 'khóa'}`, user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role, status: user.status } });
+    } catch (error: any) {
+      console.error('Toggle account status error:', error);
       return res.status(500).json({ message: 'Lỗi máy chủ', error: error.message });
     }
   }
