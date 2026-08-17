@@ -27,7 +27,9 @@ export const Generate: React.FC = () => {
   const [configs, setConfigs] = useState<AIConfig[]>([]);
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState('gemini');
-  const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.7-flash');
+  const [isCustomModel, setIsCustomModel] = useState(false);
+  const [isConfigCustomModel, setIsConfigCustomModel] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
 
@@ -244,22 +246,20 @@ export const Generate: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setActiveTab('upload')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
-                    activeTab === 'upload'
-                      ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${activeTab === 'upload'
+                    ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
                   Upload File (PDF/DOCX/TXT)
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('text')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${
-                    activeTab === 'text'
-                      ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
+                  className={`px-3 py-1 rounded-md text-xs font-bold transition-colors ${activeTab === 'text'
+                    ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                    }`}
                 >
                   Dán nội dung Text
                 </button>
@@ -270,11 +270,10 @@ export const Generate: React.FC = () => {
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                  file
-                    ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-950/20'
-                    : 'border-slate-300 dark:border-slate-700 hover:border-blue-400 bg-slate-50/50 dark:bg-slate-800/40'
-                }`}
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${file
+                  ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-950/20'
+                  : 'border-slate-300 dark:border-slate-700 hover:border-blue-400 bg-slate-50/50 dark:bg-slate-800/40'
+                  }`}
               >
                 <input
                   type="file"
@@ -366,21 +365,48 @@ export const Generate: React.FC = () => {
 
                   {selectedConfigId && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Mô hình AI (Model)
-                      </label>
-                      <input
-                        type="text"
-                        value={selectedModel}
-                        onChange={(e) => setSelectedModel(e.target.value)}
-                        list="cfg-models-list"
-                        className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                      />
-                      <datalist id="cfg-models-list">
-                        {activeProviderObj?.models?.map((m) => (
-                          <option key={m} value={m} />
-                        ))}
-                      </datalist>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          Mô hình AI (Model)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsConfigCustomModel(!isConfigCustomModel)}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {isConfigCustomModel ? '← Chọn từ danh sách' : '+ Nhập model khác'}
+                        </button>
+                      </div>
+
+                      {isConfigCustomModel ? (
+                        <input
+                          type="text"
+                          value={selectedModel}
+                          onChange={(e) => setSelectedModel(e.target.value)}
+                          placeholder="Nhập mã model bất kỳ..."
+                          className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none font-mono"
+                        />
+                      ) : (
+                        <select
+                          value={selectedModel}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setIsConfigCustomModel(true);
+                              setSelectedModel('');
+                            } else {
+                              setSelectedModel(e.target.value);
+                            }
+                          }}
+                          className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        >
+                          {activeProviderObj?.models?.map((m) => (
+                            <option key={m} value={m}>
+                              {m} {m === activeProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                            </option>
+                          ))}
+                          <option value="__custom__">+ Nhập mã model tùy chỉnh khác...</option>
+                        </select>
+                      )}
                     </div>
                   )}
                 </div>
@@ -388,7 +414,7 @@ export const Generate: React.FC = () => {
                 {selectedConfigId && (
                   <p className="text-xs text-slate-500">
                     Đang dùng API Key đã lưu từ cấu hình{' '}
-                    <b className="text-slate-700 dark:text-slate-200">{providerLabel(activeProviderId)}</b>. Bạn có thể chọn bất kỳ model của provider này ở trên.
+                    <b className="text-slate-700 dark:text-slate-200">{providerLabel(activeProviderId)}</b> ({activeProviderObj?.models?.length || 0} mô hình sẵn sàng).
                   </p>
                 )}
               </div>
@@ -415,6 +441,8 @@ export const Generate: React.FC = () => {
                       className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     >
                       <option value="gemini">Google Gemini (Khuyên dùng)</option>
+                      <option value="openrouter">OpenRouter (Multi-model & Free models)</option>
+                      <option value="groq">Groq AI (Ultra-fast Inference)</option>
                       <option value="openai">OpenAI (GPT-4o, GPT-4o-mini)</option>
                       <option value="deepseek">DeepSeek AI</option>
                       <option value="custom">Custom / Local (Ollama, vLLM)</option>
@@ -422,21 +450,48 @@ export const Generate: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      Mô hình AI (Model)
-                    </label>
-                    <input
-                      type="text"
-                      value={selectedModel}
-                      onChange={(e) => setSelectedModel(e.target.value)}
-                      list="models-list"
-                      className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                    <datalist id="models-list">
-                      {currentProviderObj?.models?.map((m) => (
-                        <option key={m} value={m} />
-                      ))}
-                    </datalist>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        Mô hình AI (Model)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomModel(!isCustomModel)}
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        {isCustomModel ? '← Chọn từ danh sách' : '+ Nhập model khác'}
+                      </button>
+                    </div>
+
+                    {isCustomModel ? (
+                      <input
+                        type="text"
+                        value={selectedModel}
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        placeholder="Nhập mã model bất kỳ..."
+                        className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                      />
+                    ) : (
+                      <select
+                        value={selectedModel}
+                        onChange={(e) => {
+                          if (e.target.value === '__custom__') {
+                            setIsCustomModel(true);
+                            setSelectedModel('');
+                          } else {
+                            setSelectedModel(e.target.value);
+                          }
+                        }}
+                        className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        {currentProviderObj?.models?.map((m) => (
+                          <option key={m} value={m}>
+                            {m} {m === currentProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                          </option>
+                        ))}
+                        <option value="__custom__">+ Nhập mã model tùy chỉnh khác...</option>
+                      </select>
+                    )}
                   </div>
                 </div>
 
@@ -478,7 +533,11 @@ export const Generate: React.FC = () => {
               </label>
               <input
                 type="text"
-                value={customInstruction}
+                value={customInstruction || `Bạn là một Senior QA Engineer. Nhiệm vụ của bạn là phân tích tài liệu được cung cấp và tạo bộ Test Case đầy đủ (Happy Path, Negative, Boundary Cases).Phân tích cực kỳ chi tiết từng màn hình và chức năng. Yêu cầu sinh tối thiểu 40-50 Test Case bao phủ toàn diện:
+1. Luồng chuẩn cho từng vai trò người dùng (Happy path).
+2. Kiểm tra tất cả các lỗi Validation (bỏ trống, sai định dạng, vượt quá độ dài, SQL injection/ký tự đặc biệt).
+3. Kiểm tra các giá trị biên (Boundary cases) cho mọi trường số/ngày tháng/ký tự.
+4. Tách biệt rõ ràng các kịch bản kiểm thử trên App và CMS.`}
                 onChange={(e) => setCustomInstruction(e.target.value)}
                 placeholder="VD: Tách rõ kịch bản App và CMS; Bổ sung nhiều case kiểm tra giá trị biên cho số điện thoại..."
                 className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"

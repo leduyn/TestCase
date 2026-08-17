@@ -5,6 +5,9 @@ export interface User {
   email: string;
   fullName: string;
   role: Role;
+  status?: string;
+  createdAt?: string;
+  lastLogin?: string;
 }
 
 export type ExecutionStatus = 'PASSED' | 'FAILED' | 'BLOCKED' | 'UNTESTED';

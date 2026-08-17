@@ -184,16 +184,6 @@ export const environmentApi = {
 
 // --- User Management API ---
 
-export interface User {
-  id: string;
-  email: string;
-  fullName: string;
-  role: string;
-  status: string;
-  createdAt: string;
-  lastLogin?: string;
-}
-
 export interface UserTableRow {
   id: string;
   email: string;

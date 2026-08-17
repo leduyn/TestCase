@@ -1,37 +1,73 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { userApi, type User } from '../services/api';
+import { userApi } from '../services/api';
+import type { User, Role } from '../types';
+import {
+  UserPlus,
+  Search,
+  Edit2,
+  Trash2,
+  Lock,
+  Unlock,
+  Shield,
+  X,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw
+} from 'lucide-react';
+
+interface ModalState {
+  open: boolean;
+  mode: 'create' | 'edit';
+  user?: User | null;
+}
 
 const UserManagement: React.FC = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user: currentUser } = useAuth();
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [newUser, setNewUser] = useState<{ email: string; password: string; fullName: string; role: string }>({
+
+  // Add / Edit Modal
+  const [modalState, setModalState] = useState<ModalState>({
+    open: false,
+    mode: 'create',
+    user: null,
+  });
+
+  const [formData, setFormData] = useState<{
+    email: string;
+    password: string;
+    fullName: string;
+    role: Role;
+  }>({
     email: '',
     password: '',
     fullName: '',
     role: 'TESTER',
   });
-  const [deleteModal, setDeleteModal] = useState<{ open: boolean; userId?: string }>({
+
+  // Confirmation Modals
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; user?: User | null }>({
     open: false,
-  });
-  const [statusModal, setStatusModal] = useState<{ open: boolean; userId?: string; status: string }>({
-    open: false,
+    user: null,
   });
 
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
+  const [statusModal, setStatusModal] = useState<{ open: boolean; user?: User | null }>({
+    open: false,
+    user: null,
+  });
+
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((prev) => (prev?.message === message ? null : prev));
+    }, 3000);
   };
-
-  useEffect(() => {
-    fetchUsers();
-  }, [search]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -39,68 +75,91 @@ const UserManagement: React.FC = () => {
       const { data } = await userApi.getUsers();
       setUsers(data);
     } catch (error: any) {
-      showToast('Lỗi khi tải danh sách người dùng', 'error');
+      showToast(error.response?.data?.message || 'Lỗi khi tải danh sách người dùng', 'error');
       console.error(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    const toast = document.createElement('div');
-    toast.style.position = 'fixed';
-    toast.style.top = '20px';
-    toast.style.right = '20px';
-    toast.style.padding = '12px 24px';
-    toast.style.background = type === 'success' ? '#10b981' : '#ef4444';
-    toast.style.color = 'white';
-    toast.style.borderRadius = '6px';
-    toast.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-    toast.style.zIndex = '1000';
-    toast.style.fontFamily = 'system-ui, -apple-system, sans-serif';
-    toast.style.fontSize = '14px';
-    toast.style.fontWeight = '500';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  };
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { data } = await userApi.createUser(newUser);
-      showToast('Tạo người dùng thành công', 'success');
-      setUsers([...users, data]);
-      setNewUser({ email: '', password: '', fullName: '', role: 'TESTER' });
-    } catch (error: any) {
-      showToast(error.response?.data?.message || 'Lỗi tạo người dùng', 'error');
-    }
-  };
-
-  const handleEdit = (user: User) => {
-    setEditingUser(user);
-    setNewUser({
-      email: user.email,
+  const openCreateModal = () => {
+    setFormData({
+      email: '',
       password: '',
-      fullName: user.fullName,
-      role: user.role,
+      fullName: '',
+      role: 'TESTER',
+    });
+    setModalState({
+      open: true,
+      mode: 'create',
+      user: null,
     });
   };
 
-  const handleUpdate = async (id: string) => {
+  const openEditModal = (targetUser: User) => {
+    setFormData({
+      email: targetUser.email,
+      password: '',
+      fullName: targetUser.fullName,
+      role: targetUser.role,
+    });
+    setModalState({
+      open: true,
+      mode: 'edit',
+      user: targetUser,
+    });
+  };
+
+  const closeModal = () => {
+    setModalState({ open: false, mode: 'create', user: null });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+
     try {
-      const { data } = await userApi.updateUser(id, {
-        fullName: newUser.fullName,
-        role: newUser.role,
-      });
-      showToast('Cập nhật người dùng thành công', 'success');
-      const updatedIndex = users.findIndex(u => u.id === id);
-      if (updatedIndex > -1) {
-        setUsers(users.map(u => u.id === id ? data : u));
+      if (modalState.mode === 'create') {
+        if (!formData.email || !formData.password || !formData.fullName) {
+          showToast('Vui lòng nhập đầy đủ email, mật khẩu và họ tên', 'error');
+          setSubmitting(false);
+          return;
+        }
+
+        const { data } = await userApi.createUser({
+          email: formData.email.trim(),
+          password: formData.password,
+          fullName: formData.fullName.trim(),
+          role: formData.role,
+        });
+
+        showToast('Tạo người dùng mới thành công', 'success');
+        setUsers((prev) => [data, ...prev]);
+        closeModal();
+      } else if (modalState.mode === 'edit' && modalState.user) {
+        if (!formData.fullName.trim()) {
+          showToast('Họ tên không được để trống', 'error');
+          setSubmitting(false);
+          return;
+        }
+
+        const { data } = await userApi.updateUser(modalState.user.id, {
+          fullName: formData.fullName.trim(),
+          role: formData.role,
+        });
+
+        showToast('Cập nhật thông tin người dùng thành công', 'success');
+        setUsers((prev) => prev.map((u) => (u.id === modalState.user!.id ? data : u)));
+        closeModal();
       }
-      setEditingUser(null);
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Lỗi cập nhật', 'error');
+      showToast(error.response?.data?.message || 'Có lỗi xảy ra', 'error');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -108,230 +167,300 @@ const UserManagement: React.FC = () => {
     try {
       await userApi.deleteUser(userId);
       showToast('Xóa người dùng thành công', 'success');
-      setUsers(users.filter(u => u.id !== userId));
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Lỗi xóa người dùng', 'error');
+      showToast(error.response?.data?.message || 'Lỗi khi xóa người dùng', 'error');
+    } finally {
+      setDeleteModal({ open: false, user: null });
     }
-    setDeleteModal(prev => ({ ...prev, open: false }));
   };
 
-  const handleToggleStatus = async (userId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+  const handleToggleStatus = async (userToToggle: User) => {
     try {
-      const { data } = await userApi.toggleStatus(userId);
-      showToast(`Tài khoản ${newStatus === 'ACTIVE' ? 'kích hoạt' : 'khóa'} thành công`, 'success');
-      const updatedIndex = users.findIndex(u => u.id === userId);
-      if (updatedIndex > -1) {
-        setUsers(users.map(u => u.id === userId ? data : u));
-      }
+      const { data } = await userApi.toggleStatus(userToToggle.id);
+      const isNowActive = data.user.status === 'ACTIVE';
+      showToast(`Tài khoản ${isNowActive ? 'kích hoạt' : 'khóa'} thành công`, 'success');
+      setUsers((prev) => prev.map((u) => (u.id === userToToggle.id ? data.user : u)));
     } catch (error: any) {
       showToast(error.response?.data?.message || 'Lỗi thay đổi trạng thái', 'error');
+    } finally {
+      setStatusModal({ open: false, user: null });
     }
-    setStatusModal(prev => ({ ...prev, open: false }));
   };
 
-  if (!user) {
+  if (!currentUser) {
     return null;
   }
 
-  const filteredUsers = users.filter(
-    u => u.email.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredUsers = users.filter((u) => {
+    const q = search.toLowerCase();
+    return (
+      u.email.toLowerCase().includes(q) ||
+      (u.fullName && u.fullName.toLowerCase().includes(q))
+    );
+  });
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6">
-      <h2 className="text-2xl font-bold text-slate-900 mb-4">
-        Quản lý Người dùng
-      </h2>
-      <p className="text-slate-500 dark:text-slate-400 mb-4">
-        Tổng cộng: {filteredUsers.length} người
-      </p>
-
-      {/* Search and Add User */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="flex-1">
-          <input
-            type="text"
-            placeholder="Tìm kiếm email hoặc tên..."
-            value={search}
-            onChange={handleSearch}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-        <button
-          onClick={() => setEditingUser(null)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-white font-medium text-sm transition-all duration-300 ${
+            toast.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
+          }`}
         >
-          Thêm người dùng
-        </button>
-      </div>
-
-      {/* Users Table */}
-      {loading ? (
-        <div className="h-64 w-full flex items-center justify-center">
-          <span className="text-slate-500">Đang tải...</span>
-        </div>
-      ) : filteredUsers.length === 0 ? (
-        <div className="h-64 w-full flex items-center justify-center text-slate-500">
-          Không có người dùng phù hợp
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-slate-600 dark:text-slate-400">
-            <thead className="text-xs text-slate-600 uppercase border-b dark:border-slate-800">
-              <tr>
-                <th className="p-3">Email</th>
-                <th className="p-3">Họ tên</th>
-                <th className="p-3">Vai trò</th>
-                <th className="p-3">Trạng thái</th>
-                <th className="p-3">Last Login</th>
-                <th className="p-3">Hành động</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((u) => (
-                <tr key={u.id} className="border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900">
-                  <td className="p-3">{u.email}</td>
-                  <td className="p-3">{u.fullName || '-'}</td>
-                  <td className="p-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        u.role === 'ADMIN'
-                          ? 'bg-red-100 text-red-800'
-                          : u.role === 'TESTER'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-green-100 text-green-800'
-                      }`}
-                    >
-                      {u.role === 'ADMIN' ? 'Quản trị viên' : u.role === 'TESTER' ? 'Kiểm thử' : 'Xem chỉ đọc'}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                        u.status === 'ACTIVE'
-                          ? 'bg-green-100 text-green-800'
-                          : u.status === 'INACTIVE'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {u.status === 'ACTIVE' ? 'Hoạt động' : u.status === 'INACTIVE' ? 'Vô hiệu hóa' : 'Chờ xác thực'}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('vi-VN') : 'Chưa đăng nhập'}
-                  </td>
-                  <td className="p-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEdit(u)}
-                        className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded hover:bg-blue-100 transition-colors"
-                        title="Sửa"
-                      >
-                        Sửa
-                      </button>
-                      <button
-                        onClick={() => setDeleteModal(prev => ({ ...prev, open: true, userId: u.id }))}
-                        className="px-2 py-1 bg-red-50 text-red-700 text-xs rounded hover:bg-red-100 transition-colors"
-                        title="Xóa"
-                      >
-                        Xóa
-                      </button>
-                      {user.role === 'ADMIN' && (
-                        <>
-                          <button
-                            onClick={() =>
-                              setStatusModal(prev => ({ ...prev, open: true, userId: u.id, status: u.status }))
-                            }
-                            className="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs rounded hover:bg-yellow-100 transition-colors"
-                            title="Kích hoạt/Khóa"
-                          >
-                            {u.status === 'ACTIVE' ? 'Khóa' : 'Kích hoạt'}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {toast.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+          <span>{toast.message}</span>
         </div>
       )}
 
-      {/* Create/Edit User Modal */}
-      {editingUser && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{
-            background: 'white', padding: '24px', borderRadius: '8px',
-            width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto'
-          }}>
-            <h3 className="text-lg font-bold mb-4">
-              {editingUser.id ? 'Sửa người dùng' : 'Thêm người dùng mới'}
-            </h3>
-            <form
-              onSubmit={
-                editingUser.id ? handleUpdate : handleCreate
-              } style={{ marginBottom: '24px' }}
-            >
-              <input
-                type="email"
-                placeholder="Email"
-                defaultValue={editingUser?.email || newUser.email}
-                onChange={(e) =>
-                  setNewUser(prev => ({ ...prev, email: e.target.value }))
-                }
-                disabled={editingUser?.id ? true : false}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <input
-                type="password"
-                placeholder="Mật khẩu (để trống nếu không đổi)"
-                defaultValue={editingUser?.id ? '' : newUser.password}
-                onChange={(e) =>
-                  setNewUser(prev => ({ ...prev, password: e.target.value }))
-                }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <input
-                type="text"
-                placeholder="Họ tên"
-                defaultValue={editingUser?.fullName || newUser.fullName}
-                onChange={(e) =>
-                  setNewUser(prev => ({ ...prev, fullName: e.target.value }))
-                }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <select
-                onChange={(e) =>
-                  setNewUser(prev => ({ ...prev, role: e.target.value }))
-                }
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <Shield className="w-7 h-7 text-indigo-600" />
+            Quản lý Người dùng
+          </h2>
+          <p className="text-slate-500 text-sm mt-1">
+            Tổng cộng: <span className="font-semibold text-slate-700">{filteredUsers.length}</span> người dùng
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchUsers}
+            disabled={loading}
+            className="p-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+            title="Tải lại"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-sm transition-colors text-sm"
+          >
+            <UserPlus className="w-4 h-4" />
+            Thêm người dùng mới
+          </button>
+        </div>
+      </div>
+
+      {/* Search Input */}
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Tìm kiếm theo email hoặc họ tên..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+        />
+      </div>
+
+      {/* Users Table */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="h-64 flex flex-col items-center justify-center gap-2 text-slate-500">
+            <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
+            <span className="text-sm font-medium">Đang tải danh sách người dùng...</span>
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="h-64 flex flex-col items-center justify-center gap-2 text-slate-500">
+            <AlertCircle className="w-8 h-8 text-slate-400" />
+            <span className="text-sm">Không tìm thấy người dùng phù hợp</span>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-slate-50 text-xs text-slate-500 uppercase font-semibold border-b border-slate-200">
+                <tr>
+                  <th className="px-5 py-3.5">Họ tên & Email</th>
+                  <th className="px-5 py-3.5">Vai trò</th>
+                  <th className="px-5 py-3.5">Trạng thái</th>
+                  <th className="px-5 py-3.5">Đăng nhập gần nhất</th>
+                  <th className="px-5 py-3.5 text-right">Hành động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="px-5 py-4">
+                      <div className="font-medium text-slate-900">{u.fullName || '(Chưa đặt tên)'}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">{u.email}</div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          u.role === 'ADMIN'
+                            ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                            : u.role === 'TESTER'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}
+                      >
+                        {u.role === 'ADMIN'
+                          ? 'Quản trị viên'
+                          : u.role === 'TESTER'
+                          ? 'Kiểm thử viên'
+                          : 'Xem chỉ đọc'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          u.status === 'ACTIVE'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            u.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-slate-400'
+                          }`}
+                        />
+                        {u.status === 'ACTIVE' ? 'Hoạt động' : 'Đã khóa'}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-xs text-slate-500">
+                      {u.lastLogin ? new Date(u.lastLogin).toLocaleString('vi-VN') : 'Chưa đăng nhập'}
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => openEditModal(u)}
+                          className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                          title="Sửa"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {currentUser.role === 'ADMIN' && (
+                          <>
+                            <button
+                              onClick={() => setStatusModal({ open: true, user: u })}
+                              className={`p-1.5 rounded transition-colors ${
+                                u.status === 'ACTIVE'
+                                  ? 'text-amber-600 hover:bg-amber-50'
+                                  : 'text-emerald-600 hover:bg-emerald-50'
+                              }`}
+                              title={u.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'}
+                            >
+                              {u.status === 'ACTIVE' ? (
+                                <Lock className="w-4 h-4" />
+                              ) : (
+                                <Unlock className="w-4 h-4" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => setDeleteModal({ open: true, user: u })}
+                              className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                              title="Xóa"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Create / Edit Modal */}
+      {modalState.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="text-lg font-bold text-slate-900">
+                {modalState.mode === 'create' ? 'Thêm người dùng mới' : 'Chỉnh sửa người dùng'}
+              </h3>
+              <button
+                onClick={closeModal}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors"
               >
-                <option value="ADMIN">Quản trị viên (ADMIN)</option>
-                <option value="TESTER">Kiểm thử (TESTER)</option>
-                <option value="VIEWER">Xem chỉ đọc (VIEWER)</option>
-              </select>
-              <div style={{ display: 'flex', gap: '12' }}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Email <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  disabled={modalState.mode === 'edit'}
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="user@example.com"
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-500"
+                />
+              </div>
+
+              {modalState.mode === 'create' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Mật khẩu <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Nhập mật khẩu..."
+                    className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Họ và tên <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  placeholder="Nguyễn Văn A"
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Vai trò (Role)
+                </label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as Role })}
+                  className="w-full px-3.5 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="ADMIN">Quản trị viên (ADMIN)</option>
+                  <option value="TESTER">Kiểm thử viên (TESTER)</option>
+                  <option value="VIEWER">Xem chỉ đọc (VIEWER)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditingUser(null)}
-                  style={{ padding: '8px 16px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  onClick={closeModal}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  disabled={editingUser?.id && !newUser.fullName}
-                  style={{
-                    padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
-                  }}
+                  disabled={submitting}
+                  className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors disabled:opacity-50 flex items-center gap-2"
                 >
-                  {editingUser.id ? 'Cập nhật' : 'Thêm'}
+                  {submitting && <RefreshCw className="w-4 h-4 animate-spin" />}
+                  {modalState.mode === 'create' ? 'Thêm người dùng' : 'Lưu thay đổi'}
                 </button>
               </div>
             </form>
@@ -339,35 +468,33 @@ const UserManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Delete Confirm Modal */}
-      {deleteModal.open && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{
-            background: 'white', padding: '24px', borderRadius: '8px',
-            width: '90%', maxWidth: '400px'
-          }}>
-            <h3 className="text-lg font-bold mb-4">Xác nhận xóa</h3>
-            <p className="text-slate-600 mb-6">
-              Bạn có chắc chắn muốn xóa người dùng không? Hành động này không thể hoàn tác.
-            </p>
-            <div style={{ display: 'flex', gap: '12' }}>
+      {/* Delete Confirmation Modal */}
+      {deleteModal.open && deleteModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm p-6 space-y-4">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-bold text-slate-900">Xác nhận xóa người dùng</h3>
+              <p className="text-sm text-slate-500 mt-2">
+                Bạn có chắc chắn muốn xóa tài khoản <span className="font-semibold text-slate-800">{deleteModal.user.email}</span>? Hành động này không thể hoàn tác.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setDeleteModal(prev => ({ ...prev, open: false }))}
-                style={{ padding: '8px 16px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                onClick={() => setDeleteModal({ open: false, user: null })}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 Hủy
               </button>
               <button
-                onClick={() => handleDelete(deleteModal.userId!)}
-                style={{
-                  padding: '8px 16px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
-                }}
+                type="button"
+                onClick={() => handleDelete(deleteModal.user!.id)}
+                className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors"
               >
-                Xóa
+                Xác nhận xóa
               </button>
             </div>
           </div>
@@ -375,38 +502,49 @@ const UserManagement: React.FC = () => {
       )}
 
       {/* Status Toggle Modal */}
-      {statusModal.open && user.role === 'ADMIN' && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div style={{
-            background: 'white', padding: '24px', borderRadius: '8px',
-            width: '90%', maxWidth: '400px'
-          }}>
-            <h3 className="text-lg font-bold mb-4">
-              {statusModal.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'}
-            </h3>
-            <p className="text-slate-600 mb-6">
-              Bạn có chắc chắn muốn {statusModal.status === 'ACTIVE' ? 'khóa' : 'kích hoạt'} tài khoản này?
-            </p>
-            <div style={{ display: 'flex', gap: '12' }}>
+      {statusModal.open && statusModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm p-6 space-y-4">
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto ${
+                statusModal.user.status === 'ACTIVE'
+                  ? 'bg-amber-100 text-amber-600'
+                  : 'bg-emerald-100 text-emerald-600'
+              }`}
+            >
+              {statusModal.user.status === 'ACTIVE' ? (
+                <Lock className="w-6 h-6" />
+              ) : (
+                <Unlock className="w-6 h-6" />
+              )}
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-bold text-slate-900">
+                {statusModal.user.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
+              </h3>
+              <p className="text-sm text-slate-500 mt-2">
+                Bạn có chắc chắn muốn {statusModal.user.status === 'ACTIVE' ? 'khóa' : 'mở khóa'} tài khoản{' '}
+                <span className="font-semibold text-slate-800">{statusModal.user.email}</span>?
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => setStatusModal(prev => ({ ...prev, open: false }))}
-                style={{
-                  padding: '8px 16px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
-                }}
+                onClick={() => setStatusModal({ open: false, user: null })}
+                className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 Hủy
               </button>
               <button
-                onClick={() => handleToggleStatus(statusModal.userId!, statusModal.status)}
-                style={{
-                  padding: '8px 16px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'
-                }}
+                type="button"
+                onClick={() => handleToggleStatus(statusModal.user!)}
+                className={`px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm transition-colors ${
+                  statusModal.user.status === 'ACTIVE'
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
               >
-                {statusModal.status === 'ACTIVE' ? 'Khóa' : 'Kích hoạt'}
+                {statusModal.user.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Mở khóa'}
               </button>
             </div>
           </div>

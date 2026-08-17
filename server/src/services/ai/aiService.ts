@@ -22,7 +22,7 @@ export interface GenerationResult {
 
 export interface GenerateOptions {
   documentContent: string;
-  provider?: string; // 'gemini' | 'openai' | 'deepseek' | 'anthropic' | 'custom'
+  provider?: string; // 'gemini' | 'openrouter' | 'groq' | 'openai' | 'deepseek' | 'custom'
   apiKey?: string;
   modelName?: string;
   baseUrl?: string;
@@ -61,6 +61,85 @@ Nhiệm vụ của bạn:
   ]
 }`;
 
+interface RetryOptions {
+  maxRetries?: number;
+  initialDelayMs?: number;
+  maxDelayMs?: number;
+  backoffFactor?: number;
+}
+
+/**
+ * Kiểm tra xem lỗi có phải do Rate Limit (429) hoặc lỗi mạng/tạm thời có thể thử lại
+ */
+function isRetryableError(error: any): boolean {
+  const status = error?.status || error?.statusCode || error?.response?.status;
+  if (status === 429 || [500, 502, 503, 504].includes(status)) {
+    return true;
+  }
+
+  const message = (error?.message || '').toLowerCase();
+  const retryableKeywords = [
+    'rate limit',
+    'rate_limit',
+    'too many requests',
+    'resource has been exhausted',
+    'quota',
+    '429',
+    'econnreset',
+    'etimedout',
+    'temporarily unavailable',
+    'overloaded',
+    'fetch failed',
+    'server error',
+  ];
+
+  return retryableKeywords.some((keyword) => message.includes(keyword));
+}
+
+/**
+ * Hàm thực thi với cơ chế Exponential Backoff Retry cho các API AI
+ */
+async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
+  const maxRetries = options.maxRetries ?? 3;
+  const initialDelayMs = options.initialDelayMs ?? 2000;
+  const maxDelayMs = options.maxDelayMs ?? 20000;
+  const backoffFactor = options.backoffFactor ?? 2;
+
+  let attempt = 0;
+  while (true) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      attempt++;
+      if (attempt > maxRetries || !isRetryableError(error)) {
+        throw error;
+      }
+
+      // Tính toán delay theo Exponential Backoff
+      let delayMs = initialDelayMs * Math.pow(backoffFactor, attempt - 1);
+
+      // Nếu server trả về Retry-After header
+      const retryAfter = error?.headers?.get?.('retry-after') || error?.response?.headers?.['retry-after'];
+      if (retryAfter) {
+        const parsed = parseFloat(retryAfter);
+        if (!isNaN(parsed) && parsed > 0) {
+          delayMs = parsed * 1000;
+        }
+      }
+
+      // Thêm jitter ngẫu nhiên để tránh xung đột
+      const jitter = Math.random() * 500;
+      const finalDelay = Math.min(delayMs + jitter, maxDelayMs);
+
+      console.warn(
+        `[AIService] ⚠️ Gặp lỗi Rate Limit / Tạm thời (Lần thử ${attempt}/${maxRetries}): ${error.message}. Đang thử lại sau ${Math.round(finalDelay)}ms...`
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, finalDelay));
+    }
+  }
+}
+
 export class AIService {
   static async generateTestCases(options: GenerateOptions): Promise<GenerationResult> {
     const provider = (options.provider || 'gemini').toLowerCase();
@@ -77,14 +156,15 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
 
     if (provider === 'gemini') {
       return this.generateWithGemini(prompt, options);
-    } else if (provider === 'openai' || provider === 'deepseek' || provider === 'custom') {
-      return this.generateWithOpenAICompatible(prompt, options);
     } else {
-      // Fallback to Gemini
-      return this.generateWithGemini(prompt, options);
+      // Mọi nhà cung cấp OpenAI-Compatible (OpenRouter, Groq, DeepSeek, OpenAI, Local vLLM/Ollama)
+      return this.generateWithOpenAICompatible(prompt, options);
     }
   }
 
+  /**
+   * Gọi Google Gemini API với cơ chế Retry & Rate Limit Exponential Backoff
+   */
   private static async generateWithGemini(prompt: string, options: GenerateOptions): Promise<GenerationResult> {
     const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -92,7 +172,7 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const modelName = options.modelName || 'gemini-2.5-flash';
+    const modelName = options.modelName || 'gemini-3.7-flash';
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: {
@@ -102,18 +182,34 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
       systemInstruction: SYSTEM_PROMPT,
     });
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const responseText = await withRetry(async () => {
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    });
+
     return this.parseJSONResponse(responseText);
   }
 
+  /**
+   * Gọi chuẩn OpenAI-Compatible API (OpenRouter, Groq, DeepSeek, OpenAI, Custom)
+   * Tự động điều chỉnh baseURL, apiKey, modelName và có cơ chế Retry Exponential Backoff
+   */
   private static async generateWithOpenAICompatible(prompt: string, options: GenerateOptions): Promise<GenerationResult> {
     const provider = (options.provider || 'openai').toLowerCase();
     let apiKey = options.apiKey;
     let baseURL = options.baseUrl;
     let modelName = options.modelName;
 
-    if (provider === 'openai') {
+    // Thiết lập mặc định cho từng Provider
+    if (provider === 'openrouter') {
+      apiKey = apiKey || process.env.OPENROUTER_API_KEY;
+      baseURL = baseURL || 'https://openrouter.ai/api/v1';
+      modelName = modelName || 'openrouter/free';
+    } else if (provider === 'groq') {
+      apiKey = apiKey || process.env.GROQ_API_KEY;
+      baseURL = baseURL || 'https://api.groq.com/openai/v1';
+      modelName = modelName || 'openai/gpt-oss-120b';
+    } else if (provider === 'openai') {
       apiKey = apiKey || process.env.OPENAI_API_KEY;
       modelName = modelName || 'gpt-4o-mini';
     } else if (provider === 'deepseek') {
@@ -131,17 +227,35 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
       baseURL: baseURL || undefined,
     });
 
-    const completion = await openai.chat.completions.create({
-      model: modelName || 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
+    const content = await withRetry(async () => {
+      try {
+        const completion = await openai.chat.completions.create({
+          model: modelName || 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.2,
+        });
+        return completion.choices[0]?.message?.content || '{}';
+      } catch (err: any) {
+        // Fallback nếu một số model free (như trên OpenRouter/Ollama) chưa hỗ trợ response_format json_object
+        if (err.message && (err.message.includes('response_format') || err.message.includes('json_object') || err.status === 400)) {
+          const completion = await openai.chat.completions.create({
+            model: modelName || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: prompt },
+            ],
+            temperature: 0.2,
+          });
+          return completion.choices[0]?.message?.content || '{}';
+        }
+        throw err;
+      }
     });
 
-    const content = completion.choices[0]?.message?.content || '{}';
     return this.parseJSONResponse(content);
   }
 
@@ -185,3 +299,4 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
     }
   }
 }
+

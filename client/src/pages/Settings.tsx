@@ -37,7 +37,8 @@ export const Settings: React.FC = () => {
   const [configs, setConfigs] = useState<AIConfig[]>([]);
 
   const [provider, setProvider] = useState('gemini');
-  const [modelName, setModelName] = useState('gemini-1.5-flash');
+  const [modelName, setModelName] = useState('gemini-3.7-flash');
+  const [isCustomModel, setIsCustomModel] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -427,28 +428,60 @@ export const Settings: React.FC = () => {
                 className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="gemini">Google Gemini</option>
-                <option value="openai">OpenAI</option>
+                <option value="openrouter">OpenRouter (Multi-model & Free models)</option>
+                <option value="groq">Groq AI (Ultra-fast Inference)</option>
+                <option value="openai">OpenAI GPT</option>
                 <option value="deepseek">DeepSeek AI</option>
                 <option value="custom">Custom / OpenAI-Compatible (Ollama, vLLM)</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Mô hình (Model)
-              </label>
-              <input
-                type="text"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                list="models-list-settings"
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <datalist id="models-list-settings">
-                {currentProviderObj?.models?.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Mô hình (Model)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomModel(!isCustomModel)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {isCustomModel ? '← Chọn từ danh sách có sẵn' : '+ Nhập tên model khác'}
+                </button>
+              </div>
+
+              {isCustomModel ? (
+                <input
+                  type="text"
+                  value={modelName}
+                  onChange={(e) => setModelName(e.target.value)}
+                  placeholder="Nhập mã model bất kỳ (VD: gpt-4o, openrouter/free...)"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                />
+              ) : (
+                <select
+                  value={modelName}
+                  onChange={(e) => {
+                    if (e.target.value === '__custom__') {
+                      setIsCustomModel(true);
+                      setModelName('');
+                    } else {
+                      setModelName(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  {currentProviderObj?.models?.map((m) => (
+                    <option key={m} value={m}>
+                      {m} {m === currentProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                    </option>
+                  ))}
+                  <option value="__custom__">+ Nhập mã model tùy chỉnh khác...</option>
+                </select>
+              )}
+              <p className="text-xs text-slate-500 mt-1">
+                {currentProviderObj?.models?.length || 0} mô hình sẵn sàng cho nhà cung cấp này.
+              </p>
             </div>
           </div>
 

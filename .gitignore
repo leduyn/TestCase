@@ -1,1 +1,44 @@
-node_modules
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment variables & secrets (CRITICAL: Do NOT commit .env files)
+.env
+.env.*
+.env.local
+*.env
+server/.env
+client/.env
+!.env.example
+!server/.env.example
+
+# Build outputs
+dist/
+build/
+*/dist/
+*/build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+~$*
+__pycache__/
+*.pyc
+
+# Local cache
+.vite/
+*/node_modules/.vite/
