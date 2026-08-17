@@ -168,4 +168,142 @@ export class AIController {
       return res.status(500).json({ message: 'Lỗi lưu cấu hình AI', error: error.message });
     }
   }
+
+  static async updateAiConfig(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Chưa đăng nhập' });
+      }
+
+      const { id } = req.params;
+      const { provider, apiKey, modelName, baseUrl, isActive } = req.body;
+
+      const existing = await prisma.aiConfig.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ message: 'Không tìm thấy cấu hình AI' });
+      }
+
+      if (existing.userId !== req.user.id && req.user.role !== 'ADMIN') {
+        return res.status(403).json({ message: 'Không có quyền chỉnh sửa cấu hình này' });
+      }
+
+      if (isActive) {
+        await prisma.aiConfig.updateMany({
+          where: { userId: existing.userId },
+          data: { isActive: false },
+        });
+      }
+
+      const updateData: any = {};
+      if (provider !== undefined) updateData.provider = provider;
+      if (modelName !== undefined) updateData.modelName = modelName;
+      if (baseUrl !== undefined) updateData.baseUrl = baseUrl || null;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      if (apiKey && apiKey.trim()) updateData.apiKey = apiKey.trim();
+
+      const updated = await prisma.aiConfig.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          provider: true,
+          modelName: true,
+          baseUrl: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return res.json({ message: 'Cập nhật cấu hình AI thành công', config: updated });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi cập nhật cấu hình AI', error: error.message });
+    }
+  }
+
+  static async deleteAiConfig(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Chưa đăng nhập' });
+      }
+
+      const { id } = req.params;
+
+      const existing = await prisma.aiConfig.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ message: 'Không tìm thấy cấu hình AI' });
+      }
+
+      if (existing.userId !== req.user.id && req.user.role !== 'ADMIN') {
+        return res.status(403).json({ message: 'Không có quyền xóa cấu hình này' });
+      }
+
+      await prisma.aiConfig.delete({
+        where: { id },
+      });
+
+      return res.json({ message: 'Đã xóa cấu hình AI thành công' });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi xóa cấu hình AI', error: error.message });
+    }
+  }
+
+  static async toggleActiveAiConfig(req: AuthRequest, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Chưa đăng nhập' });
+      }
+
+      const { id } = req.params;
+
+      const existing = await prisma.aiConfig.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        return res.status(404).json({ message: 'Không tìm thấy cấu hình AI' });
+      }
+
+      if (existing.userId !== req.user.id && req.user.role !== 'ADMIN') {
+        return res.status(403).json({ message: 'Không có quyền thao tác cấu hình này' });
+      }
+
+      const nextActiveState = !existing.isActive;
+
+      if (nextActiveState) {
+        // Tắt active của các cấu hình khác
+        await prisma.aiConfig.updateMany({
+          where: { userId: existing.userId },
+          data: { isActive: false },
+        });
+      }
+
+      const updated = await prisma.aiConfig.update({
+        where: { id },
+        data: { isActive: nextActiveState },
+        select: {
+          id: true,
+          provider: true,
+          modelName: true,
+          baseUrl: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return res.json({
+        message: nextActiveState ? 'Đã kích hoạt làm cấu hình mặc định' : 'Đã hủy kích hoạt cấu hình',
+        config: updated,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi chuyển đổi trạng thái', error: error.message });
+    }
+  }
 }

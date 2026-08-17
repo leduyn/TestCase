@@ -103,6 +103,19 @@ export const aiApi = {
     baseUrl?: string;
     isActive?: boolean;
   }) => api.post<{ message: string; configId: string }>('/ai/configs', data),
+  updateConfig: (
+    id: string,
+    data: {
+      provider?: string;
+      apiKey?: string;
+      modelName?: string;
+      baseUrl?: string;
+      isActive?: boolean;
+    }
+  ) => api.put<{ message: string; config: AIConfig }>(`/ai/configs/${id}`, data),
+  deleteConfig: (id: string) => api.delete<{ message: string }>(`/ai/configs/${id}`),
+  toggleActive: (id: string) =>
+    api.post<{ message: string; config: AIConfig }>(`/ai/configs/${id}/toggle-active`),
 };
 
 // TestCases API

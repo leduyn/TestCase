@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Settings as SettingsIcon,
@@ -15,6 +15,9 @@ import {
   Plus,
   Trash2,
   RotateCcw,
+  Edit3,
+  Star,
+  X,
 } from 'lucide-react';
 import { aiApi, setupApi, environmentApi } from '../services/api';
 import type { AIProviderInfo, AIConfig } from '../types';
@@ -36,6 +39,7 @@ export const Settings: React.FC = () => {
   const [providers, setProviders] = useState<AIProviderInfo[]>([]);
   const [configs, setConfigs] = useState<AIConfig[]>([]);
 
+  const [editingConfigId, setEditingConfigId] = useState<string | null>(null);
   const [provider, setProvider] = useState('gemini');
   const [modelName, setModelName] = useState('gemini-3.7-flash');
   const [isCustomModel, setIsCustomModel] = useState(false);
@@ -44,8 +48,12 @@ export const Settings: React.FC = () => {
   const [isActive, setIsActive] = useState(true);
 
   const [saving, setSaving] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  const formRef = useRef<HTMLDivElement>(null);
 
   // Environment Settings (Server & OS)
   const [servers, setServers] = useState<string[]>(DEFAULT_SERVERS);
@@ -98,36 +106,127 @@ export const Settings: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const current = providers.find((p) => p.id === provider);
-    if (current) {
-      setModelName(current.defaultModel);
-      if (current.defaultBaseUrl) setBaseUrl(current.defaultBaseUrl);
+    // Chỉ tự đổi model khi không phải đang edit hoặc người dùng tự đổi provider
+    if (!editingConfigId) {
+      const current = providers.find((p) => p.id === provider);
+      if (current) {
+        setModelName(current.defaultModel);
+        if (current.defaultBaseUrl) setBaseUrl(current.defaultBaseUrl);
+      }
     }
-  }, [provider, providers]);
+  }, [provider, providers, editingConfigId]);
+
+  const handleStartEdit = (conf: AIConfig) => {
+    setEditingConfigId(conf.id);
+    setProvider(conf.provider);
+    setModelName(conf.modelName);
+    setBaseUrl(conf.baseUrl || '');
+    setIsActive(conf.isActive);
+    setApiKey(''); // Để trống, nếu không nhập gì thì backend giữ nguyên key cũ
+    setError(null);
+    setSavedSuccess(null);
+
+    // Kiểm tra xem modelName có trong danh sách mặc định không
+    const pObj = providers.find((p) => p.id === conf.provider);
+    if (pObj && !pObj.models.includes(conf.modelName)) {
+      setIsCustomModel(true);
+    } else {
+      setIsCustomModel(false);
+    }
+
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingConfigId(null);
+    setProvider('gemini');
+    setModelName('gemini-3.7-flash');
+    setIsCustomModel(false);
+    setApiKey('');
+    setBaseUrl('');
+    setIsActive(true);
+    setError(null);
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSaving(true);
-    setSavedSuccess(false);
+    setSavedSuccess(null);
 
     try {
-      await aiApi.saveConfig({
-        provider,
-        apiKey,
-        modelName,
-        baseUrl: baseUrl || undefined,
-        isActive,
-      });
+      if (editingConfigId) {
+        // Cập nhật cấu hình hiện có
+        await aiApi.updateConfig(editingConfigId, {
+          provider,
+          apiKey: apiKey.trim() || undefined,
+          modelName,
+          baseUrl: baseUrl.trim() || undefined,
+          isActive,
+        });
+        setSavedSuccess('Đã cập nhật cấu hình AI thành công!');
+        setEditingConfigId(null);
+      } else {
+        // Tạo mới cấu hình
+        if (!apiKey.trim()) {
+          throw new Error('Vui lòng nhập API Key khi tạo cấu hình mới.');
+        }
+        await aiApi.saveConfig({
+          provider,
+          apiKey: apiKey.trim(),
+          modelName,
+          baseUrl: baseUrl.trim() || undefined,
+          isActive,
+        });
+        setSavedSuccess('Đã lưu cấu hình AI mới vào cơ sở dữ liệu!');
+      }
 
-      setSavedSuccess(true);
       setApiKey('');
       await loadData();
-      setTimeout(() => setSavedSuccess(false), 3000);
+      setTimeout(() => setSavedSuccess(null), 3500);
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || 'Lỗi lưu cấu hình');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteConfig = async (conf: AIConfig) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa cấu hình AI "${conf.provider.toUpperCase()} - ${conf.modelName}" không?`)) {
+      return;
+    }
+
+    setActionLoadingId(conf.id);
+    setError(null);
+
+    try {
+      await aiApi.deleteConfig(conf.id);
+      if (editingConfigId === conf.id) {
+        handleCancelEdit();
+      }
+      setSavedSuccess(`Đã xóa cấu hình "${conf.provider.toUpperCase()}" thành công!`);
+      await loadData();
+      setTimeout(() => setSavedSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Lỗi khi xóa cấu hình');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleToggleActive = async (conf: AIConfig) => {
+    setActionLoadingId(conf.id);
+    setError(null);
+
+    try {
+      const res = await aiApi.toggleActive(conf.id);
+      setSavedSuccess(res.data.message || 'Cập nhật trạng thái thành công');
+      await loadData();
+      setTimeout(() => setSavedSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.message || err.message || 'Lỗi cập nhật trạng thái');
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -395,23 +494,47 @@ export const Settings: React.FC = () => {
       </div>
 
 
-      {/* Form Cấu hình AI mới */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
-        <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <Key className="w-5 h-5 text-blue-600" />
-          Thêm hoặc Cập nhật Cấu hình AI
-        </h2>
+      {/* Form Cấu hình AI */}
+      <div ref={formRef} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6 scroll-mt-6">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Key className="w-5 h-5 text-blue-600" />
+            {editingConfigId ? 'Chỉnh sửa Cấu hình AI' : 'Thêm hoặc Cập nhật Cấu hình AI'}
+          </h2>
+          {editingConfigId && (
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+              Hủy chỉnh sửa
+            </button>
+          )}
+        </div>
+
+        {editingConfigId && (
+          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl flex items-start gap-2.5 text-blue-800 dark:text-blue-200 text-xs">
+            <Edit3 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Đang ở chế độ Chỉnh sửa cấu hình</p>
+              <p className="mt-0.5 text-blue-600 dark:text-blue-300">
+                Để trống ô API Key nếu bạn muốn giữ nguyên mã API Key đã lưu trước đó.
+              </p>
+            </div>
+          </div>
+        )}
 
         {savedSuccess && (
-          <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            Đã lưu cấu hình AI thành công vào cơ sở dữ liệu!
+          <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            {savedSuccess}
           </div>
         )}
 
         {error && (
-          <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-3 rounded-xl flex items-center gap-2 text-rose-800 dark:text-rose-300 text-xs font-semibold">
-            <AlertCircle className="w-4 h-4 text-rose-600" />
+          <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-3.5 rounded-xl flex items-center gap-2 text-rose-800 dark:text-rose-300 text-xs font-semibold">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             {error}
           </div>
         )}
@@ -487,14 +610,14 @@ export const Settings: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              API Key <span className="text-rose-500">*</span>
+              API Key {editingConfigId ? <span className="text-slate-400 font-normal">(Để trống nếu giữ nguyên)</span> : <span className="text-rose-500">*</span>}
             </label>
             <input
               type="password"
-              required
+              required={!editingConfigId}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Nhập API Key của nhà cung cấp..."
+              placeholder={editingConfigId ? '•••••••••••••••• (Giữ nguyên key cũ)' : 'Nhập API Key của nhà cung cấp...'}
               className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
             />
             <p className="text-xs text-slate-400 mt-1">
@@ -530,14 +653,23 @@ export const Settings: React.FC = () => {
             </label>
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="flex items-center justify-end gap-3 pt-2">
+            {editingConfigId && (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+            )}
             <button
               type="submit"
               disabled={saving}
               className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
             >
               <Save className="w-4 h-4" />
-              {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
+              {saving ? 'Đang lưu...' : editingConfigId ? 'Cập nhật cấu hình' : 'Lưu cấu hình'}
             </button>
           </div>
         </form>
@@ -556,33 +688,98 @@ export const Settings: React.FC = () => {
           </p>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {configs.map((conf) => (
-              <div key={conf.id} className="py-3 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center font-bold text-xs uppercase">
-                    {conf.provider.slice(0, 3)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900 dark:text-white capitalize">
-                        {conf.provider}
-                      </span>
-                      {conf.isActive && (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
-                          Đang kích hoạt
-                        </span>
-                      )}
+            {configs.map((conf) => {
+              const isLoading = actionLoadingId === conf.id;
+              const isBeingEdited = editingConfigId === conf.id;
+
+              return (
+                <div
+                  key={conf.id}
+                  className={`py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl transition-colors ${
+                    isBeingEdited ? 'bg-blue-50/50 dark:bg-blue-950/20 px-3' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs uppercase shrink-0 shadow-sm ${
+                        conf.isActive
+                          ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/20'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      {conf.provider.slice(0, 3)}
                     </div>
-                    <p className="text-xs text-slate-500">
-                      Model: {conf.modelName} {conf.baseUrl ? `• ${conf.baseUrl}` : ''}
-                    </p>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-bold text-slate-900 dark:text-white capitalize">
+                          {conf.provider}
+                        </span>
+                        {conf.isActive && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Mặc định
+                          </span>
+                        )}
+                        {isBeingEdited && (
+                          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[11px] font-bold animate-pulse">
+                            Đang chỉnh sửa
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">
+                        Model: <span className="text-slate-700 dark:text-slate-300 font-semibold">{conf.modelName}</span>
+                        {conf.baseUrl && ` • ${conf.baseUrl}`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    {/* Toggle Default Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleActive(conf)}
+                      disabled={isLoading}
+                      className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        conf.isActive
+                          ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100'
+                          : 'text-slate-500 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                      title={conf.isActive ? 'Đang là mặc định' : 'Đặt làm mặc định'}
+                    >
+                      <Star className={`w-4 h-4 ${conf.isActive ? 'fill-amber-500 text-amber-500' : ''}`} />
+                      <span className="hidden sm:inline text-xs">
+                        {conf.isActive ? 'Mặc định' : 'Đặt mặc định'}
+                      </span>
+                    </button>
+
+                    {/* Edit Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(conf)}
+                      disabled={isLoading}
+                      className="p-2 rounded-xl text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors flex items-center gap-1 text-xs font-semibold"
+                      title="Chỉnh sửa cấu hình"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      <span className="hidden sm:inline">Sửa</span>
+                    </button>
+
+                    {/* Delete Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteConfig(conf)}
+                      disabled={isLoading}
+                      className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors flex items-center gap-1 text-xs font-semibold"
+                      title="Xóa cấu hình"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span className="hidden sm:inline">Xóa</span>
+                    </button>
                   </div>
                 </div>
-                <span className="text-xs text-slate-400">
-                  {new Date(conf.createdAt).toLocaleDateString('vi-VN')}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
