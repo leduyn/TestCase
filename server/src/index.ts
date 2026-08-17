@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
+import usersRoutes from './routes/usersRoutes';
 import aiRoutes from './routes/aiRoutes';
 import testCaseRoutes from './routes/testCaseRoutes';
 import executionRoutes from './routes/executionRoutes';
@@ -44,6 +45,7 @@ app.use(dbCheckMiddleware);
 
 // API Routes (requires DB connection)
 app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/testcases', testCaseRoutes);
 app.use('/api/executions', executionRoutes);
