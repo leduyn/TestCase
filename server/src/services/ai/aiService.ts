@@ -140,6 +140,30 @@ async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions = {}): P
   }
 }
 
+function normalizeToString(value: any, isNumberedList = false): string {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) {
+    if (isNumberedList) {
+      return value
+        .map((item, idx) => {
+          const str = typeof item === 'object' ? JSON.stringify(item) : String(item).trim();
+          if (/^\d+[\.\)]\s*/.test(str)) {
+            return str;
+          }
+          return `${idx + 1}. ${str}`;
+        })
+        .join('\n');
+    }
+    return value
+      .map((item) => (typeof item === 'object' ? JSON.stringify(item) : String(item).trim()))
+      .join('\n');
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value, null, 2);
+  }
+  return String(value).trim();
+}
+
 export class AIService {
   static async generateTestCases(options: GenerateOptions): Promise<GenerationResult> {
     const provider = (options.provider || 'gemini').toLowerCase();
@@ -281,22 +305,22 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
       const parsed = JSON.parse(cleanText);
       const testCases: GeneratedTestCase[] = Array.isArray(parsed.testCases)
         ? parsed.testCases.map((tc: any, index: number) => ({
-            testCaseCode: tc.testCaseCode || tc.id || `TC_${index + 1}`,
-            module: tc.module || 'Chung',
-            platform: tc.platform || 'App',
-            title: tc.title || '',
-            testType: tc.testType || tc.type || 'Luồng chuẩn',
-            preconditions: tc.preconditions || tc.precondition || '',
-            steps: tc.steps || '',
-            expectedResult: tc.expectedResult || tc.expected || '',
-            priority: tc.priority || 'Cao',
+            testCaseCode: normalizeToString(tc.testCaseCode || tc.id) || `TC_${String(index + 1).padStart(3, '0')}`,
+            module: normalizeToString(tc.module) || 'Chung',
+            platform: normalizeToString(tc.platform) || 'App',
+            title: normalizeToString(tc.title) || `Kịch bản kiểm thử ${index + 1}`,
+            testType: normalizeToString(tc.testType || tc.type) || 'Luồng chuẩn',
+            preconditions: normalizeToString(tc.preconditions || tc.precondition),
+            steps: normalizeToString(tc.steps, true),
+            expectedResult: normalizeToString(tc.expectedResult || tc.expected),
+            priority: normalizeToString(tc.priority) || 'Cao',
           }))
         : [];
 
       return {
-        moduleName: parsed.moduleName || 'Bộ Test Case',
-        summary: parsed.summary || '',
-        assumptions: parsed.assumptions || '',
+        moduleName: normalizeToString(parsed.moduleName) || 'Bộ Test Case',
+        summary: normalizeToString(parsed.summary),
+        assumptions: normalizeToString(parsed.assumptions),
         testCases,
       };
     } catch (e: any) {

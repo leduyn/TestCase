@@ -159,13 +159,32 @@ export class TestCaseController {
       const suite = await prisma.testSuite.create({
         data: {
           documentId: savedDocId,
-          name: suiteName || aiResult.moduleName || filename,
-          moduleName: aiResult.moduleName || 'Tổng hợp',
-          summary: aiResult.summary,
-          assumptions: aiResult.assumptions,
+          name: typeof (suiteName || aiResult.moduleName || filename) === 'string' ? (suiteName || aiResult.moduleName || filename) : String(suiteName || aiResult.moduleName || filename),
+          moduleName: typeof (aiResult.moduleName || 'Tổng hợp') === 'string' ? (aiResult.moduleName || 'Tổng hợp') : String(aiResult.moduleName || 'Tổng hợp'),
+          summary: Array.isArray(aiResult.summary) ? aiResult.summary.join('\n') : (aiResult.summary ? String(aiResult.summary) : null),
+          assumptions: Array.isArray(aiResult.assumptions) ? aiResult.assumptions.join('\n') : (aiResult.assumptions ? String(aiResult.assumptions) : null),
         },
       });
       savedSuiteId = suite.id;
+
+      const formatField = (val: any, isNumbered = false): string => {
+        if (val === null || val === undefined) return '';
+        if (Array.isArray(val)) {
+          if (isNumbered) {
+            return val
+              .map((item, idx) => {
+                const str = typeof item === 'object' ? JSON.stringify(item) : String(item).trim();
+                return /^\d+[\.\)]\s*/.test(str) ? str : `${idx + 1}. ${str}`;
+              })
+              .join('\n');
+          }
+          return val
+            .map((item) => (typeof item === 'object' ? JSON.stringify(item) : String(item).trim()))
+            .join('\n');
+        }
+        if (typeof val === 'object') return JSON.stringify(val, null, 2);
+        return String(val).trim();
+      };
 
       // Save TestCases and default executions
       const createdTestCases = await Promise.all(
@@ -173,15 +192,15 @@ export class TestCaseController {
           const testCase = await prisma.testCase.create({
             data: {
               testSuiteId: suite.id,
-              testCaseCode: tc.testCaseCode || `TC_${idx + 1}`,
-              module: tc.module,
-              platform: tc.platform || 'App',
-              title: tc.title,
-              testType: tc.testType,
-              preconditions: tc.preconditions,
-              steps: tc.steps,
-              expectedResult: tc.expectedResult,
-              priority: tc.priority || 'Cao',
+              testCaseCode: formatField(tc.testCaseCode) || `TC_${String(idx + 1).padStart(3, '0')}`,
+              module: formatField(tc.module) || 'Chung',
+              platform: formatField(tc.platform) || 'App',
+              title: formatField(tc.title) || `Kịch bản kiểm thử ${idx + 1}`,
+              testType: formatField(tc.testType) || 'Luồng chuẩn',
+              preconditions: formatField(tc.preconditions),
+              steps: formatField(tc.steps, true),
+              expectedResult: formatField(tc.expectedResult),
+              priority: formatField(tc.priority) || 'Cao',
               orderIndex: idx + 1,
             },
           });
