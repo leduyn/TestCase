@@ -9,7 +9,7 @@ import { SuiteDetail } from './pages/SuiteDetail';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Settings } from './pages/Settings';
-import { UserManagement } from './pages/UserManagement';
+import UserManagement from './pages/UserManagement';
 import { DatabaseSetupPage } from './pages/Setup/DatabaseSetupPage';
 import { setupApi } from './services/api';
 import { Loader2 } from 'lucide-react';
