@@ -240,6 +240,11 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
         });
         return completion.choices[0]?.message?.content || '{}';
       } catch (err: any) {
+        // Lỗi xác thực 401 (sai API Key hoặc chưa có Header)
+        if (err?.status === 401 || err?.message?.includes('401') || err?.message?.includes('Missing Authentication header')) {
+          throw new Error(`Xác thực thất bại với ${provider.toUpperCase()} (401 Unauthorized / Sai API Key). Vui lòng kiểm tra lại API Key trong Cài đặt hoặc nhập trực tiếp.`);
+        }
+
         // Fallback nếu một số model free (như trên OpenRouter/Ollama) chưa hỗ trợ response_format json_object
         if (err.message && (err.message.includes('response_format') || err.message.includes('json_object') || err.status === 400)) {
           const completion = await openai.chat.completions.create({

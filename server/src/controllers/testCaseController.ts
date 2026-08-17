@@ -30,16 +30,24 @@ export class TestCaseController {
       }
 
       // Resolve effective AI credentials.
-      // Priority: 1) explicit saved config (configId) -> 2) body apiKey -> 3) active saved config
-      let effectiveApiKey = apiKey;
+      // Priority:
+      // 1) Explicit configId
+      // 2) Explicit body apiKey (nếu có nhập)
+      // 3) Cấu hình của User cho đúng provider đó
+      // 4) Cấu hình mặc định (isActive) của User
+      // 5) Cấu hình chung trong Database cho provider đó
+      // 6) Bất kỳ cấu hình active nào trong Database
+      let effectiveApiKey = apiKey && String(apiKey).trim() ? String(apiKey).trim() : undefined;
       let effectiveProvider = provider || 'gemini';
       let effectiveModelName = modelName;
       let effectiveBaseUrl = baseUrl;
 
-      if (configId && req.user) {
-        const savedConfig = await prisma.aiConfig.findFirst({
-          where: { id: configId, userId: req.user.id },
-        });
+      // 1) Nếu có configId
+      if (configId) {
+        const savedConfig = req.user
+          ? await prisma.aiConfig.findFirst({ where: { id: configId, userId: req.user.id } })
+          : await prisma.aiConfig.findUnique({ where: { id: configId } });
+
         if (savedConfig) {
           effectiveApiKey = savedConfig.apiKey;
           effectiveProvider = savedConfig.provider;
@@ -48,15 +56,59 @@ export class TestCaseController {
         }
       }
 
-      if (!effectiveApiKey && req.user) {
-        const savedConfig = await prisma.aiConfig.findFirst({
-          where: { userId: req.user.id, isActive: true },
-        });
-        if (savedConfig) {
-          effectiveApiKey = savedConfig.apiKey;
-          effectiveProvider = savedConfig.provider;
-          effectiveModelName = savedConfig.modelName;
-          effectiveBaseUrl = savedConfig.baseUrl || undefined;
+      // 2) Nếu chưa có apiKey, tìm cấu hình trong DB
+      if (!effectiveApiKey) {
+        // 2a. Tìm cấu hình của user cho đúng provider này trước
+        if (req.user) {
+          const userProviderConfig = await prisma.aiConfig.findFirst({
+            where: { userId: req.user.id, provider: effectiveProvider },
+            orderBy: { updatedAt: 'desc' },
+          });
+          if (userProviderConfig) {
+            effectiveApiKey = userProviderConfig.apiKey;
+            effectiveModelName = effectiveModelName || userProviderConfig.modelName;
+            effectiveBaseUrl = effectiveBaseUrl || userProviderConfig.baseUrl || undefined;
+          }
+        }
+
+        // 2b. Nếu vẫn chưa có, tìm cấu hình active của user
+        if (!effectiveApiKey && req.user) {
+          const userActiveConfig = await prisma.aiConfig.findFirst({
+            where: { userId: req.user.id, isActive: true },
+          });
+          if (userActiveConfig) {
+            effectiveApiKey = userActiveConfig.apiKey;
+            effectiveProvider = userActiveConfig.provider;
+            effectiveModelName = effectiveModelName || userActiveConfig.modelName;
+            effectiveBaseUrl = effectiveBaseUrl || userActiveConfig.baseUrl || undefined;
+          }
+        }
+
+        // 2c. Nếu vẫn chưa có (hoặc là guest), tìm bất kỳ cấu hình nào trong DB cho provider này
+        if (!effectiveApiKey) {
+          const systemProviderConfig = await prisma.aiConfig.findFirst({
+            where: { provider: effectiveProvider },
+            orderBy: { updatedAt: 'desc' },
+          });
+          if (systemProviderConfig) {
+            effectiveApiKey = systemProviderConfig.apiKey;
+            effectiveModelName = effectiveModelName || systemProviderConfig.modelName;
+            effectiveBaseUrl = effectiveBaseUrl || systemProviderConfig.baseUrl || undefined;
+          }
+        }
+
+        // 2d. Fallback cuối cùng trong DB: lấy bất kỳ cấu hình active nào
+        if (!effectiveApiKey) {
+          const anyActiveConfig = await prisma.aiConfig.findFirst({
+            where: { isActive: true },
+            orderBy: { updatedAt: 'desc' },
+          });
+          if (anyActiveConfig) {
+            effectiveApiKey = anyActiveConfig.apiKey;
+            effectiveProvider = anyActiveConfig.provider;
+            effectiveModelName = effectiveModelName || anyActiveConfig.modelName;
+            effectiveBaseUrl = effectiveBaseUrl || anyActiveConfig.baseUrl || undefined;
+          }
         }
       }
 
