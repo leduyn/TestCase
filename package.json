@@ -9,15 +9,10 @@
     "kill": "node scripts/kill-ports.js",
     "server:dev": "npm --prefix server run dev",
     "client:dev": "npm --prefix client run dev",
-    "postinstall": "npm --prefix server install --include=dev && npm --prefix client install --include=dev",
     "build": "npm --prefix server install && npm --prefix client install && npm --prefix server run build && npm --prefix client run build",
     "prisma:generate": "npm --prefix server run prisma:generate",
     "prisma:push": "npm --prefix server run prisma:push"
   },
-  "workspaces": [
-    "server",
-    "client"
-  ],
   "devDependencies": {
     "concurrently": "^9.2.4"
   }
