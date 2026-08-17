@@ -12,6 +12,8 @@ import settingRoutes from './routes/settingRoutes';
 import { checkDatabaseConnection } from './config/database';
 import { dbCheckMiddleware } from './controllers/setupController';
 
+import { ensureDefaultAdmin } from './services/adminSeed';
+
 dotenv.config();
 
 const app = express();
@@ -71,6 +73,8 @@ app.listen(PORT, async () => {
   const dbCheck = await checkDatabaseConnection();
   if (dbCheck.ready) {
     console.log(`✅ Database connected successfully.`);
+    // Tự động kiểm tra và tạo tài khoản Admin mặc định
+    await ensureDefaultAdmin();
   } else {
     console.log(`⚠️  Database not connected: ${dbCheck.message}`);
     console.log(`📋 Setup available at: http://localhost:${PORT}/api/setup/status`);

@@ -11,7 +11,8 @@
     "client:dev": "npm --prefix client run dev",
     "build": "npm --prefix server install && npm --prefix client install && npm --prefix server run build && npm --prefix client run build",
     "prisma:generate": "npm --prefix server run prisma:generate",
-    "prisma:push": "npm --prefix server run prisma:push"
+    "prisma:push": "npm --prefix server run prisma:push",
+    "seed": "npm --prefix server run seed"
   },
   "devDependencies": {
     "concurrently": "^9.2.4"
