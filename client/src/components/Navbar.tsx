@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, LayoutDashboard, Settings, LogIn, LogOut, User as UserIcon, FileSpreadsheet } from 'lucide-react';
+import { Sparkles, LayoutDashboard, Settings, LogIn, LogOut, User as UserIcon, FileSpreadsheet, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const Navbar: React.FC = () => {
