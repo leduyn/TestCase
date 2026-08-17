@@ -9,9 +9,42 @@ import {
   Key,
   ArrowRight,
   AlertCircle,
+  Loader2,
+  Clock,
+  Zap,
+  Layers,
+  Database,
+  Check,
 } from 'lucide-react';
 import { testCaseApi, aiApi } from '../services/api';
 import type { AIProviderInfo, AIConfig } from '../types';
+
+const GENERATION_STEPS = [
+  {
+    step: 1,
+    title: 'Đọc & Bóc tách tài liệu',
+    description: 'Trích xuất văn bản, bảng biểu và cấu trúc phân hệ',
+    icon: FileText,
+  },
+  {
+    step: 2,
+    title: 'AI Phân tích Luồng nghiệp vụ',
+    description: 'Nhận diện các chức năng App / CMS và quy tắc Validation',
+    icon: Cpu,
+  },
+  {
+    step: 3,
+    title: 'Thiết kế Ma trận Kịch bản',
+    description: 'Sinh luồng chuẩn, luồng ngoại lệ và giá trị biên',
+    icon: Layers,
+  },
+  {
+    step: 4,
+    title: 'Chuẩn hoá & Lưu trữ',
+    description: 'Kiểm tra schema JSON và lưu dữ liệu vào PostgreSQL',
+    icon: Database,
+  },
+];
 
 export const Generate: React.FC = () => {
   const navigate = useNavigate();
@@ -35,7 +68,9 @@ export const Generate: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progressStep, setProgressStep] = useState(0);
+  const [progressStep, setProgressStep] = useState(1);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
     const loadProviders = async () => {
@@ -133,7 +168,35 @@ export const Generate: React.FC = () => {
     }
 
     setLoading(true);
-    setProgressStep(1); // Reading document
+    setProgressStep(1);
+    setProgressPercent(8);
+    setElapsedSeconds(0);
+
+    const startTime = Date.now();
+
+    // Timer interval để tăng phần trăm mượt mà và cập nhật thời gian
+    const progressTimer = setInterval(() => {
+      const seconds = Math.floor((Date.now() - startTime) / 1000);
+      setElapsedSeconds(seconds);
+
+      setProgressPercent((prev) => {
+        // Tự động chuyển step dựa trên tiến độ và thời gian
+        if (prev < 25) {
+          setProgressStep(1);
+          return Math.min(25, prev + 4);
+        } else if (prev < 60) {
+          setProgressStep(2);
+          return Math.min(60, prev + 2);
+        } else if (prev < 85) {
+          setProgressStep(3);
+          return Math.min(85, prev + 1);
+        } else if (prev < 95) {
+          setProgressStep(4);
+          return Math.min(95, prev + 0.3);
+        }
+        return prev;
+      });
+    }, 250);
 
     try {
       const formData = new FormData();
@@ -154,22 +217,24 @@ export const Generate: React.FC = () => {
         if (baseUrl) formData.append('baseUrl', baseUrl);
       }
 
-      setTimeout(() => setProgressStep(2), 1200); // AI Thinking
-      setTimeout(() => setProgressStep(3), 3500); // Saving & structuring
-
       const res = await testCaseApi.generate(formData);
 
-      setProgressStep(4); // Done
+      clearInterval(progressTimer);
+      setProgressPercent(100);
+      setProgressStep(5);
+
       setTimeout(() => {
         navigate(`/suites/${res.data.testSuite.id}`);
-      }, 800);
+      }, 700);
     } catch (err: any) {
+      clearInterval(progressTimer);
       console.error('Generate error:', err);
       const detail = err.response?.data?.error;
       const baseMsg = err.response?.data?.message || err.message || 'Lỗi trong quá trình sinh Test Case';
       setError(detail ? `${baseMsg}\n→ Chi tiết: ${detail}` : baseMsg);
       setLoading(false);
-      setProgressStep(0);
+      setProgressStep(1);
+      setProgressPercent(0);
     }
   };
 
@@ -196,39 +261,136 @@ export const Generate: React.FC = () => {
           <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
           <div>
             <p className="font-bold">Đã xảy ra lỗi:</p>
-            <p className="mt-0.5">{error}</p>
+            <p className="mt-0.5 whitespace-pre-line">{error}</p>
           </div>
         </div>
       )}
 
-      {/* Loading Overlay with Stepper */}
+      {/* Loading Overlay with Dynamic Progress Bar & Stepper */}
       {loading && (
-        <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 p-8 rounded-2xl shadow-xl text-center space-y-6 animate-in fade-in">
-          <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 flex items-center justify-center mx-auto animate-pulse">
-            <Sparkles className="w-8 h-8" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              AI đang phân tích tài liệu và tạo bộ Test Case...
-            </h3>
-            <p className="text-xs text-slate-500">
-              Quá trình này có thể mất từ 10 - 30 giây tuỳ thuộc vào độ dài tài liệu.
-            </p>
+        <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800/80 p-6 sm:p-8 rounded-2xl shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-200">
+          {/* Header Loading Status */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+            <div className="flex items-center gap-3.5 text-center sm:text-left">
+              <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/25 shrink-0">
+                {progressPercent === 100 ? (
+                  <Check className="w-6 h-6 animate-in zoom-in" />
+                ) : (
+                  <Sparkles className="w-6 h-6 animate-spin" style={{ animationDuration: '3s' }} />
+                )}
+                {progressPercent < 100 && (
+                  <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-blue-500"></span>
+                  </span>
+                )}
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2 justify-center sm:justify-start">
+                  {progressPercent === 100 ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">Hoàn tất sinh Test Case!</span>
+                  ) : (
+                    <>
+                      <span>AI đang xử lý tài liệu & sinh kịch bản...</span>
+                      <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                    </>
+                  )}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Mô hình: <b className="text-slate-700 dark:text-slate-300 font-mono">{selectedModel}</b> ({providerLabel(selectedProvider)})
+                </p>
+              </div>
+            </div>
+
+            {/* Elapsed Timer & Percent Badge */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-mono font-medium">
+                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                <span>{elapsedSeconds}s</span>
+              </div>
+              <div className="px-3.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/80 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-sm font-black font-mono">
+                {Math.round(progressPercent)}%
+              </div>
+            </div>
           </div>
 
-          <div className="max-w-md mx-auto space-y-3 text-left">
-            <div className={`flex items-center gap-3 text-xs font-semibold ${progressStep >= 1 ? 'text-blue-600' : 'text-slate-400'}`}>
-              <CheckCircle2 className="w-4 h-4" />
-              <span>1. Đọc và bóc tách nội dung tài liệu</span>
+          {/* Glowing Animated Progress Bar */}
+          <div className="space-y-2">
+            <div className="flex justify-between items-center text-xs">
+              <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                Tiến độ xử lý
+              </span>
+              <span className="text-slate-500 font-medium">
+                {progressStep === 1 && 'Đang đọc và bóc tách tài liệu...'}
+                {progressStep === 2 && 'AI đang phân tích luồng nghiệp vụ...'}
+                {progressStep === 3 && 'Đang thiết kế kịch bản & phân hệ App/CMS...'}
+                {progressStep === 4 && 'Đang chuẩn hoá và lưu vào cơ sở dữ liệu...'}
+                {progressStep >= 5 && 'Thành công! Đang chuyển hướng...'}
+              </span>
             </div>
-            <div className={`flex items-center gap-3 text-xs font-semibold ${progressStep >= 2 ? 'text-blue-600' : 'text-slate-400'}`}>
-              <CheckCircle2 className="w-4 h-4" />
-              <span>2. AI phân tích luồng nghiệp vụ & sinh kịch bản chuẩn / ngoại lệ / biên</span>
+
+            <div className="w-full h-3.5 bg-slate-100 dark:bg-slate-800 rounded-full p-0.5 overflow-hidden shadow-inner border border-slate-200/80 dark:border-slate-700">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 transition-all duration-300 ease-out relative shadow-md shadow-blue-500/30"
+                style={{ width: `${progressPercent}%` }}
+              >
+                {/* Shimmer light effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-[shimmer_1.5s_infinite] -skew-x-12" />
+              </div>
             </div>
-            <div className={`flex items-center gap-3 text-xs font-semibold ${progressStep >= 3 ? 'text-blue-600' : 'text-slate-400'}`}>
-              <CheckCircle2 className="w-4 h-4" />
-              <span>3. Chuẩn hoá cấu trúc và lưu vào PostgreSQL</span>
-            </div>
+          </div>
+
+          {/* Stepper Timeline Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            {GENERATION_STEPS.map((s) => {
+              const isDone = progressStep > s.step || progressPercent === 100;
+              const isCurrent = progressStep === s.step && progressPercent < 100;
+              const StepIcon = s.icon;
+
+              return (
+                <div
+                  key={s.step}
+                  className={`p-3.5 rounded-xl border transition-all duration-200 flex items-start gap-3 ${
+                    isDone
+                      ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/60 text-emerald-900 dark:text-emerald-200'
+                      : isCurrent
+                      ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 shadow-sm ring-1 ring-blue-400/30'
+                      : 'bg-slate-50/60 dark:bg-slate-800/30 border-slate-200/60 dark:border-slate-800 text-slate-400'
+                  }`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${
+                      isDone
+                        ? 'bg-emerald-600 text-white'
+                        : isCurrent
+                        ? 'bg-blue-600 text-white animate-pulse'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                    }`}
+                  >
+                    {isDone ? <Check className="w-4 h-4" /> : <StepIcon className="w-3.5 h-3.5" />}
+                  </div>
+
+                  <div className="min-w-0">
+                    <p
+                      className={`text-xs font-bold flex items-center gap-1.5 ${
+                        isDone
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : isCurrent
+                          ? 'text-blue-700 dark:text-blue-300'
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      <span>{s.step}. {s.title}</span>
+                      {isCurrent && <Loader2 className="w-3 h-3 text-blue-600 animate-spin shrink-0" />}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                      {s.description}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
