@@ -9,6 +9,7 @@ import { SuiteDetail } from './pages/SuiteDetail';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Settings } from './pages/Settings';
+import { UserManagement } from './pages/UserManagement';
 import { DatabaseSetupPage } from './pages/Setup/DatabaseSetupPage';
 import { setupApi } from './services/api';
 import { Loader2 } from 'lucide-react';
@@ -75,6 +76,7 @@ const AppContent: React.FC = () => {
           <Route path="/login" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Login />} />
           <Route path="/register" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Register />} />
           <Route path="/settings" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Settings />} />
+          <Route path="/user-management" element={isSetupRequired ? <Navigate to="/setup" replace /> : <UserManagement />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

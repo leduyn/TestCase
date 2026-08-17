@@ -182,3 +182,36 @@ export const environmentApi = {
     ),
 };
 
+// --- User Management API ---
+
+export interface User {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  lastLogin?: string;
+}
+
+export interface UserTableRow {
+  id: string;
+  email: string;
+  fullName: string;
+  role: string;
+  status: string;
+  lastLogin?: string;
+  actions: React.ReactNode;
+}
+
+export const userApi = {
+  getUsers: () => api.get<User[]>('/users'),
+  getUser: (id: string) => api.get<User>(`/users/${id}`),
+  createUser: (data: { email: string; password: string; fullName: string; role: string }) =>
+    api.post<User>('/users', data),
+  updateUser: (id: string, data: { fullName?: string; role?: string; status?: string }) =>
+    api.put<User>(`/users/${id}`, data),
+  deleteUser: (id: string) => api.delete<{ message: string }>(`/users/${id}`),
+  toggleStatus: (id: string) => api.post<{ message: string; user: User }>(`/users/${id}/toggle-status`),
+};
+

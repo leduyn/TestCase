@@ -74,6 +74,17 @@ export const Navbar: React.FC = () => {
             <Settings className="w-4 h-4" />
             Cài đặt AI
           </Link>
+          <Link
+            to="/user-management"
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+              isActive('/user-management')
+                ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Quản lý người dùng
+          </Link>
         </nav>
 
         {/* User profile & Actions */}
