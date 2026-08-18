@@ -19,5 +19,9 @@ router.get('/suites/:id', optionalAuthenticate, TestCaseController.getSuiteById)
 router.put('/:id', optionalAuthenticate, TestCaseController.updateTestCase);
 router.delete('/:id', optionalAuthenticate, TestCaseController.deleteTestCase);
 
+// TestSuite CRUD routes
+router.put('/suites/:id', optionalAuthenticate, TestCaseController.updateTestSuite);
+router.delete('/suites/:id', optionalAuthenticate, TestCaseController.deleteTestSuite);
+
 export default router;
 

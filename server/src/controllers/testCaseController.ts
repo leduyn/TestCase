@@ -530,6 +530,48 @@ export class TestCaseController {
       return res.status(500).json({ message: 'Lỗi xóa Test Case', error: error.message });
     }
   }
+
+  static async updateTestSuite(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const { name, moduleName, summary, assumptions } = req.body;
+
+      const updated = await prisma.testSuite.update({
+        where: { id },
+        data: {
+          name,
+          moduleName,
+          summary,
+          assumptions,
+          updatedAt: new Date(),
+        },
+      });
+
+      return res.json({
+        message: 'Cập nhật Test Suite thành công',
+        testSuite: {
+          id: updated.id,
+          name: updated.name,
+          moduleName: updated.moduleName,
+          summary: updated.summary,
+          assumptions: updated.assumptions,
+          updatedAt: updated.updatedAt,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi cập nhật Test Suite', error: error.message });
+    }
+  }
+
+  static async deleteTestSuite(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      await prisma.testSuite.delete({ where: { id } });
+      return res.json({ message: 'Đã xóa Test Suite thành công' });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi xóa Test Suite', error: error.message });
+    }
+  }
 }
 
 

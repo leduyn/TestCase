@@ -225,7 +225,11 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
     let modelName = options.modelName;
 
     // Thiết lập mặc định cho từng Provider
-    if (provider === 'openrouter') {
+    if (provider === 'opencode' || provider === 'zen') {
+      apiKey = apiKey || process.env.OPENCODE_API_KEY || process.env.ZEN_API_KEY;
+      baseURL = baseURL || 'https://opencode.ai/zen/v1';
+      modelName = modelName || 'gemini-3.7-flash';
+    } else if (provider === 'openrouter') {
       apiKey = apiKey || process.env.OPENROUTER_API_KEY;
       baseURL = baseURL || 'https://openrouter.ai/api/v1';
       modelName = modelName || 'openrouter/free';

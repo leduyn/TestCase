@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Dashboard } from './pages/Dashboard';
 import { Generate } from './pages/Generate';
@@ -17,40 +17,65 @@ import { Loader2 } from 'lucide-react';
 const AppContent: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [checkingSetup, setCheckingSetup] = useState(true);
   const [isSetupRequired, setIsSetupRequired] = useState(false);
 
   useEffect(() => {
-    const checkSystemStatus = async () => {
-      try {
-        const res = await setupApi.getStatus();
-        if (res.data.status === 'SETUP_REQUIRED') {
-          setIsSetupRequired(true);
-          if (location.pathname !== '/setup') {
-            navigate('/setup', { replace: true });
-          }
-        } else {
-          setIsSetupRequired(false);
-          if (location.pathname === '/setup') {
-            navigate('/', { replace: true });
-          }
-        }
-      } catch (err: any) {
-        if (err.response?.data?.status === 'SETUP_REQUIRED') {
-          setIsSetupRequired(true);
-          if (location.pathname !== '/setup') {
-            navigate('/setup', { replace: true });
-          }
-        }
-      } finally {
+    const checkAuth = async () => {
+      // If user is already loaded and authenticated, proceed normally
+      if (user && !authLoading) {
+        setIsSetupRequired(false);
         setCheckingSetup(false);
+        return;
       }
+
+      // If no user token, check setup status
+      if (!user && !authLoading) {
+        try {
+          const res = await setupApi.getStatus();
+          if (res.data.status === 'SETUP_REQUIRED') {
+            setIsSetupRequired(true);
+            if (location.pathname !== '/setup') {
+              navigate('/setup', { replace: true });
+            }
+          } else {
+            setIsSetupRequired(false);
+            if (location.pathname === '/setup') {
+              navigate('/', { replace: true });
+            }
+            if (location.pathname !== '/login' && location.pathname !== '/register') {
+              navigate('/login', { replace: true });
+            }
+          }
+        } catch (err: any) {
+          if (err.response?.data?.status === 'SETUP_REQUIRED') {
+            setIsSetupRequired(true);
+            if (location.pathname !== '/setup') {
+              navigate('/setup', { replace: true });
+            }
+          }
+        }
+      }
+      setCheckingSetup(false);
     };
 
-    checkSystemStatus();
-  }, [location.pathname]);
+    checkAuth();
+  }, [user, authLoading, location.pathname]);
 
-  if (checkingSetup && location.pathname !== '/setup') {
+  // Show spinner only during initial auth check, not when already authenticated
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+          <p className="text-sm text-slate-400">Đang kiểm tra quyền truy cập...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (checkingSetup && location.pathname !== '/setup' && location.pathname !== '/login' && location.pathname !== '/register') {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
         <div className="flex flex-col items-center gap-3">
@@ -65,7 +90,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
-      {!isSetupRoute && <Navbar />}
+      {user ? <Navbar /> : null}
       <main className="flex-1">
         <Routes>
           <Route path="/setup" element={<DatabaseSetupPage />} />

@@ -15,7 +15,7 @@ import {
   Edit3,
   Trash2,
 } from 'lucide-react';
-import { testCaseApi, exportApi, environmentApi } from '../services/api';
+import { testCaseApi, exportApi, environmentApi, suiteApi } from '../services/api';
 import type { TestSuite, TestCase } from '../types';
 import { StatusBadge, PlatformBadge, PriorityBadge, TestTypeBadge } from '../components/Badge';
 import { ExecutionDrawer } from '../components/ExecutionDrawer';
@@ -53,6 +53,15 @@ export const SuiteDetail: React.FC = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = useState<TestCase | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Suite Edit Modal
+  const [isSuiteModalOpen, setIsSuiteModalOpen] = useState(false);
+  const [suiteToEdit, setSuiteToEdit] = useState<TestSuite | null>(null);
+  const [updatingSuite, setUpdatingSuite] = useState(false);
+
+  // Suite Delete Confirmation Modal
+  const [isDeleteSuiteModalOpen, setIsDeleteSuiteModalOpen] = useState(false);
+  const [deletingSuite, setDeletingSuite] = useState(false);
 
   const fetchSuiteDetails = async () => {
     if (!id) return;
@@ -92,6 +101,13 @@ export const SuiteDetail: React.FC = () => {
       }
     };
     loadEnvironments();
+
+    // Fetch suites list
+    suiteApi.getSuites().then(res => {
+      // Suites are already fetched by getSuiteById, but we keep this for completeness
+    }).catch(err => {
+      console.warn('Error fetching suites list:', err);
+    });
   }, [id, user?.id]);
 
   const handleOpenDrawer = (tc: TestCase) => {
@@ -145,6 +161,62 @@ export const SuiteDetail: React.FC = () => {
       );
     } else {
       setTestCases((prev) => [...prev, savedTc]);
+    }
+  };
+
+  // Suite Edit Handlers
+  const handleOpenSuiteModal = (suite: TestSuite) => {
+    setSuiteToEdit(suite);
+    setIsSuiteModalOpen(true);
+  };
+
+  const handleCancelSuiteModal = () => {
+    setIsSuiteModalOpen(false);
+    setSuiteToEdit(null);
+  };
+
+  const handleUpdateSuite = async () => {
+    if (!suiteToEdit || !suiteToEdit.id) return;
+    setUpdatingSuite(true);
+    try {
+      const res = await suiteApi.updateTestSuite(suiteToEdit.id, {
+        name: suiteToEdit.name,
+        moduleName: suiteToEdit.moduleName,
+        summary: suiteToEdit.summary,
+        assumptions: suiteToEdit.assumptions,
+      });
+      setSuite((prev) => prev ? { ...prev, ...res.data.testSuite } : null);
+      setTestCases((prev) =>
+        prev.map((tc) => (tc.testSuiteId === suiteToEdit.id ? { ...tc, testSuiteId: suiteToEdit.id } : tc))
+      );
+      setIsSuiteModalOpen(false);
+      setSuiteToEdit(null);
+    } catch (err: any) {
+      alert(`Lỗi khi cập nhật Test Suite: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setUpdatingSuite(false);
+    }
+  };
+
+  // Suite Delete Confirmation Handlers
+  const handleOpenDeleteSuiteModal = (suite: TestSuite) => {
+    setIsDeleteSuiteModalOpen(true);
+    setSuiteToEdit(suite);
+  };
+
+  const handleConfirmDeleteSuite = async () => {
+    if (!suiteToEdit?.id) return;
+    setDeletingSuite(true);
+    try {
+      await suiteApi.deleteTestSuite(suiteToEdit.id);
+      setSuite(null);
+      setTestCases([]);
+      setIsDeleteSuiteModalOpen(false);
+      setSuiteToEdit(null);
+    } catch (err: any) {
+      alert(`Lỗi khi xóa Test Suite: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setDeletingSuite(false);
     }
   };
 
@@ -298,6 +370,22 @@ export const SuiteDetail: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
             Tạo Test Case
+          </button>
+          <button
+            onClick={() => handleOpenSuiteModal(suite!)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-indigo-500/20 transition-all"
+            title="Chỉnh sửa thông tin bộ Test Suite"
+          >
+            <Edit3 className="w-4 h-4" />
+            Sửa Suite
+          </button>
+          <button
+            onClick={() => handleOpenDeleteSuiteModal(suite!)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-rose-500/20 transition-all"
+            title="Xóa bộ Test Suite"
+          >
+            <Trash2 className="w-4 h-4" />
+            Xóa Suite
           </button>
           <button
             onClick={fetchSuiteDetails}
@@ -769,6 +857,199 @@ export const SuiteDetail: React.FC = () => {
         testCaseToEdit={testCaseToEdit}
         onSuccess={handleTestCaseModalSuccess}
       />
+
+      {/* Suite Edit modal}
+      {isSuiteModalOpen && suiteToEdit && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Cập nhật bộ Test Suite
+            </h3>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleUpdateSuite();
+              }}
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm text-slate-700 dark:text-slate-300 font-medium">Tên Suite</label>
+                  <input
+                    value={suiteToEdit?.name || ''}
+                    onChange={(e) =>
+                      setSuiteToEdit((prev) =>
+                        prev ? { ...prev, name: e.target.value } : prev
+                      )
+                    }
+                    placeholder="Nhập tên suite"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-700 dark:text-slate-300 font-medium">Module</label>
+                  <input
+                    value={suiteToEdit?.moduleName || ''}
+                    onChange={(e) =>
+                      setSuiteToEdit((prev) =>
+                        prev ? { ...prev, moduleName: e.target.value } : prev
+                      )
+                    }
+                    placeholder="Chọn module"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-sm text-slate-700 dark:text-slate-300 font-medium">Tóm tắt</label>
+                  <textarea
+                    value={suiteToEdit?.summary || ''}
+                    onChange={(e) =>
+                      setSuiteToEdit((prev) =>
+                        prev ? { ...prev, summary: e.target.value } : prev
+                      )
+                    }
+                    placeholder="Nhóm giả định cho kịch bản kiểm thử..."
+                    rows={3}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none text-sm"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-sm text-slate-700 dark:text-slate-300 font-medium">Giả định</label>
+                  <textarea
+                    value={suiteToEdit?.assumptions || ''}
+                    onChange={(e) =>
+                      setSuiteToEdit((prev) =>
+                        prev ? { ...prev, assumptions: e.target.value } : prev
+                      )
+                    }
+                    placeholder="Những giả định trước khi chạy test..."
+                    rows={3}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={handleCancelSuiteModal}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:bg-slate-800 rounded-lg transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingSuite}
+                  className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 bg-opacity-80 hover:bg-indigo-700 rounded-lg shadow-md shadow-indigo-500/20 transition-all disabled:opacity-60"
+                >
+                  {updatingSuite ? 'Đang cập nhật...' : 'Cập nhuite'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal for Test Case */}
+      {isDeleteModalOpen && testCaseToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Xác nhận xóa Test Case?
+                </h3>
+                <p className="text-xs text-slate-500">Hành động này không thể hoàn tác.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+              <p>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Mã Test Case:</span>{' '}
+                <span className="font-mono font-bold text-blue-600">{testCaseToDelete.testCaseCode}</span>
+              </p>
+              <p>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Tiêu đề:</span>{' '}
+                <span className="text-slate-800 dark:text-slate-200">{testCaseToDelete.title}</span>
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setTestCaseToDelete(null);
+                }}
+                disabled={deleting}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:bg-slate-800 rounded-lg transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-md shadow-rose-500/20 transition-all disabled:opacity-60"
+              >
+                {deleting ? 'Đang xóa...' : 'Xác nhận xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal for Suite */}
+      {isDeleteSuiteModalOpen && suiteToEdit && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Xác nhận xóa bộ Test Suite?
+                </h3>
+                <p className="text-xs text-slate-500">Hành động này sẽ xóa vĩnh영 cả các Test Case trong suite.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+              <p>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Tên Suite:</span>{' '}
+                <span className="font-medium text-slate-800 dark:text-white">{suiteToEdit.name}</span>
+              </p>
+              <p>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Số lượng Test Case:</span>{' '}
+                <span className="font-mono font-bold text-blue-600">{suiteToEdit.testCases?.length || 0}</span>
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeleteSuiteModalOpen(false);
+                  setSuiteToEdit(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-300 dark:bg-slate-800 rounded-lg transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteSuite}
+                disabled={deletingSuite}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-md shadow-rose-500/20 transition-all disabled:opacity-60"
+              >
+                {deletingSuite ? 'Đang xóa...' : 'Xác nhận xóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && testCaseToDelete && (

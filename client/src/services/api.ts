@@ -218,3 +218,13 @@ export const userApi = {
   toggleStatus: (id: string) => api.post<{ message: string; user: User }>(`/users/${id}/toggle-status`),
 };
 
+// TestSuites API
+export const suiteApi = {
+  getSuites: () => api.get<{ suites: TestSuite[] }>('/testcases/suites'),
+  getSuiteById: (id: string) =>
+    api.get<{ suite: TestSuite; testCases: TestCase[] }>(`/testcases/suites/${id}`),
+  updateTestSuite: (id: string, data: { name: string; moduleName: string; summary?: string; assumptions?: string }) =>
+    api.put<{ message: string; testSuite: TestSuite }>(`/testcases/suites/${id}`, data),
+  deleteTestSuite: (id: string) => api.delete<{ message: string }>(`/testcases/suites/${id}`),
+};
+
