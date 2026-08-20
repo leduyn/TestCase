@@ -34,6 +34,55 @@ enum TestExecutionStatus {
   UNTESTED
 }
 
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  category    String
+  description String?
+  isSystem    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  rolePermissions     RolePermission[]
+  userPermissions     UserPermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String       @id @default(uuid())
+  role         Role
+  permissionId String       @map("permission_id")
+  permission   Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedAt    DateTime     @default(now()) @map("granted_at")
+  grantedById  String?      @map("granted_by_id")
+  grantedBy    User?        @relation("GrantedRolePermissions", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([role, permissionId])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id           String            @id @default(uuid())
+  userId       String            @map("user_id")
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String            @map("permission_id")
+  permission   Permission        @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  effect       PermissionEffect  @default(ALLOW)
+  resourceType String?           @map("resource_type")
+  resourceId   String?           @map("resource_id")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  @@unique([userId, permissionId, resourceType, resourceId])
+  @@map("user_permissions")
+}
+
 model User {
   id                String            @id @default(uuid())
   email             String            @unique
@@ -47,9 +96,11 @@ model User {
   createdAt         DateTime          @default(now()) @map("created_at")
   updatedAt         DateTime          @updatedAt @map("updated_at")
 
-  documents         Document[]
-  executions        TestExecution[]
-  aiConfigs         AiConfig[]
+  documents             Document[]
+  executions            TestExecution[]
+  aiConfigs             AiConfig[]
+  userPermissions       UserPermission[]
+  grantedRolePermissions RolePermission[] @relation("GrantedRolePermissions")
 
   @@map("users")
 }

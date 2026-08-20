@@ -9,6 +9,7 @@ import executionRoutes from './routes/executionRoutes';
 import exportRoutes from './routes/exportRoutes';
 import setupRoutes from './routes/setupRoutes';
 import settingRoutes from './routes/settingRoutes';
+import permissionRoutes from './routes/permissionRoutes';
 import { checkDatabaseConnection } from './config/database';
 import { dbCheckMiddleware } from './controllers/setupController';
 
@@ -53,6 +54,7 @@ app.use('/api/testcases', testCaseRoutes);
 app.use('/api/executions', executionRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/permissions', permissionRoutes);
 
 
 // Global error handler

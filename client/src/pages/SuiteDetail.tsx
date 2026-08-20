@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Download,
@@ -21,10 +21,20 @@ import { StatusBadge, PlatformBadge, PriorityBadge, TestTypeBadge } from '../com
 import { ExecutionDrawer } from '../components/ExecutionDrawer';
 import { TestCaseModal } from '../components/TestCaseModal';
 import { useAuth } from '../context/AuthContext';
+import { usePermissions } from '../hooks/usePermissions';
 
 export const SuiteDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
+  const { hasPermission } = usePermissions();
+
+  const canCreateTestCase = hasPermission('testcase:create');
+  const canUpdateTestCase = hasPermission('testcase:update');
+  const canDeleteTestCase = hasPermission('testcase:delete');
+  const canExecuteTestCase = hasPermission('testcase:execute');
+  const canUpdateSuite = hasPermission('testsuite:update');
+  const canDeleteSuite = hasPermission('testsuite:delete');
 
   const [suite, setSuite] = useState<TestSuite | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -103,7 +113,7 @@ export const SuiteDetail: React.FC = () => {
     loadEnvironments();
 
     // Fetch suites list
-    suiteApi.getSuites().then(res => {
+    suiteApi.getSuites().then(() => {
       // Suites are already fetched by getSuiteById, but we keep this for completeness
     }).catch(err => {
       console.warn('Error fetching suites list:', err);
@@ -182,8 +192,8 @@ export const SuiteDetail: React.FC = () => {
       const res = await suiteApi.updateTestSuite(suiteToEdit.id, {
         name: suiteToEdit.name,
         moduleName: suiteToEdit.moduleName,
-        summary: suiteToEdit.summary,
-        assumptions: suiteToEdit.assumptions,
+        summary: suiteToEdit.summary || undefined,
+        assumptions: suiteToEdit.assumptions || undefined,
       });
       setSuite((prev) => prev ? { ...prev, ...res.data.testSuite } : null);
       setTestCases((prev) =>
@@ -209,10 +219,9 @@ export const SuiteDetail: React.FC = () => {
     setDeletingSuite(true);
     try {
       await suiteApi.deleteTestSuite(suiteToEdit.id);
-      setSuite(null);
-      setTestCases([]);
       setIsDeleteSuiteModalOpen(false);
       setSuiteToEdit(null);
+      navigate('/');
     } catch (err: any) {
       alert(`Lỗi khi xóa Test Suite: ${err.response?.data?.message || err.message}`);
     } finally {
@@ -363,30 +372,36 @@ export const SuiteDetail: React.FC = () => {
           Quay lại danh sách Suites
         </Link>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleOpenCreateModal}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-blue-500/20 transition-all"
-            title="Tạo thêm kịch bản kiểm thử mới"
-          >
-            <Plus className="w-4 h-4" />
-            Tạo Test Case
-          </button>
-          <button
-            onClick={() => handleOpenSuiteModal(suite!)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-indigo-500/20 transition-all"
-            title="Chỉnh sửa thông tin bộ Test Suite"
-          >
-            <Edit3 className="w-4 h-4" />
-            Sửa Suite
-          </button>
-          <button
-            onClick={() => handleOpenDeleteSuiteModal(suite!)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-rose-500/20 transition-all"
-            title="Xóa bộ Test Suite"
-          >
-            <Trash2 className="w-4 h-4" />
-            Xóa Suite
-          </button>
+          {canCreateTestCase && (
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-blue-500/20 transition-all"
+              title="Tạo thêm kịch bản kiểm thử mới"
+            >
+              <Plus className="w-4 h-4" />
+              Tạo Test Case
+            </button>
+          )}
+          {canUpdateSuite && (
+            <button
+              onClick={() => handleOpenSuiteModal(suite!)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-indigo-500/20 transition-all"
+              title="Chỉnh sửa thông tin bộ Test Suite"
+            >
+              <Edit3 className="w-4 h-4" />
+              Sửa Suite
+            </button>
+          )}
+          {canDeleteSuite && (
+            <button
+              onClick={() => handleOpenDeleteSuiteModal(suite!)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-rose-500/20 transition-all"
+              title="Xóa bộ Test Suite"
+            >
+              <Trash2 className="w-4 h-4" />
+              Xóa Suite
+            </button>
+          )}
           <button
             onClick={fetchSuiteDetails}
             className="p-2 text-slate-500 hover:text-slate-700 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
@@ -408,7 +423,7 @@ export const SuiteDetail: React.FC = () => {
       {/* Suite Overview Header */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-          <div className="space-y-1.5 max-w-3xl">
+          <div className="space-y-1.5 max-w-7xl">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="px-2.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300 text-xs font-bold">
                 {suite.moduleName}
@@ -470,54 +485,49 @@ export const SuiteDetail: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button
               onClick={() => setSelectedStatus('ALL')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'ALL'
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'ALL'
                   ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-              }`}
+                }`}
             >
               Tất cả ({total})
             </button>
             <button
               onClick={() => setSelectedStatus('PASSED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'PASSED'
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'PASSED'
                   ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300'
-              }`}
+                }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               Passed ({passed})
             </button>
             <button
               onClick={() => setSelectedStatus('FAILED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'FAILED'
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'FAILED'
                   ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-400'
                   : 'bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300'
-              } ${failed > 0 ? 'animate-pulse' : ''}`}
+                } ${failed > 0 ? 'animate-pulse' : ''}`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
               Failed ({failed})
             </button>
             <button
               onClick={() => setSelectedStatus('BLOCKED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'BLOCKED'
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'BLOCKED'
                   ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-400'
                   : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300'
-              }`}
+                }`}
             >
               <AlertCircle className="w-3.5 h-3.5" />
               Blocked ({blocked})
             </button>
             <button
               onClick={() => setSelectedStatus('UNTESTED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                selectedStatus === 'UNTESTED'
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNTESTED'
                   ? 'bg-slate-700 text-white shadow-sm'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-              }`}
+                }`}
             >
               <Clock className="w-3.5 h-3.5" />
               Chưa test ({untested})
@@ -641,11 +651,10 @@ export const SuiteDetail: React.FC = () => {
                     <React.Fragment key={tc.id}>
                       <tr
                         onClick={() => handleOpenDrawer(tc)}
-                        className={`cursor-pointer transition-all hover:bg-blue-50/60 dark:hover:bg-blue-950/25 align-top ${
-                          isFailed
+                        className={`cursor-pointer transition-all hover:bg-blue-50/60 dark:hover:bg-blue-950/25 align-top ${isFailed
                             ? 'bg-rose-50/70 dark:bg-rose-950/40 border-l-4 border-l-rose-600'
                             : 'even:bg-slate-50/40 dark:even:bg-slate-800/30'
-                        }`}
+                          }`}
                       >
                         {/* Mã TC */}
                         <td className="py-3 px-3 text-center font-mono font-bold text-blue-700 dark:text-blue-400">
@@ -724,27 +733,33 @@ export const SuiteDetail: React.FC = () => {
                         {/* Thao tác */}
                         <td className="py-3 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleOpenDrawer(tc)}
-                              className="px-2.5 py-1 text-xs font-semibold rounded bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 transition-colors"
-                              title="Ghi nhận kết quả test"
-                            >
-                              Test
-                            </button>
-                            <button
-                              onClick={() => handleOpenEditModal(tc)}
-                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition-colors"
-                              title="Chỉnh sửa Test Case"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenDeleteModal(tc)}
-                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded transition-colors"
-                              title="Xóa Test Case"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {canExecuteTestCase && (
+                              <button
+                                onClick={() => handleOpenDrawer(tc)}
+                                className="px-2.5 py-1 text-xs font-semibold rounded bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 transition-colors"
+                                title="Ghi nhận kết quả test"
+                              >
+                                Test
+                              </button>
+                            )}
+                            {canUpdateTestCase && (
+                              <button
+                                onClick={() => handleOpenEditModal(tc)}
+                                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition-colors"
+                                title="Chỉnh sửa Test Case"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {canDeleteTestCase && (
+                              <button
+                                onClick={() => handleOpenDeleteModal(tc)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded transition-colors"
+                                title="Xóa Test Case"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -858,7 +873,7 @@ export const SuiteDetail: React.FC = () => {
         onSuccess={handleTestCaseModalSuccess}
       />
 
-      {/* Suite Edit modal}
+      /* Suite Edit modal */
       {isSuiteModalOpen && suiteToEdit && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-in zoom-in-95 duration-150">
@@ -1023,7 +1038,7 @@ export const SuiteDetail: React.FC = () => {
               </p>
               <p>
                 <span className="font-semibold text-slate-700 dark:text-slate-300">Số lượng Test Case:</span>{' '}
-                <span className="font-mono font-bold text-blue-600">{suiteToEdit.testCases?.length || 0}</span>
+                <span className="font-mono font-bold text-blue-600">{testCases.length}</span>
               </p>
             </div>
 

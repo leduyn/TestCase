@@ -61,10 +61,39 @@ export const Generate: React.FC = () => {
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState('gemini');
   const [selectedModel, setSelectedModel] = useState('gemini-3.7-flash');
+  const [dynamicModels, setDynamicModels] = useState<Array<{name: string; displayName?: string; description?: string}>>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [isCustomModel, setIsCustomModel] = useState(false);
   const [isConfigCustomModel, setIsConfigCustomModel] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+
+  // Fetch dynamic models when provider changes and API key is available
+  useEffect(() => {
+    const fetchModels = async () => {
+      // Only fetch for Gemini when we have an API key (from config or manual entry)
+      const effectiveApiKey = selectedConfigId
+        ? configs.find((c) => c.id === selectedConfigId)?.apiKey
+        : apiKey;
+
+      if (selectedProvider === 'gemini' && effectiveApiKey) {
+        setIsLoadingModels(true);
+        try {
+          const res = await aiApi.getModels(selectedProvider, effectiveApiKey, baseUrl || undefined);
+          setDynamicModels(res.data.models || []);
+        } catch (err) {
+          console.warn('Could not fetch dynamic models:', err);
+          setDynamicModels([]);
+        } finally {
+          setIsLoadingModels(false);
+        }
+      } else {
+        setDynamicModels([]);
+        setIsLoadingModels(false);
+      }
+    };
+    fetchModels();
+  }, [selectedProvider, selectedConfigId, apiKey, baseUrl, configs]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -256,15 +285,16 @@ export const Generate: React.FC = () => {
         </p>
       </div>
 
-      {error && (
-        <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-4 rounded-xl flex items-start gap-3 text-rose-800 dark:text-rose-200 text-sm">
-          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold">Đã xảy ra lỗi:</p>
-            <p className="mt-0.5 whitespace-pre-line">{error}</p>
+      {/* Error banner outside loading (for non-loading errors) */}
+        {!loading && error && (
+          <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-4 rounded-xl flex items-start gap-3 text-rose-800 dark:text-rose-200 text-sm">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Đã xảy ra lỗi:</p>
+              <p className="mt-0.5 whitespace-pre-line">{error}</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Loading Overlay with Dynamic Progress Bar & Stepper */}
       {loading && (
@@ -327,12 +357,17 @@ export const Generate: React.FC = () => {
                 {progressStep === 3 && 'Đang thiết kế kịch bản & phân hệ App/CMS...'}
                 {progressStep === 4 && 'Đang chuẩn hoá và lưu vào cơ sở dữ liệu...'}
                 {progressStep >= 5 && 'Thành công! Đang chuyển hướng...'}
+                {error && ' ❌ Đã xảy ra lỗi'}
               </span>
             </div>
 
             <div className="w-full h-3.5 bg-slate-100 dark:bg-slate-800 rounded-full p-0.5 overflow-hidden shadow-inner border border-slate-200/80 dark:border-slate-700">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 transition-all duration-300 ease-out relative shadow-md shadow-blue-500/30"
+                className={`h-full rounded-full transition-all duration-300 ease-out relative shadow-md ${
+                  error
+                    ? 'bg-gradient-to-r from-rose-500 via-rose-600 to-red-500 shadow-rose-500/30'
+                    : 'bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 shadow-blue-500/30'
+                }`}
                 style={{ width: `${progressPercent}%` }}
               >
                 {/* Shimmer light effect */}
@@ -392,6 +427,17 @@ export const Generate: React.FC = () => {
               );
             })}
           </div>
+
+          {/* Error banner inside progress overlay */}
+          {error && (
+            <div className="mt-4 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 flex items-start gap-3 text-rose-800 dark:text-rose-200 text-sm animate-in slide-in-from-top-2 duration-200">
+              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-bold">Lỗi tại bước {progressStep}: {GENERATION_STEPS[progressStep - 1]?.title || 'Không xác định'}</p>
+                <p className="mt-0.5 whitespace-pre-line text-xs text-rose-700 dark:text-rose-300 break-all">{error}</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -531,13 +577,21 @@ export const Generate: React.FC = () => {
                         <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                           Mô hình AI (Model)
                         </label>
-                        <button
-                          type="button"
-                          onClick={() => setIsConfigCustomModel(!isConfigCustomModel)}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                        >
-                          {isConfigCustomModel ? '← Chọn từ danh sách' : '+ Nhập model khác'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {isLoadingModels && (
+                            <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                              <span className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                              Đang tải models...
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setIsConfigCustomModel(!isConfigCustomModel)}
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            {isConfigCustomModel ? '← Chọn từ danh sách' : '+ Nhập model khác'}
+                          </button>
+                        </div>
                       </div>
 
                       {isConfigCustomModel ? (
@@ -561,11 +615,20 @@ export const Generate: React.FC = () => {
                           }}
                           className="w-full px-3.5 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                         >
-                          {activeProviderObj?.models?.map((m) => (
-                            <option key={m} value={m}>
-                              {m} {m === activeProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                          {((isLoadingModels ? [] : dynamicModels.length > 0 ? dynamicModels : activeProviderObj?.models) || []).map((m: any) => (
+                            <option key={m.name || m} value={m.name || m}>
+                              {(m.displayName || m.name || m)} {m.name === activeProviderObj?.defaultModel ? '★ (Khuyên dùng)' : ''}
                             </option>
                           ))}
+                          {dynamicModels.length === 0 && !isLoadingModels && activeProviderObj?.models && (
+                            <>
+                              {activeProviderObj.models.map((m) => (
+                                <option key={m} value={m}>
+                                  {m} {m === activeProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                                </option>
+                              ))}
+                            </>
+                          )}
                           <option value="__custom__">+ Nhập mã model tùy chỉnh khác...</option>
                         </select>
                       )}
@@ -576,7 +639,8 @@ export const Generate: React.FC = () => {
                 {selectedConfigId && (
                   <p className="text-xs text-slate-500">
                     Đang dùng API Key đã lưu từ cấu hình{' '}
-                    <b className="text-slate-700 dark:text-slate-200">{providerLabel(activeProviderId)}</b> ({activeProviderObj?.models?.length || 0} mô hình sẵn sàng).
+                    <b className="text-slate-700 dark:text-slate-200">{providerLabel(activeProviderId)}</b>{' '}
+                    ({(dynamicModels.length > 0 ? dynamicModels.length : activeProviderObj?.models?.length || 0)} mô hình sẵn sàng).
                   </p>
                 )}
               </div>
@@ -616,13 +680,21 @@ export const Generate: React.FC = () => {
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                         Mô hình AI (Model)
                       </label>
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomModel(!isCustomModel)}
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                      >
-                        {isCustomModel ? '← Chọn từ danh sách' : '+ Nhập model khác'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {isLoadingModels && selectedProvider === 'gemini' && (
+                          <span className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <span className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            Đang tải models...
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setIsCustomModel(!isCustomModel)}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          {isCustomModel ? '← Chọn từ danh sách' : '+ Nhập model khác'}
+                        </button>
+                      </div>
                     </div>
 
                     {isCustomModel ? (
@@ -646,11 +718,20 @@ export const Generate: React.FC = () => {
                         }}
                         className="w-full px-3.5 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       >
-                        {currentProviderObj?.models?.map((m) => (
-                          <option key={m} value={m}>
-                            {m} {m === currentProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                        {((isLoadingModels ? [] : dynamicModels.length > 0 ? dynamicModels : currentProviderObj?.models) || []).map((m: any) => (
+                          <option key={m.name || m} value={m.name || m}>
+                            {(m.displayName || m.name || m)} {m.name === currentProviderObj?.defaultModel ? '★ (Khuyên dùng)' : ''}
                           </option>
                         ))}
+                        {dynamicModels.length === 0 && !isLoadingModels && currentProviderObj?.models && (
+                          <>
+                            {currentProviderObj.models.map((m) => (
+                              <option key={m} value={m}>
+                                {m} {m === currentProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                              </option>
+                            ))}
+                          </>
+                        )}
                         <option value="__custom__">+ Nhập mã model tùy chỉnh khác...</option>
                       </select>
                     )}

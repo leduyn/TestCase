@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export class AIController {
   static async getProviders(_req: AuthRequest, res: Response) {
@@ -134,6 +135,64 @@ export class AIController {
     ];
 
     return res.json({ providers });
+  }
+
+  static async getModels(req: AuthRequest, res: Response) {
+    try {
+      const { provider } = req.params;
+      const { apiKey, baseUrl } = req.query;
+
+      if (!provider) {
+        return res.status(400).json({ message: 'Thiếu provider' });
+      }
+
+      // For non-Gemini providers, return static list (could be extended later)
+      if (provider !== 'gemini') {
+        return res.json({ models: [], message: 'Chỉ hỗ trợ fetch động cho Gemini hiện tại' });
+      }
+
+      const key = (apiKey as string) || process.env.GEMINI_API_KEY;
+      if (!key) {
+        return res.status(400).json({ message: 'Cần API Key để lấy danh sách model' });
+      }
+
+      // Call Google Generative Language API directly
+      const apiVersion = 'v1beta';
+      const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models?key=${encodeURIComponent(key)}`;
+
+      const response = await fetch(endpoint, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const err: any = await response.json().catch(() => ({}));
+        console.error('Gemini listModels error:', err);
+        return res.status(response.status).json({
+          message: 'Lỗi lấy danh sách model từ Gemini API',
+          error: err.error?.message || response.statusText,
+        });
+      }
+
+      const data: any = await response.json();
+      
+      // Filter models that support generateContent
+      const supportedModels = (data.models || [])
+        .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+        .map((m: any) => ({
+          name: m.name.replace('models/', ''),
+          displayName: m.displayName,
+          description: m.description,
+          inputTokenLimit: m.inputTokenLimit,
+          outputTokenLimit: m.outputTokenLimit,
+          supportedMethods: m.supportedGenerationMethods,
+        }))
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+      return res.json({ models: supportedModels });
+    } catch (error: any) {
+      console.error('getModels error:', error);
+      return res.status(500).json({ message: 'Lỗi server', error: error.message });
+    }
   }
 
   static async getAiConfigs(req: AuthRequest, res: Response) {

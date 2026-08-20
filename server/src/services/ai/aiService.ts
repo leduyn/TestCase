@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
+import prisma from '../../config/database';
 
 export interface GeneratedTestCase {
   testCaseCode: string;
@@ -29,9 +30,9 @@ export interface GenerateOptions {
   customInstruction?: string;
 }
 
-const SYSTEM_PROMPT = `Bạn là Chuyên gia QA / Software Test Engineer cao cấp với hơn 10 năm kinh nghiệm phân tích tài liệu đặc tả yêu cầu (BRD/SRS) và thiết kế kịch bản kiểm thử (Test Case).
+const DEFAULT_SYSTEM_PROMPT = `Bạn là Chuyên gia QA / Software Test Engineer cao cấp với hơn 10 năm kinh nghiệm phân tích tài liệu đặc tả yêu cầu (BRD/SRS) và thiết kế kịch bản kiểm thử (Test Case).
 
-Nhiệm vụ của bạn:
+NHIỆM VỤ:
 1. Đọc kỹ toàn bộ tài liệu đặc tả yêu cầu được cung cấp.
 2. Phân tích các phân hệ, chức năng, luồng nghiệp vụ, giao diện (App di động, Web CMS, API backend), các quy tắc nghiệp vụ (Business Rules), ràng buộc dữ liệu.
 3. Sinh ra bộ Test Case toàn diện, đầy đủ và chi tiết gồm cả:
@@ -40,8 +41,9 @@ Nhiệm vụ của bạn:
    - Giá trị biên (Boundary value analysis / Edge cases)
    - Phân quyền & trạng thái (Permission / Role-based access / Status transition)
 4. Phân định rõ nền tảng kiểm thử cho từng test case: "App", "CMS", hoặc "Web".
-5. BẮT BUỘC trả về định dạng JSON thuần túy (không kèm markdown \`\`\`json bọc ngoài nếu không cần thiết, hoặc parse được) tuân theo đúng cấu trúc schema sau:
+5. **BẮT BUỘC CHỈ TRẢ VỀ JSON THUẦN TÚY** – KHÔNG CÓ VĂN BẢN GIẢI THÍCH, KHÔNG CÓ MARKDOWN \`\`\`json, KHÔNG CÓ CHỮ GÌ KHÁC NGOÀI JSON. NẾU VI PHẠM, HỆ THỐNG SẼ BỎ QUA.
 
+CẤU TRÚC JSON BẮT BUỘC TUÂN THEO:
 {
   "moduleName": "Tên phân hệ / module chính của tài liệu (VD: Quản lý Khách hàng)",
   "summary": "Tóm tắt ngắn gọn các chức năng và phạm vi kiểm thử (3-5 câu)",
@@ -195,6 +197,8 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
       throw new Error('Chưa cung cấp Gemini API Key. Vui lòng cấu hình trong Cài đặt hoặc file .env');
     }
 
+    const systemPrompt = await this.getSystemPrompt();
+
     const genAI = new GoogleGenerativeAI(apiKey);
     const modelName = options.modelName || 'gemini-3.7-flash';
     const model = genAI.getGenerativeModel({
@@ -203,7 +207,7 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
         responseMimeType: 'application/json',
         temperature: 0.2,
       },
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: systemPrompt,
     });
 
     const responseText = await withRetry(async () => {
@@ -250,6 +254,8 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
       throw new Error(`Chưa cung cấp API Key cho ${provider.toUpperCase()}. Vui lòng cấu hình trong Cài đặt hoặc file .env`);
     }
 
+    const systemPrompt = await this.getSystemPrompt();
+
     const openai = new OpenAI({
       apiKey,
       baseURL: baseURL || undefined,
@@ -260,7 +266,7 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
         const completion = await openai.chat.completions.create({
           model: modelName || 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'system', content: systemPrompt },
             { role: 'user', content: prompt },
           ],
           response_format: { type: 'json_object' },
@@ -278,7 +284,7 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
           const completion = await openai.chat.completions.create({
             model: modelName || 'gpt-4o-mini',
             messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: systemPrompt },
               { role: 'user', content: prompt },
             ],
             temperature: 0.2,
@@ -294,6 +300,8 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
 
   private static parseJSONResponse(text: string): GenerationResult {
     let cleanText = text.trim();
+
+    // 1. Remove markdown fences
     if (cleanText.startsWith('```json')) {
       cleanText = cleanText.substring(7);
     }
@@ -305,31 +313,89 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
     }
     cleanText = cleanText.trim();
 
+    // 2. Try direct JSON parse
     try {
       const parsed = JSON.parse(cleanText);
-      const testCases: GeneratedTestCase[] = Array.isArray(parsed.testCases)
-        ? parsed.testCases.map((tc: any, index: number) => ({
-            testCaseCode: normalizeToString(tc.testCaseCode || tc.id) || `TC_${String(index + 1).padStart(3, '0')}`,
-            module: normalizeToString(tc.module) || 'Chung',
-            platform: normalizeToString(tc.platform) || 'App',
-            title: normalizeToString(tc.title) || `Kịch bản kiểm thử ${index + 1}`,
-            testType: normalizeToString(tc.testType || tc.type) || 'Luồng chuẩn',
-            preconditions: normalizeToString(tc.preconditions || tc.precondition),
-            steps: normalizeToString(tc.steps, true),
-            expectedResult: normalizeToString(tc.expectedResult || tc.expected),
-            priority: normalizeToString(tc.priority) || 'Cao',
-          }))
-        : [];
+      return this.mapToResult(parsed);
+    } catch {}
 
-      return {
-        moduleName: normalizeToString(parsed.moduleName) || 'Bộ Test Case',
-        summary: normalizeToString(parsed.summary),
-        assumptions: normalizeToString(parsed.assumptions),
-        testCases,
-      };
-    } catch (e: any) {
-      throw new Error(`Lỗi phân tích JSON từ AI: ${e.message}\nNội dung: ${cleanText.slice(0, 300)}...`);
+    // 3. Extract JSON object from mixed text (handles "We need to..." + JSON)
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return this.mapToResult(parsed);
+      } catch {}
     }
+
+    // 4. Last resort: find array and wrap
+    const arrayMatch = cleanText.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      try {
+        const testCases = JSON.parse(arrayMatch[0]);
+        return {
+          moduleName: 'Bộ Test Case',
+          summary: '',
+          assumptions: '',
+          testCases: this.normalizeTestCases(testCases),
+        };
+      } catch {}
+    }
+
+    throw new Error(`Lỗi phân tích JSON từ AI: Không tìm thấy JSON hợp lệ\nNội dung (300 ký tự đầu): ${cleanText.slice(0, 300)}...`);
+  }
+
+  private static mapToResult(parsed: any): GenerationResult {
+    const testCases: GeneratedTestCase[] = Array.isArray(parsed.testCases)
+      ? parsed.testCases.map((tc: any, index: number) => ({
+          testCaseCode: normalizeToString(tc.testCaseCode || tc.id) || `TC_${String(index + 1).padStart(3, '0')}`,
+          module: normalizeToString(tc.module) || 'Chung',
+          platform: normalizeToString(tc.platform) || 'App',
+          title: normalizeToString(tc.title) || `Kịch bản kiểm thử ${index + 1}`,
+          testType: normalizeToString(tc.testType || tc.type) || 'Luồng chuẩn',
+          preconditions: normalizeToString(tc.preconditions || tc.precondition),
+          steps: normalizeToString(tc.steps, true),
+          expectedResult: normalizeToString(tc.expectedResult || tc.expected),
+          priority: normalizeToString(tc.priority) || 'Cao',
+        }))
+      : [];
+
+    return {
+      moduleName: normalizeToString(parsed.moduleName) || 'Bộ Test Case',
+      summary: normalizeToString(parsed.summary),
+      assumptions: normalizeToString(parsed.assumptions),
+      testCases,
+    };
+  }
+
+  private static normalizeTestCases(arr: any[]): GeneratedTestCase[] {
+    return arr.map((tc: any, index: number) => ({
+      testCaseCode: normalizeToString(tc.testCaseCode || tc.id) || `TC_${String(index + 1).padStart(3, '0')}`,
+      module: normalizeToString(tc.module) || 'Chung',
+      platform: normalizeToString(tc.platform) || 'App',
+      title: normalizeToString(tc.title) || `Kịch bản kiểm thử ${index + 1}`,
+      testType: normalizeToString(tc.testType || tc.type) || 'Luồng chuẩn',
+      preconditions: normalizeToString(tc.preconditions || tc.precondition),
+      steps: normalizeToString(tc.steps, true),
+      expectedResult: normalizeToString(tc.expectedResult || tc.expected),
+      priority: normalizeToString(tc.priority) || 'Cao',
+    }));
+  }
+
+  static async getSystemPrompt(): Promise<string> {
+    const setting = await prisma.systemSetting.findUnique({ where: { key: 'ai_system_prompt' } });
+    return setting?.value || DEFAULT_SYSTEM_PROMPT;
+  }
+
+  static async setSystemPrompt(prompt: string): Promise<void> {
+    if (!prompt || prompt.trim().length < 100) {
+      throw new Error('Prompt quá ngắn (tối thiểu 100 ký tự)');
+    }
+    await prisma.systemSetting.upsert({
+      where: { key: 'ai_system_prompt' },
+      update: { value: prompt.trim() },
+      create: { key: 'ai_system_prompt', value: prompt.trim() },
+    });
   }
 }
 

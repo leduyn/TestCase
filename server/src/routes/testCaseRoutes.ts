@@ -2,7 +2,8 @@ import { Router } from 'express';
 import multer from 'multer';
 import { TestCaseController } from '../controllers/testCaseController';
 import { ImportController } from '../controllers/importController';
-import { optionalAuthenticate } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
+import { requirePermission, requireResourcePermission } from '../middleware/rbac';
 
 const router = Router();
 const upload = multer({
@@ -10,18 +11,20 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB max
 });
 
-router.post('/', optionalAuthenticate, TestCaseController.createTestCase);
-router.post('/generate', optionalAuthenticate, upload.single('file'), TestCaseController.generate);
-router.post('/import/preview', optionalAuthenticate, upload.single('file'), ImportController.preview);
-router.post('/import', optionalAuthenticate, upload.single('file'), ImportController.import);
-router.get('/suites', optionalAuthenticate, TestCaseController.getSuites);
-router.get('/suites/:id', optionalAuthenticate, TestCaseController.getSuiteById);
-router.put('/:id', optionalAuthenticate, TestCaseController.updateTestCase);
-router.delete('/:id', optionalAuthenticate, TestCaseController.deleteTestCase);
+// Test Case routes
+router.post('/', authenticate, requirePermission('testcase:create'), TestCaseController.createTestCase);
+router.post('/generate', authenticate, requirePermission('testcase:generate'), upload.single('file'), TestCaseController.generate);
+router.post('/import/preview', authenticate, requirePermission('testcase:import'), upload.single('file'), ImportController.preview);
+router.post('/import', authenticate, requirePermission('testcase:import'), upload.single('file'), ImportController.import);
+router.post('/import/json', authenticate, requirePermission('testcase:import'), ImportController.importJson);
+router.get('/suites', authenticate, requirePermission('testsuite:read'), TestCaseController.getSuites);
+router.get('/suites/:id', authenticate, requirePermission('testsuite:read'), TestCaseController.getSuiteById);
+router.put('/:id', authenticate, requirePermission('testcase:update'), TestCaseController.updateTestCase);
+router.delete('/:id', authenticate, requirePermission('testcase:delete'), TestCaseController.deleteTestCase);
 
 // TestSuite CRUD routes
-router.put('/suites/:id', optionalAuthenticate, TestCaseController.updateTestSuite);
-router.delete('/suites/:id', optionalAuthenticate, TestCaseController.deleteTestSuite);
+router.put('/suites/:id', authenticate, requirePermission('testsuite:update'), TestCaseController.updateTestSuite);
+router.delete('/suites/:id', authenticate, requirePermission('testsuite:delete'), TestCaseController.deleteTestSuite);
 
 export default router;
 

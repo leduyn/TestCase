@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import { AIService } from '../services/ai/aiService';
 
 const DEFAULT_SERVERS = ['DEV', 'STAGING', 'UAT', 'PRODUCTION'];
 const DEFAULT_OS_LIST = [
@@ -91,6 +92,30 @@ export class SettingController {
         message: 'Lỗi khi lưu cấu hình môi trường',
         error: error.message,
       });
+    }
+  }
+
+  static async getSystemPrompt(_req: Request, res: Response) {
+    try {
+      const prompt = await AIService.getSystemPrompt();
+      return res.json({ prompt });
+    } catch (error: any) {
+      console.error('Error fetching system prompt:', error);
+      return res.status(500).json({ message: 'Lỗi khi lấy System Prompt', error: error.message });
+    }
+  }
+
+  static async updateSystemPrompt(req: AuthRequest, res: Response) {
+    try {
+      const { prompt } = req.body;
+      if (!prompt || typeof prompt !== 'string' || prompt.trim().length < 100) {
+        return res.status(400).json({ message: 'Prompt quá ngắn (tối thiểu 100 ký tự)' });
+      }
+      await AIService.setSystemPrompt(prompt.trim());
+      return res.json({ message: 'Đã cập nhật System Prompt thành công' });
+    } catch (error: any) {
+      console.error('Error updating system prompt:', error);
+      return res.status(500).json({ message: 'Lỗi khi cập nhật System Prompt', error: error.message });
     }
   }
 }

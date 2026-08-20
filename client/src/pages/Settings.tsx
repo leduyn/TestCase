@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   AlertCircle,
   Database,
-  RefreshCw,
   ExternalLink,
   Server,
   Monitor,
@@ -16,11 +15,15 @@ import {
   Trash2,
   RotateCcw,
   Edit3,
-  Star,
   X,
+  Loader2,
 } from 'lucide-react';
 import { aiApi, setupApi, environmentApi } from '../services/api';
+import { AIConfigRow } from '../components/AIConfigRow';
+import { PermissionManagement } from '../components/PermissionManagement';
+import { SystemPromptEditor } from '../components/SystemPromptEditor';
 import type { AIProviderInfo, AIConfig } from '../types';
+import { usePermissions } from '../hooks/usePermissions';
 
 const DEFAULT_SERVERS = ['DEV', 'STAGING', 'UAT', 'PRODUCTION'];
 const DEFAULT_OS_LIST = [
@@ -36,6 +39,14 @@ const DEFAULT_OS_LIST = [
 ];
 
 export const Settings: React.FC = () => {
+  const { hasPermission } = usePermissions();
+  
+  const canManageAI = hasPermission('settings:ai:write');
+  const canReadAI = hasPermission('settings:ai:read');
+  const canManageEnv = hasPermission('settings:env:write');
+  const canReadEnv = hasPermission('settings:env:read');
+  const canManagePermissions = hasPermission('users:update'); // Admin only
+
   const [providers, setProviders] = useState<AIProviderInfo[]>([]);
   const [configs, setConfigs] = useState<AIConfig[]>([]);
 
@@ -66,7 +77,6 @@ export const Settings: React.FC = () => {
 
   // DB Status
   const [dbStatus, setDbStatus] = useState<{ status: string; message: string } | null>(null);
-  const [loadingDbStatus, setLoadingDbStatus] = useState(false);
 
   const loadData = async () => {
     try {
@@ -89,14 +99,11 @@ export const Settings: React.FC = () => {
   };
 
   const checkDb = async () => {
-    setLoadingDbStatus(true);
     try {
       const res = await setupApi.getStatus();
       setDbStatus(res.data);
     } catch (err: any) {
       setDbStatus(err.response?.data || { status: 'UNKNOWN', message: err.message });
-    } finally {
-      setLoadingDbStatus(false);
     }
   };
 
@@ -286,7 +293,7 @@ export const Settings: React.FC = () => {
   const currentProviderObj = providers.find((p) => p.id === provider);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <div>
         <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
           <SettingsIcon className="w-6 h-6 text-blue-600" />
@@ -298,189 +305,203 @@ export const Settings: React.FC = () => {
       </div>
 
       {/* Cài đặt Danh sách Server & Hệ điều hành */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+      {(canReadEnv || canManageEnv) && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Server className="w-5 h-5 text-blue-600" />
+                Lựa chọn Selectbox: Server & Hệ điều hành (OS)
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Các mục tại đây sẽ xuất hiện trong menu chọn Server và OS khi thực thi Test Case và bộ lọc.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRestoreDefaultEnv}
+              className="text-xs font-semibold text-slate-500 hover:text-blue-600 flex items-center gap-1 self-start sm:self-auto"
+              title="Khôi phục danh sách gợi ý ban đầu"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Khôi phục mặc định
+            </button>
+          </div>
+
+          {savedEnvSuccess && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              Đã lưu danh sách Server và Hệ điều hành thành công!
+            </div>
+          )}
+
+          {envError && (
+            <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-3 rounded-xl flex items-center gap-2 text-rose-800 dark:text-rose-300 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+              {envError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Cài đặt Servers */}
+            <div className="space-y-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Server className="w-3.5 h-3.5 text-blue-600" />
+                Danh sách Server ({servers.length})
+              </label>
+
+              {/* Input thêm Server mới */}
+              {canManageEnv && (
+                <form onSubmit={handleAddServer} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newServer}
+                    onChange={(e) => setNewServer(e.target.value)}
+                    placeholder="VD: STAGING, UAT, PROD..."
+                    className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors flex items-center gap-1 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Thêm
+                  </button>
+                </form>
+              )}
+
+              {/* Tags Server */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/80 min-h-[110px] flex flex-wrap gap-2 content-start">
+                {servers.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">Chưa có Server nào. Hãy nhập để thêm.</span>
+                ) : (
+                  servers.map((s) => (
+                    <span
+                      key={s}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 shadow-sm"
+                    >
+                      {s}
+                      {canManageEnv && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveServer(s)}
+                          className="text-slate-400 hover:text-rose-500 transition-colors"
+                          title={`Xóa ${s}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Cài đặt OS */}
+            <div className="space-y-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <Monitor className="w-3.5 h-3.5 text-indigo-600" />
+                Danh sách Hệ điều hành (OS) ({osList.length})
+              </label>
+
+              {/* Input thêm OS mới */}
+              {canManageEnv && (
+                <form onSubmit={handleAddOs} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newOs}
+                    onChange={(e) => setNewOs(e.target.value)}
+                    placeholder="VD: Windows 11, iOS 18..."
+                    className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors flex items-center gap-1 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Thêm
+                  </button>
+                </form>
+              )}
+
+              {/* Tags OS */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/80 min-h-[110px] flex flex-wrap gap-2 content-start">
+                {osList.length === 0 ? (
+                  <span className="text-xs text-slate-400 italic">Chưa có OS nào. Hãy nhập để thêm.</span>
+                ) : (
+                  osList.map((o) => (
+                    <span
+                      key={o}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-sm"
+                    >
+                      {o}
+                      {canManageEnv && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveOs(o)}
+                          className="text-slate-400 hover:text-rose-500 transition-colors"
+                          title={`Xóa ${o}`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {canManageEnv && (
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={handleSaveEnvironments}
+                disabled={savingEnv}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition-colors disabled:opacity-50"
+              >
+                {savingEnv ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {savingEnv ? 'Đang lưu...' : 'Lưu danh sách Server & OS'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Cấu hình Database */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Server className="w-5 h-5 text-blue-600" />
-              Lựa chọn Selectbox: Server & Hệ điều hành (OS)
+              <Database className="w-5 h-5 text-emerald-600" />
+              Cấu hình Database PostgreSQL
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Các mục tại đây sẽ xuất hiện trong menu chọn Server và OS khi thực thi Test Case và bộ lọc.
+              Kiểm tra trạng thái kết nối hoặc chuyển đến trang Setup để cấu hình lại.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleRestoreDefaultEnv}
-            className="text-xs font-semibold text-slate-500 hover:text-blue-600 flex items-center gap-1 self-start sm:self-auto"
-            title="Khôi phục danh sách gợi ý ban đầu"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Khôi phục mặc định
-          </button>
         </div>
 
-        {savedEnvSuccess && (
-          <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            Đã lưu danh sách Server và Hệ điều hành thành công!
-          </div>
-        )}
-
-        {envError && (
-          <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-3 rounded-xl flex items-center gap-2 text-rose-800 dark:text-rose-300 text-xs font-semibold">
-            <AlertCircle className="w-4 h-4 text-rose-600" />
-            {envError}
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Cài đặt Servers */}
-          <div className="space-y-3">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-              <Server className="w-3.5 h-3.5 text-blue-600" />
-              Danh sách Server ({servers.length})
-            </label>
-
-            {/* Input thêm Server mới */}
-            <form onSubmit={handleAddServer} className="flex gap-2">
-              <input
-                type="text"
-                value={newServer}
-                onChange={(e) => setNewServer(e.target.value)}
-                placeholder="VD: STAGING, UAT, PROD..."
-                className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition-colors flex items-center gap-1 shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Thêm
-              </button>
-            </form>
-
-            {/* Tags Server */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/80 min-h-[110px] flex flex-wrap gap-2 content-start">
-              {servers.length === 0 ? (
-                <span className="text-xs text-slate-400 italic">Chưa có Server nào. Hãy nhập để thêm.</span>
-              ) : (
-                servers.map((s) => (
-                  <span
-                    key={s}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 shadow-sm"
-                  >
-                    {s}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveServer(s)}
-                      className="text-slate-400 hover:text-rose-500 transition-colors"
-                      title={`Xóa ${s}`}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))
-              )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-100 dark:bg-blue-950/40">
+              <Database className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
-          </div>
-
-          {/* Cài đặt OS */}
-          <div className="space-y-3">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-              <Monitor className="w-3.5 h-3.5 text-indigo-600" />
-              Danh sách Hệ điều hành (OS) ({osList.length})
-            </label>
-
-            {/* Input thêm OS mới */}
-            <form onSubmit={handleAddOs} className="flex gap-2">
-              <input
-                type="text"
-                value={newOs}
-                onChange={(e) => setNewOs(e.target.value)}
-                placeholder="VD: Windows 11, iOS 18..."
-                className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition-colors flex items-center gap-1 shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Thêm
-              </button>
-            </form>
-
-            {/* Tags OS */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/80 min-h-[110px] flex flex-wrap gap-2 content-start">
-              {osList.length === 0 ? (
-                <span className="text-xs text-slate-400 italic">Chưa có OS nào. Hãy nhập để thêm.</span>
-              ) : (
-                osList.map((o) => (
-                  <span
-                    key={o}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-sm"
-                  >
-                    {o}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveOs(o)}
-                      className="text-slate-400 hover:text-rose-500 transition-colors"
-                      title={`Xóa ${o}`}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))
-              )}
+            <div>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    dbStatus?.status === 'READY' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                  }`}
+                />
+                <span className="text-sm font-bold text-slate-900 dark:text-white">
+                  {dbStatus?.status === 'READY' ? 'Đã kết nối PostgreSQL' : 'Cần kiểm tra kết nối'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                {dbStatus?.message || 'Đang lấy trạng thái...'}
+              </p>
             </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end pt-2">
-          <button
-            type="button"
-            onClick={handleSaveEnvironments}
-            disabled={savingEnv}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
-          >
-            <Save className="w-4 h-4" />
-            {savingEnv ? 'Đang lưu danh sách...' : 'Lưu cài đặt Server & OS'}
-          </button>
-        </div>
-      </div>
-
-      {/* Quản lý Cơ sở Dữ liệu */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Database className="w-5 h-5 text-blue-600" />
-            Cơ sở Dữ liệu PostgreSQL
-          </h2>
-          <button
-            onClick={checkDb}
-            disabled={loadingDbStatus}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingDbStatus ? 'animate-spin' : ''}`} />
-            Kiểm tra kết nối
-          </button>
-        </div>
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
-          <div>
-            <div className="flex items-center gap-2">
-              <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  dbStatus?.status === 'READY' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-                }`}
-              />
-              <span className="text-sm font-bold text-slate-900 dark:text-white">
-                {dbStatus?.status === 'READY' ? 'Đã kết nối PostgreSQL' : 'Cần kiểm tra kết nối'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              {dbStatus?.message || 'Đang lấy trạng thái...'}
-            </p>
           </div>
 
           <Link
@@ -493,296 +514,220 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-
       {/* Form Cấu hình AI */}
-      <div ref={formRef} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6 scroll-mt-6">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Key className="w-5 h-5 text-blue-600" />
-            {editingConfigId ? 'Chỉnh sửa Cấu hình AI' : 'Thêm hoặc Cập nhật Cấu hình AI'}
-          </h2>
-          {editingConfigId && (
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-              Hủy chỉnh sửa
-            </button>
-          )}
-        </div>
-
-        {editingConfigId && (
-          <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl flex items-start gap-2.5 text-blue-800 dark:text-blue-200 text-xs">
-            <Edit3 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">Đang ở chế độ Chỉnh sửa cấu hình</p>
-              <p className="mt-0.5 text-blue-600 dark:text-blue-300">
-                Để trống ô API Key nếu bạn muốn giữ nguyên mã API Key đã lưu trước đó.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {savedSuccess && (
-          <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            {savedSuccess}
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-3.5 rounded-xl flex items-center gap-2 text-rose-800 dark:text-rose-300 text-xs font-semibold">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Nhà cung cấp (Provider)
-              </label>
-              <select
-                value={provider}
-                onChange={(e) => setProvider(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                <option value="gemini">Google Gemini</option>
-                <option value="openrouter">OpenRouter (Multi-model & Free models)</option>
-                <option value="groq">Groq AI (Ultra-fast Inference)</option>
-                <option value="openai">OpenAI GPT</option>
-                <option value="deepseek">DeepSeek AI</option>
-                <option value="custom">Custom / OpenAI-Compatible (Ollama, vLLM)</option>
-              </select>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Mô hình (Model)
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsCustomModel(!isCustomModel)}
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  {isCustomModel ? '← Chọn từ danh sách có sẵn' : '+ Nhập tên model khác'}
-                </button>
-              </div>
-
-              {isCustomModel ? (
-                <input
-                  type="text"
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
-                  placeholder="Nhập mã model bất kỳ (VD: gpt-4o, openrouter/free...)"
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
-                />
-              ) : (
-                <select
-                  value={modelName}
-                  onChange={(e) => {
-                    if (e.target.value === '__custom__') {
-                      setIsCustomModel(true);
-                      setModelName('');
-                    } else {
-                      setModelName(e.target.value);
-                    }
-                  }}
-                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                >
-                  {currentProviderObj?.models?.map((m) => (
-                    <option key={m} value={m}>
-                      {m} {m === currentProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
-                    </option>
-                  ))}
-                  <option value="__custom__">+ Nhập mã model tùy chỉnh khác...</option>
-                </select>
-              )}
-              <p className="text-xs text-slate-500 mt-1">
-                {currentProviderObj?.models?.length || 0} mô hình sẵn sàng cho nhà cung cấp này.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              API Key {editingConfigId ? <span className="text-slate-400 font-normal">(Để trống nếu giữ nguyên)</span> : <span className="text-rose-500">*</span>}
-            </label>
-            <input
-              type="password"
-              required={!editingConfigId}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={editingConfigId ? '•••••••••••••••• (Giữ nguyên key cũ)' : 'Nhập API Key của nhà cung cấp...'}
-              className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
-            />
-            <p className="text-xs text-slate-400 mt-1">
-              API Key được lưu trữ mã hoá an toàn trong PostgreSQL và chỉ dùng cho tài khoản của bạn.
-            </p>
-          </div>
-
-          {provider === 'custom' && (
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Base URL
-              </label>
-              <input
-                type="text"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="http://localhost:11434/v1"
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-          )}
-
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="is-active"
-              checked={isActive}
-              onChange={(e) => setIsActive(e.target.checked)}
-              className="w-4 h-4 text-blue-600 rounded"
-            />
-            <label htmlFor="is-active" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Đặt làm Provider mặc định khi sinh Test Case
-            </label>
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-2">
+      {(canReadAI || canManageAI) && (
+        <div ref={formRef} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6 scroll-mt-6">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Key className="w-5 h-5 text-blue-600" />
+              {editingConfigId ? 'Chỉnh sửa Cấu hình AI' : 'Thêm hoặc Cập nhật Cấu hình AI'}
+            </h2>
             {editingConfigId && (
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg transition-colors"
               >
-                Hủy bỏ
+                <X className="w-3.5 h-3.5" />
+                Hủy chỉnh sửa
               </button>
             )}
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Đang lưu...' : editingConfigId ? 'Cập nhật cấu hình' : 'Lưu cấu hình'}
-            </button>
           </div>
-        </form>
-      </div>
+
+          {editingConfigId && (
+            <div className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 p-3.5 rounded-xl flex items-start gap-2.5 text-blue-800 dark:text-blue-200 text-xs">
+              <Edit3 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">Đang ở chế độ Chỉnh sửa cấu hình</p>
+                <p className="mt-0.5 text-blue-600 dark:text-blue-300">
+                  Để trống ô API Key nếu bạn muốn giữ nguyên mã API Key đã lưu trước đó.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {savedSuccess && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3.5 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              {savedSuccess}
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-3.5 rounded-xl flex items-center gap-2 text-rose-800 dark:text-rose-300 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSave} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nhà cung cấp (Provider)
+                </label>
+                <select
+                  value={provider}
+                  onChange={(e) => setProvider(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                >
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openrouter">OpenRouter (Multi-model & Free models)</option>
+                  <option value="groq">Groq AI (Ultra-fast Inference)</option>
+                  <option value="openai">OpenAI GPT</option>
+                  <option value="deepseek">DeepSeek AI</option>
+                  <option value="custom">Custom / OpenAI-Compatible (Ollama, vLLM)</option>
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Mô hình (Model)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomModel(!isCustomModel)}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    {isCustomModel ? '← Chọn từ danh sách có sẵn' : '+ Nhập tên model khác'}
+                  </button>
+                </div>
+
+                {isCustomModel ? (
+                  <input
+                    type="text"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    placeholder="Nhập tên model..."
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                  />
+                ) : (
+                  <select
+                    value={modelName}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') {
+                        setIsCustomModel(true);
+                        setModelName('');
+                      } else {
+                        setModelName(e.target.value);
+                      }
+                    }}
+                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    {currentProviderObj?.models?.map((m) => (
+                      <option key={m} value={m}>
+                        {m} {m === currentProviderObj.defaultModel ? '★ (Khuyên dùng)' : ''}
+                      </option>
+                    ))}
+                    <option value="__custom__">+ Nhập tên model tùy chỉnh khác...</option>
+                  </select>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={editingConfigId ? 'Để trống để giữ nguyên key cũ' : 'Nhập API Key...'}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Base URL (tùy chọn)
+                </label>
+                <input
+                  type="text"
+                  value={baseUrl}
+                  onChange={(e) => setBaseUrl(e.target.value)}
+                  placeholder="https://api.example.com/v1"
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="is-active"
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="is-active" className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Đặt làm Provider mặc định khi sinh Test Case
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              {editingConfigId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+              )}
+              {canManageAI && (
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
+                >
+                  <Save className="w-4 h-4" />
+                  {saving ? 'Đang lưu...' : editingConfigId ? 'Cập nhật cấu hình' : 'Lưu cấu hình'}
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Danh sách cấu hình đã lưu */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
-        <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <ShieldCheck className="w-5 h-5 text-emerald-600" />
-          Các cấu hình AI đã lưu ({configs.length})
-        </h2>
+      {canReadAI && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            Các cấu hình AI đã lưu ({configs.length})
+          </h2>
 
-        {configs.length === 0 ? (
-          <p className="text-xs text-slate-500 text-center py-6">
-            Chưa có cấu hình AI nào được lưu. Hệ thống sẽ sử dụng API Key mặc định trong file .env nếu có.
-          </p>
-        ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {configs.map((conf) => {
-              const isLoading = actionLoadingId === conf.id;
-              const isBeingEdited = editingConfigId === conf.id;
-
-              return (
-                <div
+{configs.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-6">
+              Chưa có cấu hình AI nào được lưu. Hệ thống sẽ sử dụng API Key mặc định trong file .env nếu có.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+{configs.map((conf) => (
+                <AIConfigRow
                   key={conf.id}
-                  className={`py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl transition-colors ${
-                    isBeingEdited ? 'bg-blue-50/50 dark:bg-blue-950/20 px-3' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs uppercase shrink-0 shadow-sm ${
-                        conf.isActive
-                          ? 'bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-500/20'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                      }`}
-                    >
-                      {conf.provider.slice(0, 3)}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-bold text-slate-900 dark:text-white capitalize">
-                          {conf.provider}
-                        </span>
-                        {conf.isActive && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Mặc định
-                          </span>
-                        )}
-                        {isBeingEdited && (
-                          <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[11px] font-bold animate-pulse">
-                            Đang chỉnh sửa
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5 truncate">
-                        Model: <span className="text-slate-700 dark:text-slate-300 font-semibold">{conf.modelName}</span>
-                        {conf.baseUrl && ` • ${conf.baseUrl}`}
-                      </p>
-                    </div>
-                  </div>
+                  conf={conf}
+                  canManageAI={canManageAI}
+                  isLoading={actionLoadingId === conf.id}
+                  isBeingEdited={editingConfigId === conf.id}
+                  onToggleActive={handleToggleActive}
+                  onStartEdit={handleStartEdit}
+                  onDelete={handleDeleteConfig}
+                />
+              ))}
+            </div>
+)}
 
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                    {/* Toggle Default Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleActive(conf)}
-                      disabled={isLoading}
-                      className={`p-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                        conf.isActive
-                          ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100'
-                          : 'text-slate-500 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
-                      title={conf.isActive ? 'Đang là mặc định' : 'Đặt làm mặc định'}
-                    >
-                      <Star className={`w-4 h-4 ${conf.isActive ? 'fill-amber-500 text-amber-500' : ''}`} />
-                      <span className="hidden sm:inline text-xs">
-                        {conf.isActive ? 'Mặc định' : 'Đặt mặc định'}
-                      </span>
-                    </button>
+        </div>
+      )}
 
-                    {/* Edit Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit(conf)}
-                      disabled={isLoading}
-                      className="p-2 rounded-xl text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50 transition-colors flex items-center gap-1 text-xs font-semibold"
-                      title="Chỉnh sửa cấu hình"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                      <span className="hidden sm:inline">Sửa</span>
-                    </button>
+      {/* System Prompt AI */}
+      <SystemPromptEditor />
 
-                    {/* Delete Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteConfig(conf)}
-                      disabled={isLoading}
-                      className="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors flex items-center gap-1 text-xs font-semibold"
-                      title="Xóa cấu hình"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span className="hidden sm:inline">Xóa</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/* Permission Management */}
+      <PermissionManagement canManagePermissions={canManagePermissions} />
     </div>
   );
 };
+export default Settings;

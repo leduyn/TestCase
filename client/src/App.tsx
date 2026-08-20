@@ -13,6 +13,7 @@ import UserManagement from './pages/UserManagement';
 import { DatabaseSetupPage } from './pages/Setup/DatabaseSetupPage';
 import { setupApi } from './services/api';
 import { Loader2 } from 'lucide-react';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 const AppContent: React.FC = () => {
   const location = useLocation();
@@ -86,8 +87,6 @@ const AppContent: React.FC = () => {
     );
   }
 
-  const isSetupRoute = location.pathname === '/setup';
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans">
       {user ? <Navbar /> : null}
@@ -95,13 +94,33 @@ const AppContent: React.FC = () => {
         <Routes>
           <Route path="/setup" element={<DatabaseSetupPage />} />
           <Route path="/" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Dashboard />} />
-          <Route path="/generate" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Generate />} />
-          <Route path="/import" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Import />} />
-          <Route path="/suites/:id" element={isSetupRequired ? <Navigate to="/setup" replace /> : <SuiteDetail />} />
+          <Route path="/generate" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="testcase:generate"><Generate /></ProtectedRoute>
+            )
+          } />
+          <Route path="/import" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="testcase:import"><Import /></ProtectedRoute>
+            )
+          } />
+          <Route path="/suites/:id" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="testsuite:read"><SuiteDetail /></ProtectedRoute>
+            )
+          } />
           <Route path="/login" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Login />} />
           <Route path="/register" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Register />} />
-          <Route path="/settings" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Settings />} />
-          <Route path="/user-management" element={isSetupRequired ? <Navigate to="/setup" replace /> : <UserManagement />} />
+          <Route path="/settings" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permissions={['settings:ai:read', 'settings:prompt:read', 'settings:env:read']} mode="any"><Settings /></ProtectedRoute>
+            )
+          } />
+          <Route path="/user-management" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="users:read"><UserManagement /></ProtectedRoute>
+            )
+          } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

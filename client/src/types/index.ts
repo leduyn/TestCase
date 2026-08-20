@@ -82,6 +82,7 @@ export interface AIConfig {
   id: string;
   provider: string;
   modelName: string;
+  apiKey?: string;
   baseUrl?: string | null;
   isActive: boolean;
   createdAt: string;
@@ -90,5 +91,69 @@ export interface AIConfig {
 export interface EnvironmentSettings {
   servers: string[];
   osList: string[];
+}
+
+export interface GenerationResult {
+  moduleName: string;
+  summary?: string;
+  assumptions?: string;
+  testCases: {
+    testCaseCode?: string;
+    module: string;
+    platform?: string;
+    title: string;
+    testType?: string;
+    preconditions?: string;
+    steps?: string | string[];
+    expectedResult?: string;
+    priority?: string;
+  }[];
+}
+
+export interface Permission {
+  id: string;
+  key: string;
+  name: string;
+  category: string;
+  description?: string;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RolePermission {
+  id: string;
+  role: Role;
+  permissionId: string;
+  permission: Permission;
+  grantedAt: string;
+  grantedById?: string;
+}
+
+export interface UserPermission {
+  id: string;
+  userId: string;
+  permissionId: string;
+  permission: Permission;
+  effect: 'ALLOW' | 'DENY';
+  resourceType?: string;
+  resourceId?: string;
+  createdAt: string;
+}
+
+export interface PermissionCategory {
+  category: string;
+  permissions: Permission[];
+}
+
+export interface UserPermissionsResponse {
+  role: Role;
+  rolePermissions: string[];
+  userPermissions: Array<{
+    permissionKey: string;
+    effect: 'ALLOW' | 'DENY';
+    resourceType?: string;
+    resourceId?: string;
+  }>;
 }
 

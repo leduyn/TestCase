@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { ExcelImporter, MappedTestCase } from '../services/excelImporter';
+import { JsonImporter, GenerationResult, JsonImportResult } from '../services/jsonImporter';
 
 export class ImportController {
   static async preview(req: AuthRequest, res: Response) {
@@ -151,6 +152,121 @@ export class ImportController {
       console.error('Import test cases error:', error);
       return res.status(500).json({
         message: 'Lỗi trong quá trình nhập Test Case từ Excel',
+        error: error.message,
+      });
+    }
+  }
+
+  static async importJson(req: AuthRequest, res: Response) {
+    try {
+      const json = req.body as GenerationResult;
+
+      let parseResult: JsonImportResult;
+      try {
+        parseResult = JsonImporter.parse(json);
+      } catch (parseError: any) {
+        return res.status(400).json({ message: parseError.message });
+      }
+
+      const { rows, skipped, moduleName, summary, assumptions } = parseResult;
+
+      if (rows.length === 0) {
+        return res.status(400).json({
+          message: 'Không có Test Case hợp lệ nào để nhập.',
+          skipped,
+        });
+      }
+
+      // Resolve user (guest fallback like generate)
+      let userId = req.user?.id;
+      if (!userId) {
+        let defaultUser = await prisma.user.findFirst({ where: { email: 'guest@system.local' } });
+        if (!defaultUser) {
+          defaultUser = await prisma.user.create({
+            data: {
+              email: 'guest@system.local',
+              passwordHash: 'guest_hash',
+              fullName: 'Guest User',
+              role: 'TESTER',
+            },
+          });
+        }
+        userId = defaultUser.id;
+      }
+
+      // Create Document record for referential consistency
+      const doc = await prisma.document.create({
+        data: {
+          userId,
+          filename: 'ai-generated-testcases.json',
+          fileType: 'application/json',
+          fileSize: JSON.stringify(json).length,
+          rawContent: JSON.stringify({ source: 'json-import', originalJson: json }),
+        },
+      });
+
+      // Create TestSuite
+      const suite = await prisma.testSuite.create({
+        data: {
+          documentId: doc.id,
+          name: `Test Suite từ AI - ${moduleName}`,
+          moduleName,
+          summary: summary || null,
+          assumptions: assumptions || null,
+        },
+      });
+
+      // Create test cases + initial executions
+      const created = await Promise.all(
+        rows.map(async (tc: MappedTestCase, idx: number) => {
+          const code = tc.testCaseCode || `TC_${String(idx + 1).padStart(3, '0')}`;
+          const testCase = await prisma.testCase.create({
+            data: {
+              testSuiteId: suite.id,
+              testCaseCode: code,
+              module: tc.module,
+              platform: tc.platform,
+              title: tc.title,
+              testType: tc.testType,
+              preconditions: tc.preconditions,
+              steps: tc.steps,
+              expectedResult: tc.expectedResult,
+              priority: tc.priority,
+              orderIndex: idx + 1,
+            },
+          });
+
+          const execution = await prisma.testExecution.create({
+            data: {
+              testCaseId: testCase.id,
+              executedById: userId,
+              status: 'UNTESTED',
+            },
+          });
+
+          return { ...testCase, latestExecution: execution };
+        })
+      );
+
+      return res.status(201).json({
+        message: 'Nhập Test Case từ JSON (AI) thành công',
+        testSuite: {
+          id: suite.id,
+          name: suite.name,
+          moduleName: suite.moduleName,
+          summary: suite.summary,
+          assumptions: suite.assumptions,
+          createdAt: suite.createdAt,
+        },
+        importedCount: created.length,
+        skippedCount: skipped.length,
+        skipped,
+        testCases: created,
+      });
+    } catch (error: any) {
+      console.error('Import JSON test cases error:', error);
+      return res.status(500).json({
+        message: 'Lỗi trong quá trình nhập Test Case từ JSON',
         error: error.message,
       });
     }

@@ -6,6 +6,8 @@ import type {
   TestExecution,
   AIProviderInfo,
   AIConfig,
+  Permission,
+  UserPermissionsResponse,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -95,6 +97,8 @@ export const authApi = {
 // AI API
 export const aiApi = {
   getProviders: () => api.get<{ providers: AIProviderInfo[] }>('/ai/providers'),
+  getModels: (provider: string, apiKey?: string, baseUrl?: string) =>
+    api.get<{ models: any[] }>(`/ai/models/${provider}`, { params: { apiKey, baseUrl } }),
   getConfigs: () => api.get<{ configs: AIConfig[] }>('/ai/configs'),
   saveConfig: (data: {
     provider: string;
@@ -116,6 +120,8 @@ export const aiApi = {
   deleteConfig: (id: string) => api.delete<{ message: string }>(`/ai/configs/${id}`),
   toggleActive: (id: string) =>
     api.post<{ message: string; config: AIConfig }>(`/ai/configs/${id}/toggle-active`),
+  getSystemPrompt: () => api.get<{ prompt: string }>('/settings/system-prompt'),
+  updateSystemPrompt: (prompt: string) => api.put<{ message: string }>('/settings/system-prompt', { prompt }),
 };
 
 // TestCases API
@@ -156,6 +162,15 @@ export const testCaseApi = {
     }>('/testcases/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  importJson: (data: any) =>
+    api.post<{
+      message: string;
+      testSuite: TestSuite;
+      importedCount: number;
+      skippedCount: number;
+      skipped: Array<{ row: number; reason: string }>;
+      testCases: TestCase[];
+    }>('/testcases/import/json', data),
 };
 
 // Execution API
@@ -216,6 +231,18 @@ export const userApi = {
     api.put<User>(`/users/${id}`, data),
   deleteUser: (id: string) => api.delete<{ message: string }>(`/users/${id}`),
   toggleStatus: (id: string) => api.post<{ message: string; user: User }>(`/users/${id}/toggle-status`),
+};
+
+// Permission API
+export const permissionApi = {
+  getAll: () => api.get<{ permissions: Permission[] }>('/permissions/permissions'),
+  getByCategory: () => api.get<{ categories: Record<string, Permission[]> }>('/permissions/permissions/categories'),
+  getRolePermissions: (role: string) => api.get<{ role: string; permissions: Permission[] }>(`/permissions/roles/${role}/permissions`),
+  updateRolePermissions: (role: string, permissionKeys: string[]) => api.put<{ role: string; permissions: Permission[]; message: string }>(`/permissions/roles/${role}/permissions`, { permissionKeys }),
+  getMyPermissions: () => api.get<UserPermissionsResponse>('/permissions/users/me/permissions'),
+  getUserPermissions: (id: string) => api.get<UserPermissionsResponse>(`/permissions/users/${id}/permissions`),
+  grantUserPermission: (id: string, data: { permissionKey: string; effect: 'ALLOW' | 'DENY'; resourceType?: string; resourceId?: string }) => api.post(`/permissions/users/${id}/permissions`, data),
+  revokeUserPermission: (id: string, permissionKey: string, resourceType?: string, resourceId?: string) => api.delete(`/permissions/users/${id}/permissions/${permissionKey}`, { params: { resourceType, resourceId } }),
 };
 
 // TestSuites API

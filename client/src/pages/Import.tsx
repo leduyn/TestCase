@@ -10,9 +10,13 @@ import {
   Table2,
   MapPin,
   Loader2,
+  FileJson,
+  Clipboard,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import { testCaseApi } from '../services/api';
-import type { TestSuite } from '../types';
+import type { TestSuite, GenerationResult } from '../types';
 
 interface ImportField {
   key: string;
@@ -53,6 +57,10 @@ export const Import: React.FC = () => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
+
+  const [importMode, setImportMode] = useState<'excel' | 'json'>('excel');
+  const [jsonInput, setJsonInput] = useState('');
+  const [jsonPreview, setJsonPreview] = useState<{ valid: boolean; parsed?: GenerationResult; error?: string } | null>(null);
 
   const [target, setTarget] = useState<'new' | 'existing'>('new');
   const [suiteName, setSuiteName] = useState('');
@@ -123,6 +131,85 @@ export const Import: React.FC = () => {
     }
   };
 
+  const validateJson = () => {
+    if (!jsonInput.trim()) {
+      setJsonPreview({ valid: false, error: 'Vui lòng dán nội dung JSON' });
+      return;
+    }
+    try {
+      const parsed = JSON.parse(jsonInput) as GenerationResult;
+      
+      // Basic validation
+      if (!parsed.moduleName || typeof parsed.moduleName !== 'string') {
+        setJsonPreview({ valid: false, error: 'Thiếu trường bắt buộc: moduleName (string)' });
+        return;
+      }
+      if (!Array.isArray(parsed.testCases) || parsed.testCases.length === 0) {
+        setJsonPreview({ valid: false, error: 'Thiếu trường bắt buộc: testCases (mảng không rỗng)' });
+        return;
+      }
+      
+      // Check each test case has required fields
+      const missingFields = parsed.testCases
+        .map((tc, i) => {
+          const errors: string[] = [];
+          if (!tc.title?.trim()) errors.push('title');
+          if (!tc.module?.trim()) errors.push('module');
+          return errors.length > 0 ? `Dòng ${i + 1}: thiếu ${errors.join(', ')}` : null;
+        })
+        .filter(Boolean);
+      
+      if (missingFields.length > 0) {
+        setJsonPreview({ 
+          valid: false, 
+          error: 'Các Test Case thiếu trường bắt buộc:\n' + missingFields.slice(0, 5).join('\n') + (missingFields.length > 5 ? '\n...' : '') 
+        });
+        return;
+      }
+      
+      setJsonPreview({ valid: true, parsed });
+    } catch (e: any) {
+      setJsonPreview({ valid: false, error: `JSON không hợp lệ: ${e.message}` });
+    }
+  };
+
+  const pasteFromClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setJsonInput(text);
+      setJsonPreview(null);
+    } catch {
+      setError('Không thể truy cập clipboard. Hãy dán thủ công (Ctrl+V).');
+    }
+  };
+
+  const handleImportJson = async () => {
+    if (!jsonPreview?.valid || !jsonPreview.parsed) return;
+    if (target === 'existing' && !existingSuiteId) {
+      setError('Vui lòng chọn bộ Test Suite để thêm dữ liệu');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await testCaseApi.importJson(jsonPreview.parsed);
+      setResult({
+        testSuite: res.data.testSuite,
+        importedCount: res.data.importedCount,
+        skippedCount: res.data.skippedCount,
+        skipped: res.data.skipped || [],
+      });
+      setStep(3);
+    } catch (err: any) {
+      const detail = err.response?.data?.error;
+      const base = err.response?.data?.message || err.message || 'Lỗi nhập Test Case từ JSON';
+      setError(detail ? `${base}\n→ Chi tiết: ${detail}` : base);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const setFieldMapping = (key: string, header: string) => {
     setMapping((prev) => ({ ...prev, [key]: header }));
   };
@@ -188,6 +275,9 @@ export const Import: React.FC = () => {
     setSummary('');
     setAssumptions('');
     setExistingSuiteId('');
+    setImportMode('excel');
+    setJsonInput('');
+    setJsonPreview(null);
   }, []);
 
   return (
@@ -195,14 +285,16 @@ export const Import: React.FC = () => {
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 text-xs font-bold">
-          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-          Nhập Test Case từ Excel
+          {importMode === 'excel' ? <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> : <FileJson className="w-4 h-4 text-emerald-600" />}
+          Nhập Test Case từ {importMode === 'excel' ? 'Excel' : 'JSON (AI)'}
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-          Nhập danh sách Test Case & Ánh xạ cột
+          {importMode === 'excel' ? 'Nhập danh sách Test Case & Ánh xạ cột' : 'Nhập Test Case từ JSON trả về bởi AI'}
         </h1>
         <p className="text-sm text-slate-500 max-w-2xl mx-auto">
-          Tải lên file Excel, ánh xạ các cột sang trường dữ liệu và nhập vào bộ Test Suite mới hoặc hiện có.
+          {importMode === 'excel' 
+            ? 'Tải lên file Excel, ánh xạ các cột sang trường dữ liệu và nhập vào bộ Test Suite mới hoặc hiện có.'
+            : 'Dán JSON schema GenerationResult từ AI, hệ thống sẽ tự tạo Test Suite và Test Case.'}
         </p>
       </div>
 
@@ -237,6 +329,32 @@ export const Import: React.FC = () => {
         ))}
       </div>
 
+      {/* Mode Selector */}
+      <div className="flex justify-center gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => { setImportMode('excel'); setStep(1); }}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            importMode === 'excel'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4 inline mr-1" /> Excel
+        </button>
+        <button
+          type="button"
+          onClick={() => { setImportMode('json'); setStep(1); }}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            importMode === 'json'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+          }`}
+        >
+          <FileJson className="w-4 h-4 inline mr-1" /> JSON từ AI
+        </button>
+      </div>
+
       {error && (
         <div className="bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 p-4 rounded-xl flex items-start gap-3 text-rose-800 dark:text-rose-200 text-sm whitespace-pre-line">
           <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -248,7 +366,7 @@ export const Import: React.FC = () => {
       )}
 
       {/* STEP 1 */}
-      {step === 1 && (
+      {step === 1 && importMode === 'excel' && (
         <div className="space-y-6">
           {/* Upload */}
           <div
@@ -401,6 +519,164 @@ export const Import: React.FC = () => {
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
               Tiếp tục & Xem trước
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 1 - JSON MODE */}
+      {step === 1 && importMode === 'json' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <FileJson className="w-4 h-4 text-emerald-600" />
+              Dán JSON từ AI
+            </h3>
+            <p className="text-sm text-slate-500">
+              JSON phải tuân theo schema GenerationResult: moduleName, summary?, assumptions?, testCases[]
+            </p>
+            <textarea
+              value={jsonInput}
+              onChange={(e) => { setJsonInput(e.target.value); setJsonPreview(null); }}
+              placeholder='{"moduleName": "Quản lý Khách hàng", "summary": "...", "assumptions": "...", "testCases": [...]}'
+              rows={12}
+              className="w-full font-mono text-sm p-4 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              spellCheck={false}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={pasteFromClipboard}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Clipboard className="w-4 h-4" />
+                Dán từ Clipboard
+              </button>
+              <button
+                type="button"
+                onClick={validateJson}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm transition-colors"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Validate JSON
+              </button>
+            </div>
+            
+            {jsonPreview && jsonPreview.valid && jsonPreview.parsed && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-4 rounded-xl">
+                <p className="font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  JSON hợp lệ
+                </p>
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                  <div><b>Module:</b> {jsonPreview.parsed.moduleName}</div>
+                  <div><b>Test Cases:</b> {jsonPreview.parsed.testCases.length}</div>
+                  <div><b>Preview:</b> {jsonPreview.parsed.testCases.slice(0, 3).map(t => t.title).join(', ')}...</div>
+                </div>
+              </div>
+            )}
+            
+            {jsonPreview && !jsonPreview.valid && (
+              <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-4 rounded-xl text-rose-700 dark:text-rose-300 whitespace-pre-line">
+                <p className="font-bold flex items-center gap-2">
+                  <XCircle className="w-4 h-4" />
+                  JSON không hợp lệ
+                </p>
+                <p className="mt-1 text-sm">{jsonPreview.error}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Target */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-emerald-600" />
+              Chọn nơi lưu dữ liệu
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setTarget('new')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  target === 'new'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                }`}
+              >
+                <p className="font-bold text-slate-900 dark:text-white">Tạo bộ mới</p>
+                <p className="text-xs text-slate-500 mt-1">Tạo một Test Suite mới từ dữ liệu JSON.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTarget('existing')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  target === 'existing'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                }`}
+              >
+                <p className="font-bold text-slate-900 dark:text-white">Thêm vào bộ có sẵn</p>
+                <p className="text-xs text-slate-500 mt-1">Nạp dữ liệu vào một bộ đã tồn tại.</p>
+              </button>
+            </div>
+
+            {target === 'new' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    Tên bộ Test Suite <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    value={suiteName}
+                    onChange={(e) => setSuiteName(e.target.value)}
+                    placeholder="VD: Test Case Quản lý Khách hàng (tự động từ JSON nếu để trống)"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    Tên module / phân hệ <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    value={moduleName}
+                    onChange={(e) => setModuleName(e.target.value)}
+                    placeholder="Sẽ lấy từ JSON moduleName nếu để trống"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                  Chọn bộ Test Suite <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={existingSuiteId}
+                  onChange={(e) => setExistingSuiteId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white"
+                >
+                  <option value="">-- Chọn bộ hiện có --</option>
+                  {suites.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.moduleName ? `(${s.moduleName})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {suites.length === 0 && (
+                  <p className="text-xs text-slate-400 mt-1">Chưa có bộ nào. Hãy chọn "Tạo bộ mới".</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={handleImportJson}
+              disabled={!jsonPreview?.valid || loading}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-sm transition-colors"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              Tạo Test Suite từ JSON
             </button>
           </div>
         </div>

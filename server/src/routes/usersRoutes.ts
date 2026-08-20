@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/database';
-import { authenticate, authorize } from '../middleware/auth';
-import { UserRole } from '../Models/UserModel';
+import { authenticate } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 
 const router = Router();
 
-// GET /api/users - Lấy danh sách tất cả người dùng (chỉ admin)
-router.get('/', authenticate, authorize([UserRole.ADMIN]), async (req, res) => {
+// GET /api/users - Lấy danh sách tất cả người dùng
+router.get('/', authenticate, requirePermission('users:read'), async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -28,7 +28,7 @@ router.get('/', authenticate, authorize([UserRole.ADMIN]), async (req, res) => {
 });
 
 // GET /api/users/:id - Lấy thông tin người dùng
-router.get('/:id', authenticate, async (req, res) => {
+router.get('/:id', authenticate, requirePermission('users:read'), async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
@@ -53,7 +53,7 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // POST /api/users - Tạo người dùng mới
-router.post('/', authenticate, authorize([UserRole.ADMIN]), async (req, res) => {
+router.post('/', authenticate, requirePermission('users:create'), async (req, res) => {
   try {
     const { email, password, fullName, role } = req.body;
     if (!email || !password || !fullName) {
@@ -90,7 +90,7 @@ router.post('/', authenticate, authorize([UserRole.ADMIN]), async (req, res) => 
 });
 
 // PUT /api/users/:id - Cập nhật người dùng
-router.put('/:id', authenticate, authorize([UserRole.ADMIN]), async (req, res) => {
+router.put('/:id', authenticate, requirePermission('users:update'), async (req, res) => {
   try {
     const { id } = req.params;
     const { fullName, role, status } = req.body;
@@ -124,7 +124,7 @@ router.put('/:id', authenticate, authorize([UserRole.ADMIN]), async (req, res) =
 });
 
 // DELETE /api/users/:id - Xóa người dùng
-router.delete('/:id', authenticate, authorize([UserRole.ADMIN]), async (req, res) => {
+router.delete('/:id', authenticate, requirePermission('users:delete'), async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -141,7 +141,7 @@ router.delete('/:id', authenticate, authorize([UserRole.ADMIN]), async (req, res
 });
 
 // POST /api/users/:id/toggle-status - Thay đổi trạng thái
-router.post('/:id/toggle-status', authenticate, authorize([UserRole.ADMIN]), async (req, res) => {
+router.post('/:id/toggle-status', authenticate, requirePermission('users:status'), async (req, res) => {
   try {
     const { id } = req.params;
     const currentUser = await prisma.user.findUnique({ where: { id } });
