@@ -1,220 +1,37 @@
-name: Build and Deploy
+name: Deploy TestCase
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches:
+      - main
 
-env:
-  NODE_VERSION: '20.x'
-  POSTGRES_VERSION: '16'
+  workflow_dispatch:
+
+concurrency:
+  group: testcase-production
+  cancel-in-progress: false
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & TypeCheck
+  deploy:
+    name: Deploy to Production
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: |
-            client/package-lock.json
-            server/package-lock.json
-
-      - name: Install client dependencies
-        run: npm ci
-        working-directory: ./client
-
-      - name: Install server dependencies
-        run: npm ci
-        working-directory: ./server
-
-      - name: TypeCheck client
-        run: npx tsc --noEmit
-        working-directory: ./client
-
-      - name: TypeCheck server
-        run: npx tsc --noEmit
-        working-directory: ./server
-
-      - name: Lint client
-        run: npm run lint
-        working-directory: ./client
-
-  build-client:
-    name: Build Client
-    needs: lint-and-typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: client/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: ./client
-
-      - name: Build client
-        run: npm run build
-        working-directory: ./client
-        env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
-
-      - name: Upload client build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: client-dist
-          path: client/dist
-          retention-days: 7
-
-  build-server:
-    name: Build Server
-    needs: lint-and-typecheck
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:${{ env.POSTGRES_VERSION }}
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U test_user -d test_db"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Deploy through Jump Host
+        uses: appleboy/ssh-action@v1.2.2
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: server/package-lock.json
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT }}
 
-      - name: Install dependencies
-        run: npm ci
-        working-directory: ./server
+          proxy_host: ${{ secrets.JUMP_HOST }}
+          proxy_username: ${{ secrets.JUMP_USER }}
+          proxy_key: ${{ secrets.JUMP_SSH_KEY }}
+          proxy_port: ${{ secrets.JUMP_PORT }}
 
-      - name: Generate Prisma Client
-        run: npx prisma generate
-        working-directory: ./server
+          script_stop: true
 
-      - name: Run database migrations
-        run: npx prisma migrate deploy
-        working-directory: ./server
-        env:
-          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
-
-      - name: Build server
-        run: npm run build
-        working-directory: ./server
-
-      - name: Upload server build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: server-dist
-          path: server/dist
-          retention-days: 7
-
-  deploy-preview:
-    name: Deploy Preview
-    if: github.event_name == 'pull_request'
-    needs: [build-client, build-server]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download client build
-        uses: actions/download-artifact@v4
-        with:
-          name: client-dist
-          path: client/dist
-
-      - name: Download server build
-        uses: actions/download-artifact@v4
-        with:
-          name: server-dist
-          path: server/dist
-
-      - name: Comment PR with preview info
-        uses: actions/github-script@v7
-        with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Preview build completed successfully!\n\n' +
-                    'Client build: `client/dist`\n' +
-                    'Server build: `server/dist`\n\n' +
-                    'Deploy these artifacts to your preview environment.'
-            })
-
-  deploy-production:
-    name: Deploy Production
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [build-client, build-server]
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Download client build
-        uses: actions/download-artifact@v4
-        with:
-          name: client-dist
-          path: client/dist
-
-      - name: Download server build
-        uses: actions/download-artifact@v4
-        with:
-          name: server-dist
-          path: server/dist
-
-      # Example: Deploy to Vercel (Client)
-      # - name: Deploy Client to Vercel
-      #   uses: amondnet/vercel-action@v25
-      #   with:
-      #     vercel-token: ${{ secrets.VERCEL_TOKEN }}
-      #     vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-      #     vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-      #     working-directory: ./client
-
-      # Example: Deploy to Railway/Render/Fly.io (Server)
-      # - name: Deploy Server to Railway
-      #   uses: railway-actions/deploy@v1
-      #   with:
-      #     token: ${{ secrets.RAILWAY_TOKEN }}
-      #     service: ${{ secrets.RAILWAY_SERVICE }}
-      #     working-directory: ./server
-
-      # Example: Docker deploy
-      # - name: Build and push Docker images
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: .
-      #     push: true
-      #     tags: |
-      #       ${{ secrets.DOCKER_REGISTRY }}/ai-testcase-client:${{ github.sha }}
-      #       ${{ secrets.DOCKER_REGISTRY }}/ai-testcase-server:${{ github.sha }}
-
-      - name: Notify deployment success
-        run: |
-          echo "✅ Production deployment completed!"
-          echo "Client artifact: client/dist"
-          echo "Server artifact: server/dist"
-          echo "Configure your deployment target in this workflow (Vercel, Railway, Docker, etc.)"
+            cd /var/www/testcase
+            ./deploy.sh
