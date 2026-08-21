@@ -167,8 +167,8 @@
             "steps": "1. Nhập từ khóa tìm kiếm 'khachhang_khong_ton_tai_xyz'.\n2. Bấm 'Tìm kiếm'.",
             "expectedResult": "Hiển thị thông báo 'Không tìm thấy khách hàng phù hợp' hoặc danh sách rỗng.",
             "priority": "Thấp"
-        }
- {
+        },
+        {
             "testCaseCode": "TC_DK_001",
             "module": "Đăng ký tài khoản App",
             "platform": "App",
@@ -376,8 +376,8 @@
             "steps": "1. Upload 3 hình ảnh theo thứ tự A, B, C.\n2. Hoàn thành form hợp lệ.\n3. Đăng ký thành công.\n4. Kiểm tra avatar trên App và CMS.",
             "expectedResult": "Hình A (đầu tiên) được đặt làm avatar. Các hình còn lại lưu trong thư viện ảnh.",
             "priority": "Trung bình"
-        }
-    {
+        },
+        {
             "testCaseCode": "TC_DSKH_001",
             "module": "Danh sách khách hàng",
             "platform": "CMS",
@@ -640,8 +640,8 @@
             "steps": "1. Mở App.\n2. Đăng nhập bằng tài khoản khách hàng Ngưng hoạt động.",
             "expectedResult": "Đăng nhập thất bại. Hiển thị thông báo tài khoản bị ngưng hoạt động.",
             "priority": "Cao"
-        }
-    {
+        },
+        {
             "testCaseCode": "TC_NM_001",
             "module": "Tạo trực tiếp từ CMS",
             "platform": "CMS",
@@ -827,8 +827,8 @@
             "steps": "1. Vào DS người mua.\n2. Chọn người mua 'Bravo'.\n3. Bấm 'Chuyển trạng thái' sang 'Đang giao dịch'.",
             "expectedResult": "Trạng thái chuyển sang 'Đang giao dịch' thành công.",
             "priority": "Cao"
-        }
-    {
+        },
+        {
             "testCaseCode": "TC_DSNM_001",
             "module": "Danh sách người mua",
             "platform": "CMS",
@@ -1047,8 +1047,8 @@
             "steps": "1. Vào trang chi tiết người mua Ngưng giao dịch.\n2. Bấm 'Kích hoạt'.\n3. Xác nhận.",
             "expectedResult": "Trạng thái chuyển sang 'Đang giao dịch'.",
             "priority": "Cao"
-        }
-    {
+        },
+        {
             "testCaseCode": "TC_DCGH_001",
             "module": "Danh sách địa chỉ giao hàng",
             "platform": "CMS",
@@ -1223,8 +1223,8 @@
             "steps": "1. Nhập từ khóa không tồn tại.\n2. Bấm 'Tìm kiếm'.",
             "expectedResult": "Hiển thị danh sách rỗng hoặc thông báo không tìm thấy.",
             "priority": "Thấp"
-        }
-    {
+        },
+        {
             "testCaseCode": "TC_NT_001",
             "module": "Mã khách hàng",
             "platform": "CMS",

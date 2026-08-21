@@ -12,6 +12,9 @@ const PERMISSIONS = [
   { key: 'testcase:import', name: 'Nhập Test Case', category: 'TESTCASE', description: 'Nhập từ Excel/JSON' },
   { key: 'testcase:generate', name: 'Sinh Test Case bằng AI', category: 'TESTCASE', description: 'Tự động sinh Test Case từ tài liệu' },
   { key: 'testcase:export', name: 'Xuất Excel', category: 'TESTCASE', description: 'Xuất Test Suite ra file Excel' },
+  // EXECUTION HISTORY
+  { key: 'execution:read-own', name: 'Xem lịch sử thực thi của mình', category: 'TESTCASE', description: 'Chỉ xem lịch sử thực thi do chính mình thực hiện' },
+  { key: 'execution:read-all', name: 'Xem lịch sử thực thi của tất cả', category: 'TESTCASE', description: 'Xem lịch sử thực thi của tất cả thành viên trong team' },
 
   // TESTSUITE
   { key: 'testsuite:create', name: 'Tạo Test Suite', category: 'TESTSUITE', description: 'Tạo mới Test Suite' },
@@ -40,10 +43,12 @@ const ROLE_PERMISSIONS: Record<Role, string[]> = {
   TESTER: [
     'testcase:create', 'testcase:read', 'testcase:update', 'testcase:execute',
     'testcase:import', 'testcase:generate', 'testcase:export',
+    'execution:read-own',
     'testsuite:create', 'testsuite:read', 'testsuite:update',
   ],
   VIEWER: [
     'testcase:read', 'testcase:export',
+    'execution:read-own',
     'testsuite:read',
   ],
 };

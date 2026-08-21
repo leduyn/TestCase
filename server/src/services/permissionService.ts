@@ -216,3 +216,13 @@ export async function revokeUserPermission(userId: string, permissionKey: string
 export async function checkPermission(userId: string, role: string, permissionKey: string) {
   return hasPermission(userId, role, permissionKey);
 }
+
+export async function canViewAllExecutionHistory(userId: string | undefined, role: string | undefined): Promise<boolean> {
+  if (!userId || !role) return false;
+  return hasPermission(userId, role, 'execution:read-all');
+}
+
+export async function canViewOwnExecutionHistory(userId: string | undefined, role: string | undefined): Promise<boolean> {
+  if (!userId || !role) return false;
+  return hasPermission(userId, role, 'execution:read-own');
+}

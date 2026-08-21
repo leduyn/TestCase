@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { parseDocument } from '../services/documentParser';
 import { AIService } from '../services/ai/aiService';
+import { canViewAllExecutionHistory } from '../services/permissionService';
 
 export class TestCaseController {
   static async generate(req: AuthRequest, res: Response) {
@@ -246,6 +247,9 @@ export class TestCaseController {
   static async getSuites(req: AuthRequest, res: Response) {
     try {
       const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+      const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
+      
       const suites = await prisma.testSuite.findMany({
         orderBy: { createdAt: 'desc' },
         include: {
@@ -269,13 +273,19 @@ export class TestCaseController {
 
       const formatted = suites.map((suite) => {
         const testCasesWithExtras = suite.testCases.map((tc) => {
+          // Filter executions based on permissions
+          let filteredExecutions = tc.executions;
+          if (!canViewAll && currentUserId) {
+            filteredExecutions = tc.executions.filter((e) => e.executedById === currentUserId);
+          }
+          
           const userExec = currentUserId
-            ? tc.executions.find((e) => e.executedById === currentUserId)
-            : tc.executions[0];
+            ? filteredExecutions.find((e) => e.executedById === currentUserId)
+            : filteredExecutions[0];
           return {
             ...tc,
             latestExecution: userExec ?? null,
-            results: tc.executions, // Full list of executions (with user details)
+            results: filteredExecutions, // Filtered list of executions based on permissions
           };
         });
 
@@ -324,6 +334,9 @@ export class TestCaseController {
     try {
       const { id } = req.params;
       const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+      const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
+      
       const suite = await prisma.testSuite.findUnique({
         where: { id },
         include: {
@@ -349,9 +362,15 @@ export class TestCaseController {
       }
 
       const testCases = suite.testCases.map((tc) => {
+        // Filter executions based on permissions
+        let filteredExecutions = tc.executions;
+        if (!canViewAll && currentUserId) {
+          filteredExecutions = tc.executions.filter((e) => e.executedById === currentUserId);
+        }
+        
         const userExec = currentUserId
-          ? tc.executions.find((e) => e.executedById === currentUserId)
-          : tc.executions[0];
+          ? filteredExecutions.find((e) => e.executedById === currentUserId)
+          : filteredExecutions[0];
         return {
           id: tc.id,
           testSuiteId: tc.testSuiteId,
@@ -367,7 +386,7 @@ export class TestCaseController {
           orderIndex: tc.orderIndex,
           createdAt: tc.createdAt,
           latestExecution: userExec || null,
-          results: tc.executions, // Full list of executions (with user details)
+          results: filteredExecutions, // Filtered list of executions based on permissions
         };
       });
 
@@ -418,6 +437,9 @@ export class TestCaseController {
         expectedResult,
         priority,
       } = req.body;
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+      const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
 
       if (!testSuiteId || !title || !module) {
         return res.status(400).json({
@@ -459,12 +481,15 @@ export class TestCaseController {
         },
       });
 
+      // Filter executions based on permissions (for consistency)
+      const filteredExecutions = canViewAll || !currentUserId ? [initialExec] : (initialExec.executedById === currentUserId ? [initialExec] : []);
+
       return res.status(201).json({
         message: 'Tạo Test Case mới thành công',
         testCase: {
           ...testCase,
-          latestExecution: initialExec,
-          executions: [initialExec],
+          latestExecution: filteredExecutions[0] || null,
+          executions: filteredExecutions,
         },
       });
     } catch (error: any) {
@@ -477,6 +502,9 @@ export class TestCaseController {
     try {
       const { id } = req.params;
       const { testCaseCode, module, platform, title, testType, preconditions, steps, expectedResult, priority } = req.body;
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+      const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
 
       const updated = await prisma.testCase.update({
         where: { id },
@@ -503,17 +531,22 @@ export class TestCaseController {
         },
       });
 
-      const currentUserId = req.user?.id;
+      // Filter executions based on permissions
+      let filteredExecutions = updated.executions;
+      if (!canViewAll && currentUserId) {
+        filteredExecutions = updated.executions.filter((e) => e.executedById === currentUserId);
+      }
+
       const userExec = currentUserId
-        ? updated.executions.find((e) => e.executedById === currentUserId)
-        : updated.executions[0];
+        ? filteredExecutions.find((e) => e.executedById === currentUserId)
+        : filteredExecutions[0];
 
       return res.json({
         message: 'Cập nhật Test Case thành công',
         testCase: {
           ...updated,
           latestExecution: userExec || null,
-          executions: updated.executions,
+          executions: filteredExecutions,
         },
       });
     } catch (error: any) {

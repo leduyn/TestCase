@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { TestExecutionStatus } from '@prisma/client';
+import { canViewAllExecutionHistory } from '../services/permissionService';
 
 export class ExecutionController {
   static async executeTestCase(req: AuthRequest, res: Response) {
@@ -48,9 +49,21 @@ export class ExecutionController {
   static async getHistory(req: AuthRequest, res: Response) {
     try {
       const { testCaseId } = req.params;
+      const userId = req.user?.id;
+      const userRole = req.user?.role;
+
+      // Check if user can view all execution history
+      const canViewAll = await canViewAllExecutionHistory(userId, userRole);
+
+      const whereClause: any = { testCaseId };
+      
+      // If user cannot view all, filter to only their own executions
+      if (!canViewAll && userId) {
+        whereClause.executedById = userId;
+      }
 
       const history = await prisma.testExecution.findMany({
-        where: { testCaseId },
+        where: whereClause,
         orderBy: { executedAt: 'desc' },
         include: {
           executedBy: {

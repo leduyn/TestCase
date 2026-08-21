@@ -197,6 +197,20 @@ export const executionApi = {
 // Export API
 export const exportApi = {
   getExcelDownloadUrl: (suiteId: string) => `${API_BASE_URL}/export/${suiteId}/excel`,
+  getResultsExcelDownloadUrl: (suiteId: string) => `${API_BASE_URL}/export/${suiteId}/excel/results`,
+  downloadResultsExcel: async (suiteId: string, filename?: string) => {
+    const response = await api.get(`/export/${suiteId}/excel/results`, {
+      responseType: 'blob',
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename || `TestCase_Results_${suiteId}.xlsx`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 // Environment Settings API
