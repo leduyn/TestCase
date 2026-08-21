@@ -67,6 +67,11 @@ export async function hasPermission(
   permissionKey: string,
   resource?: { type: string; id: string; ownerId: string }
 ): Promise<boolean> {
+  // ADMIN bypasses all permission checks
+  if (role === 'ADMIN') {
+    return true;
+  }
+
   const permissions = await getUserEffectivePermissions(userId, role);
   
   if (!permissions.includes(permissionKey)) {
@@ -219,10 +224,12 @@ export async function checkPermission(userId: string, role: string, permissionKe
 
 export async function canViewAllExecutionHistory(userId: string | undefined, role: string | undefined): Promise<boolean> {
   if (!userId || !role) return false;
+  if (role === 'ADMIN') return true;
   return hasPermission(userId, role, 'execution:read-all');
 }
 
 export async function canViewOwnExecutionHistory(userId: string | undefined, role: string | undefined): Promise<boolean> {
   if (!userId || !role) return false;
+  if (role === 'ADMIN') return true;
   return hasPermission(userId, role, 'execution:read-own');
 }
