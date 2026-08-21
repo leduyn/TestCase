@@ -30,7 +30,6 @@ jobs:
           proxy_key: ${{ secrets.JUMP_SSH_KEY }}
           proxy_port: ${{ secrets.JUMP_PORT }}
 
-          script_stop: true
 
           script: |
             cd /var/www/testcase
