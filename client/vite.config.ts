@@ -13,6 +13,11 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    host: '0.0.0.0',
+    port: 5173,
+    allowedHosts: ['testtool.shtsoft.vn'],
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./client/src', import.meta.url)),
