@@ -92,6 +92,17 @@ export class PermissionController {
       if (!req.user) {
         return res.status(401).json({ message: 'Chưa đăng nhập' });
       }
+      
+      // ADMIN has all permissions
+      if (req.user.role === 'ADMIN') {
+        const allPermissions = await getAllPermissions();
+        return res.json({ 
+          role: req.user.role,
+          rolePermissions: allPermissions.map(p => p.key),
+          userPermissions: [],
+        });
+      }
+
       const rolePerms = await getRolePermissions(req.user.role);
       const userPerms = await getUserPermissions(req.user.id);
 
