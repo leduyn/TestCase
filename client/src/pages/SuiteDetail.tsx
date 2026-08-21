@@ -262,8 +262,23 @@ export const SuiteDetail: React.FC = () => {
     });
   };
 
+  // Status sort order: UNTESTED → FAILED → BLOCKED → PASSED
+  const statusOrder: Record<string, number> = {
+    UNTESTED: 0,
+    FAILED: 1,
+    BLOCKED: 2,
+    PASSED: 3,
+  };
+
+  // Apply default sort by status, then filter
+  const sortedCases = [...testCases].sort((a, b) => {
+    const aStatus = (a.latestExecution?.status || 'UNTESTED').toUpperCase();
+    const bStatus = (b.latestExecution?.status || 'UNTESTED').toUpperCase();
+    return (statusOrder[aStatus] ?? 4) - (statusOrder[bStatus] ?? 4);
+  });
+
   // Filter logic
-  const filteredCases = testCases.filter((tc) => {
+  const filteredCases = sortedCases.filter((tc) => {
     const exec = tc.latestExecution;
     const status = (exec?.status || 'UNTESTED').toUpperCase();
     const platform = (tc.platform || '').toUpperCase();

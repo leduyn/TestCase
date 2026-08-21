@@ -99,9 +99,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
       setSaveSuccess(true);
       onSaved(updated);
+      // Close drawer after successful save
       setTimeout(() => {
-        setSaveSuccess(false);
-      }, 2500);
+        onClose();
+      }, 1000);
     } catch (err: any) {
       alert(`Lỗi khi lưu kết quả: ${err.response?.data?.message || err.message}`);
     } finally {
@@ -111,7 +112,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-sm flex justify-end">
-      <div className="w-full max-w-2xl bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+      <div className="w-full max-w-6xl bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
         {/* Drawer Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 shrink-0">
           <div className="flex items-center gap-3">
@@ -145,218 +146,230 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-hidden">
           {/* Drawer Scrollable Content */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Section 1: Specification Details */}
-            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                <Tag className="w-3.5 h-3.5" />
-                Chi tiết đặc tả kiểm thử
-              </h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Specification Details */}
+              <div className="space-y-4 lg:pr-3">
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-4 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5" />
+                    Chi tiết đặc tả kiểm thử
+                  </h3>
 
-              {testCase.preconditions && (
-                <div>
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                    Tiền điều kiện (Preconditions):
-                  </span>
-                  <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-pre-line">
-                    {testCase.preconditions}
-                  </p>
-                </div>
-              )}
+                  <div className="flex items-center justify-between">
+                    <PlatformBadge platform={testCase.platform} />
+                    <div className="flex items-center gap-2">
+                      <PriorityBadge priority={testCase.priority} />
+                      <TestTypeBadge type={testCase.testType} />
+                    </div>
+                  </div>
 
-              <div>
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Các bước thực hiện (Steps):
-                </span>
-                <div className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-pre-line font-sans">
-                  {testCase.steps}
-                </div>
-              </div>
+                  {testCase.preconditions && (
+                    <div>
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                        Tiền điều kiện (Preconditions):
+                      </span>
+                      <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-pre-line">
+                        {testCase.preconditions}
+                      </p>
+                    </div>
+                  )}
 
-              <div>
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
-                  Kết quả mong đợi (Expected Result):
-                </span>
-                <div className="text-xs leading-relaxed text-emerald-900 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 whitespace-pre-line font-medium">
-                  {testCase.expectedResult}
-                </div>
-              </div>
-            </div>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                      Các bước thực hiện (Steps):
+                    </span>
+                    <div className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-pre-line font-sans">
+                      {testCase.steps}
+                    </div>
+                  </div>
 
-            {/* Section 2: Execution & Results Form */}
-            <div className="space-y-4 pt-2 border-t border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-blue-600" />
-                  Ghi nhận kết quả thực thi
-                </h3>
-                <StatusBadge status={status} size="md" />
-              </div>
-
-              {/* Status Selection Buttons */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Đánh giá trạng thái (Status) <span className="text-rose-500">*</span>
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setStatus('PASSED')}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                      status === 'PASSED'
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400 ring-offset-2'
-                        : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-4 h-4 mb-1" />
-                    PASSED
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStatus('FAILED')}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                      status === 'FAILED'
-                        ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20 ring-2 ring-rose-400 ring-offset-2 animate-pulse'
-                        : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
-                    }`}
-                  >
-                    <AlertTriangle className="w-4 h-4 mb-1" />
-                    FAILED
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStatus('BLOCKED')}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                      status === 'BLOCKED'
-                        ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20 ring-2 ring-amber-400 ring-offset-2'
-                        : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                    }`}
-                  >
-                    <AlertCircle className="w-4 h-4 mb-1" />
-                    BLOCKED
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStatus('UNTESTED')}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                      status === 'UNTESTED'
-                        ? 'bg-slate-700 text-white border-slate-700 shadow-md'
-                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                    }`}
-                  >
-                    <Clock className="w-4 h-4 mb-1" />
-                    CHƯA TEST
-                  </button>
+                  <div>
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
+                      Kết quả mong đợi (Expected Result):
+                    </span>
+                    <div className="text-xs leading-relaxed text-emerald-900 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 whitespace-pre-line font-medium">
+                      {testCase.expectedResult}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Server & OS Row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                    <Server className="w-3.5 h-3.5 text-blue-600" />
-                    Server / Môi trường
-                  </label>
-                  <select
-                    value={server}
-                    onChange={(e) => setServer(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    {/* If current server is not in availableServers, show it */}
-                    {server && !availableServers.includes(server) && (
-                      <option value={server}>{server}</option>
+              {/* Right Column: Execution & Results Form */}
+              <div className="space-y-4 lg:pl-3">
+                <div className="bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-blue-600" />
+                      Ghi nhận kết quả thực thi
+                    </h3>
+                    <StatusBadge status={status} size="md" />
+                  </div>
+
+                  {/* Status Selection Buttons */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Đánh giá trạng thái (Status) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setStatus('PASSED')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          status === 'PASSED'
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400 ring-offset-2'
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-4 h-4 mb-1" />
+                        PASSED
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStatus('FAILED')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          status === 'FAILED'
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20 ring-2 ring-rose-400 ring-offset-2 animate-pulse'
+                            : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+                        }`}
+                      >
+                        <AlertTriangle className="w-4 h-4 mb-1" />
+                        FAILED
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStatus('BLOCKED')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          status === 'BLOCKED'
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20 ring-2 ring-amber-400 ring-offset-2'
+                            : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                        }`}
+                      >
+                        <AlertCircle className="w-4 h-4 mb-1" />
+                        BLOCKED
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setStatus('UNTESTED')}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          status === 'UNTESTED'
+                            ? 'bg-slate-700 text-white border-slate-700 shadow-md'
+                            : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                        }`}
+                      >
+                        <Clock className="w-4 h-4 mb-1" />
+                        CHƯA TEST
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Server & OS Row */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                        <Server className="w-3.5 h-3.5 text-blue-600" />
+                        Server / Môi trường
+                      </label>
+                      <select
+                        value={server}
+                        onChange={(e) => setServer(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        {server && !availableServers.includes(server) && (
+                          <option value={server}>{server}</option>
+                        )}
+                        {availableServers.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                        <Monitor className="w-3.5 h-3.5 text-indigo-600" />
+                        Hệ điều hành (OS)
+                      </label>
+                      <select
+                        value={os}
+                        onChange={(e) => setOs(e.target.value)}
+                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      >
+                        {os && !availableOsList.includes(os) && (
+                          <option value={os}>{os}</option>
+                        )}
+                        {availableOsList.map((o) => (
+                          <option key={o} value={o}>
+                            {o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Actual Result Input with Rich Text Editor */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                      <span>Kết quả thực tế (Actual Result)</span>
+                      <span className="text-[11px] text-blue-600 font-normal">Trình soạn thảo phong phú (Rich Text)</span>
+                    </label>
+                    <RichTextEditor
+                      value={actualResult}
+                      onChange={setActualResult}
+                      placeholder="Mô tả những gì hệ thống thực tế hiển thị hoặc phản hồi khi bạn thực hiện test..."
+                      minHeight="140px"
+                      isFailed={status === 'FAILED'}
+                    />
+                  </div>
+
+                  {/* Notes / Jira Ticket */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Ghi chú / Link Bug / Nguyên nhân lỗi
+                    </label>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Ghi chú thêm, mã lỗi HTTP, link ticket Jira..."
+                      rows={2}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Sticky Footer action */}
+                  <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    {saveSuccess ? (
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold animate-in fade-in">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Đã lưu kết quả thành công vào DB!
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">Nhấn để cập nhật kết quả</span>
                     )}
-                    {availableServers.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                    <Monitor className="w-3.5 h-3.5 text-indigo-600" />
-                    Hệ điều hành (OS)
-                  </label>
-                  <select
-                    value={os}
-                    onChange={(e) => setOs(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  >
-                    {/* If current os is not in availableOsList, show it */}
-                    {os && !availableOsList.includes(os) && (
-                      <option value={os}>{os}</option>
-                    )}
-                    {availableOsList.map((o) => (
-                      <option key={o} value={o}>
-                        {o}
-                      </option>
-                    ))}
-                  </select>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                      >
+                        Đóng
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={saving}
+                        className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
+                      >
+                        <Save className="w-4 h-4" />
+                        {saving ? 'Đang lưu...' : 'Lưu kết quả'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              {/* Actual Result Input with Rich Text Editor */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                  <span>Kết quả thực tế (Actual Result)</span>
-                  <span className="text-[11px] text-blue-600 font-normal">Trình soạn thảo phong phú (Rich Text)</span>
-                </label>
-                <RichTextEditor
-                  value={actualResult}
-                  onChange={setActualResult}
-                  placeholder="Mô tả những gì hệ thống thực tế hiển thị hoặc phản hồi khi bạn thực hiện test..."
-                  minHeight="140px"
-                  isFailed={status === 'FAILED'}
-                />
-              </div>
-
-              {/* Notes / Jira Ticket */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Ghi chú / Link Bug / Nguyên nhân lỗi
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ghi chú thêm, mã lỗi HTTP, link ticket Jira..."
-                  rows={2}
-                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Sticky Footer action */}
-          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 flex items-center justify-between shrink-0">
-            {saveSuccess ? (
-              <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4" />
-                Đã lưu kết quả thành công vào DB!
-              </div>
-            ) : (
-              <span className="text-xs text-slate-400">Nhấn để cập nhật kết quả</span>
-            )}
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700 rounded-lg transition-colors"
-              >
-                Đóng
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
-              >
-                <Save className="w-4 h-4" />
-                {saving ? 'Đang lưu...' : 'Lưu kết quả'}
-              </button>
             </div>
           </div>
         </form>
