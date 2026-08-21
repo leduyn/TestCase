@@ -89,6 +89,28 @@ export class AIController {
         requiresBaseUrl: false,
       },
       {
+        id: 'orcarouter',
+        name: 'OrcaRouter (Multi-model Gateway)',
+        models: [
+          'orcarouter/auto',
+          'orcarouter/free',
+          'anthropic/claude-3.5-sonnet',
+          'anthropic/claude-3.5-haiku',
+          'openai/gpt-4o',
+          'openai/gpt-4o-mini',
+          'openai/o1-preview',
+          'openai/o1-mini',
+          'google/gemini-2.0-flash-exp',
+          'google/gemini-1.5-pro',
+          'meta-llama/llama-3.3-70b-instruct',
+          'mistral/mistral-large',
+          'qwen/qwen-2.5-coder-32b-instruct',
+        ],
+        defaultModel: 'orcarouter/auto',
+        defaultBaseUrl: 'https://api.orcarouter.ai/v1',
+        requiresBaseUrl: false,
+      },
+      {
         id: 'opencode',
         name: 'OpenCode Zen (Curated Models Gateway)',
         models: [

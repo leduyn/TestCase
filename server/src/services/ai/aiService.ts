@@ -229,7 +229,11 @@ Hãy phân tích kỹ lưỡng tài liệu trên và sinh ra danh sách Test Cas
     let modelName = options.modelName;
 
     // Thiết lập mặc định cho từng Provider
-    if (provider === 'opencode' || provider === 'zen') {
+    if (provider === 'orcarouter') {
+      apiKey = apiKey || process.env.ORCAROUTER_API_KEY;
+      baseURL = baseURL || 'https://api.orcarouter.ai/v1';
+      modelName = modelName || 'orcarouter/auto';
+    } else if (provider === 'opencode' || provider === 'zen') {
       apiKey = apiKey || process.env.OPENCODE_API_KEY || process.env.ZEN_API_KEY;
       baseURL = baseURL || 'https://opencode.ai/zen/v1';
       modelName = modelName || 'gemini-3.7-flash';
