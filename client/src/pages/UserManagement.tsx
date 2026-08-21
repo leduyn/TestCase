@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { userApi } from '../services/api';
 import type { User, Role } from '../types';
+import { PermissionManagement } from '../components/PermissionManagement';
 import {
   UserPlus,
   Search,
@@ -548,6 +549,13 @@ const UserManagement: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Permission Management (RBAC) */}
+      {currentUser?.role === 'ADMIN' && (
+        <div className="mt-6">
+          <PermissionManagement canManagePermissions={true} />
         </div>
       )}
     </div>

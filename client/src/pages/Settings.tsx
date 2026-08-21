@@ -20,7 +20,6 @@ import {
 } from 'lucide-react';
 import { aiApi, setupApi, environmentApi } from '../services/api';
 import { AIConfigRow } from '../components/AIConfigRow';
-import { PermissionManagement } from '../components/PermissionManagement';
 import { SystemPromptEditor } from '../components/SystemPromptEditor';
 import type { AIProviderInfo, AIConfig } from '../types';
 import { usePermissions } from '../hooks/usePermissions';
@@ -45,7 +44,6 @@ export const Settings: React.FC = () => {
   const canReadAI = hasPermission('settings:ai:read');
   const canManageEnv = hasPermission('settings:env:write');
   const canReadEnv = hasPermission('settings:env:read');
-  const canManagePermissions = hasPermission('users:update'); // Admin only
 
   const [providers, setProviders] = useState<AIProviderInfo[]>([]);
   const [configs, setConfigs] = useState<AIConfig[]>([]);
@@ -724,9 +722,6 @@ export const Settings: React.FC = () => {
 
       {/* System Prompt AI */}
       <SystemPromptEditor />
-
-      {/* Permission Management */}
-      <PermissionManagement canManagePermissions={canManagePermissions} />
     </div>
   );
 };
