@@ -11,15 +11,21 @@ import {
   RefreshCw,
   Expand,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Plus,
   Edit3,
   Trash2,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { testCaseApi, exportApi, environmentApi, suiteApi } from '../services/api';
-import type { TestSuite, TestCase } from '../types';
+import { testCaseApi, exportApi, environmentApi, suiteApi, uploadApi } from '../services/api';
+import type { TestSuite, TestCase, TestExecutionImage } from '../types';
 import { StatusBadge, PlatformBadge, PriorityBadge, TestTypeBadge } from '../components/Badge';
 import { ExecutionDrawer } from '../components/ExecutionDrawer';
 import { TestCaseModal } from '../components/TestCaseModal';
+import { ImageLightbox } from '../components/ImageLightbox';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -51,9 +57,14 @@ export const SuiteDetail: React.FC = () => {
   const [selectedServer, setSelectedServer] = useState<string>('ALL');
   const [selectedOs, setSelectedOs] = useState<string>('ALL');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   // Selected Test Case for Execution Drawer
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerInitialEditing, setDrawerInitialEditing] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Create / Edit TestCase Modal
@@ -73,6 +84,17 @@ export const SuiteDetail: React.FC = () => {
   // Suite Delete Confirmation Modal
   const [isDeleteSuiteModalOpen, setIsDeleteSuiteModalOpen] = useState(false);
   const [deletingSuite, setDeletingSuite] = useState(false);
+
+  // Evidence Lightbox State
+  const [lightboxImages, setLightboxImages] = useState<TestExecutionImage[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+
+  const openEvidenceLightbox = (images: TestExecutionImage[], index: number = 0) => {
+    setLightboxImages(images);
+    setLightboxIndex(index);
+    setIsLightboxOpen(true);
+  };
 
   const fetchSuiteDetails = async () => {
     if (!id) return;
@@ -121,8 +143,9 @@ export const SuiteDetail: React.FC = () => {
     });
   }, [id, user?.id]);
 
-  const handleOpenDrawer = (tc: TestCase) => {
+  const handleOpenDrawer = (tc: TestCase, editMode: boolean = false) => {
     setSelectedTestCase(tc);
+    setDrawerInitialEditing(editMode);
     setIsDrawerOpen(true);
   };
 
@@ -325,6 +348,32 @@ export const SuiteDetail: React.FC = () => {
     return true;
   });
 
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedStatus, selectedPlatform, selectedPriority, selectedServer, selectedOs, pageSize]);
+
+  // Pagination calculations
+  const totalFilteredItems = filteredCases.length;
+  const totalPages = pageSize === -1 ? 1 : Math.max(1, Math.ceil(totalFilteredItems / pageSize));
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = pageSize === -1 ? 0 : (validCurrentPage - 1) * pageSize;
+  const endIndex = pageSize === -1 ? totalFilteredItems : Math.min(startIndex + pageSize, totalFilteredItems);
+  const paginatedCases = pageSize === -1 ? filteredCases : filteredCases.slice(startIndex, endIndex);
+
+  const getPageNumbers = (current: number, total: number): (number | string)[] => {
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    if (current <= 4) {
+      return [1, 2, 3, 4, 5, '...', total];
+    }
+    if (current >= total - 3) {
+      return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+    }
+    return [1, '...', current - 1, current, current + 1, '...', total];
+  };
+
   // Calculate live stats
   const total = testCases.length;
   let passed = 0;
@@ -514,8 +563,8 @@ export const SuiteDetail: React.FC = () => {
             <button
               onClick={() => setSelectedStatus('ALL')}
               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'ALL'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
                 }`}
             >
               Tất cả ({total})
@@ -523,8 +572,8 @@ export const SuiteDetail: React.FC = () => {
             <button
               onClick={() => setSelectedStatus('PASSED')}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'PASSED'
-                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
-                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300'
+                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
+                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300'
                 }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -533,8 +582,8 @@ export const SuiteDetail: React.FC = () => {
             <button
               onClick={() => setSelectedStatus('FAILED')}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'FAILED'
-                  ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-400'
-                  : 'bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300'
+                ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-400'
+                : 'bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300'
                 } ${failed > 0 ? 'animate-pulse' : ''}`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
@@ -543,8 +592,8 @@ export const SuiteDetail: React.FC = () => {
             <button
               onClick={() => setSelectedStatus('BLOCKED')}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'BLOCKED'
-                  ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-400'
-                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300'
+                ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-400'
+                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300'
                 }`}
             >
               <AlertCircle className="w-3.5 h-3.5" />
@@ -553,8 +602,8 @@ export const SuiteDetail: React.FC = () => {
             <button
               onClick={() => setSelectedStatus('UNTESTED')}
               className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNTESTED'
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                ? 'bg-slate-700 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
                 }`}
             >
               <Clock className="w-3.5 h-3.5" />
@@ -662,14 +711,14 @@ export const SuiteDetail: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {filteredCases.length === 0 ? (
+              {paginatedCases.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="py-12 text-center text-slate-500">
                     Không tìm thấy kịch bản kiểm thử nào khớp với bộ lọc.
                   </td>
                 </tr>
               ) : (
-                filteredCases.map((tc) => {
+                paginatedCases.map((tc) => {
                   const exec = tc.latestExecution;
                   const status = (exec?.status || 'UNTESTED').toUpperCase();
                   const isFailed = status === 'FAILED';
@@ -678,10 +727,10 @@ export const SuiteDetail: React.FC = () => {
                   return (
                     <React.Fragment key={tc.id}>
                       <tr
-                        onClick={() => handleOpenDrawer(tc)}
+                        onClick={() => handleOpenDrawer(tc, false)}
                         className={`cursor-pointer transition-all hover:bg-blue-50/60 dark:hover:bg-blue-950/25 align-top ${isFailed
-                            ? 'bg-rose-50/70 dark:bg-rose-950/40 border-l-4 border-l-rose-600'
-                            : 'even:bg-slate-50/40 dark:even:bg-slate-800/30'
+                          ? 'bg-rose-50/70 dark:bg-rose-950/40 border-l-4 border-l-rose-600'
+                          : 'even:bg-slate-50/40 dark:even:bg-slate-800/30'
                           }`}
                       >
                         {/* Mã TC */}
@@ -714,8 +763,22 @@ export const SuiteDetail: React.FC = () => {
                           <p className="font-bold text-slate-900 dark:text-white line-clamp-2 leading-snug">
                             {tc.title}
                           </p>
-                          <div className="flex items-center gap-1.5 mt-1.5">
+                          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                             <PriorityBadge priority={tc.priority} />
+                            {exec?.images && exec.images.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openEvidenceLightbox(exec.images || [], 0);
+                                }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold border border-blue-200 dark:border-blue-800 transition-colors"
+                                title="Xem danh sách ảnh minh chứng đã tải lên"
+                              >
+                                <ImageIcon className="w-3 h-3 text-blue-600" />
+                                <span>{exec.images.length} ảnh</span>
+                              </button>
+                            )}
                           </div>
                         </td>
 
@@ -763,9 +826,9 @@ export const SuiteDetail: React.FC = () => {
                           <div className="flex items-center justify-center gap-1">
                             {canExecuteTestCase && (
                               <button
-                                onClick={() => handleOpenDrawer(tc)}
+                                onClick={() => handleOpenDrawer(tc, true)}
                                 className="px-2.5 py-1 text-xs font-semibold rounded bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 transition-colors"
-                                title="Ghi nhận kết quả test"
+                                title="Thực thi / Ghi nhận kết quả test (Mở chế độ chỉnh sửa)"
                               >
                                 Test
                               </button>
@@ -853,6 +916,38 @@ export const SuiteDetail: React.FC = () => {
                                             <span className="text-slate-400 italic text-[11px]">Chưa ghi nhận</span>
                                           )}
                                         </div>
+
+                                        {/* Evidence Images */}
+                                        {ex.images && ex.images.length > 0 && (
+                                          <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                                            <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1 mb-1.5">
+                                              <ImageIcon className="w-3 h-3 text-blue-500" />
+                                              Ảnh minh chứng ({ex.images.length})
+                                            </span>
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              {ex.images.slice(0, 4).map((img, imgIdx) => (
+                                                <button
+                                                  key={img.id}
+                                                  type="button"
+                                                  onClick={() => openEvidenceLightbox(ex.images || [], imgIdx)}
+                                                  className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform"
+                                                  title={img.filename}
+                                                >
+                                                  <img
+                                                    src={uploadApi.getImageUrl(img.id)}
+                                                    alt={img.filename}
+                                                    className="w-full h-full object-cover"
+                                                  />
+                                                  {imgIdx === 3 && (ex.images?.length || 0) > 4 && (
+                                                    <div className="absolute inset-0 bg-black/60 text-white text-[10px] font-bold flex items-center justify-center">
+                                                      +{(ex.images?.length || 0) - 4}
+                                                    </div>
+                                                  )}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
                                       </div>
 
                                       {/* Card Footer: Notes if present */}
@@ -878,14 +973,115 @@ export const SuiteDetail: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Footer */}
+        {totalFilteredItems > 0 && (
+          <div className="bg-slate-50/70 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 px-5 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Info & Page Size Selector */}
+            <div className="flex items-center gap-4 text-xs text-slate-600 dark:text-slate-400 flex-wrap">
+              <div>
+                Hiển thị <span className="font-bold text-slate-900 dark:text-white">{startIndex + 1}</span> -{' '}
+                <span className="font-bold text-slate-900 dark:text-white">{endIndex}</span> trong tổng số{' '}
+                <span className="font-bold text-blue-600 dark:text-blue-400 font-mono">{totalFilteredItems}</span> Test Case
+                {totalFilteredItems < total && (
+                  <span className="text-slate-400 ml-1">(lọc từ {total} tổng số)</span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-500">Số dòng/trang:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 shadow-sm"
+                >
+                  <option value={10}>10 dòng</option>
+                  <option value={25}>25 dòng</option>
+                  <option value={50}>50 dòng</option>
+                  <option value={100}>100 dòng</option>
+                  <option value={-1}>Tất cả ({totalFilteredItems})</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Navigation Page Buttons */}
+            {pageSize !== -1 && totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={validCurrentPage === 1}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-600 dark:text-slate-300 transition-colors shadow-sm"
+                  title="Trang đầu"
+                >
+                  <ChevronsLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={validCurrentPage === 1}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-600 dark:text-slate-300 transition-colors shadow-sm"
+                  title="Trang trước"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                {/* Page number buttons */}
+                {getPageNumbers(validCurrentPage, totalPages).map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`ellipsis-${idx}`} className="px-1.5 text-xs text-slate-400 font-bold select-none">
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={`page-${p}`}
+                      type="button"
+                      onClick={() => setCurrentPage(Number(p))}
+                      className={`min-w-[32px] h-8 px-2 text-xs font-bold rounded-lg transition-all shadow-sm ${validCurrentPage === p
+                          ? 'bg-blue-600 text-white shadow-blue-500/30'
+                          : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={validCurrentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-600 dark:text-slate-300 transition-colors shadow-sm"
+                  title="Trang sau"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={validCurrentPage === totalPages}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:pointer-events-none text-slate-600 dark:text-slate-300 transition-colors shadow-sm"
+                  title="Trang cuối"
+                >
+                  <ChevronsRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Execution Drawer */}
       <ExecutionDrawer
         testCase={selectedTestCase}
         isOpen={isDrawerOpen}
+        initialEditing={drawerInitialEditing}
         onClose={() => setIsDrawerOpen(false)}
         onSaved={handleSaveExecution}
+        onEditTestCase={handleOpenEditModal}
       />
 
       {/* Create / Edit TestCase Modal */}
@@ -901,7 +1097,7 @@ export const SuiteDetail: React.FC = () => {
         onSuccess={handleTestCaseModalSuccess}
       />
 
-      /* Suite Edit modal */
+      {/* Suite Edit modal */}
       {isSuiteModalOpen && suiteToEdit && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-in zoom-in-95 duration-150">
@@ -1145,6 +1341,14 @@ export const SuiteDetail: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Lightbox for Evidence Screenshots */}
+      <ImageLightbox
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+        isOpen={isLightboxOpen}
+        onClose={() => setIsLightboxOpen(false)}
+      />
     </div>
   );
 };

@@ -4,6 +4,8 @@ import type {
   TestSuite,
   TestCase,
   TestExecution,
+  TestExecutionImage,
+  StorageConfig,
   AIProviderInfo,
   AIConfig,
   Permission,
@@ -270,5 +272,49 @@ export const suiteApi = {
   updateTestSuite: (id: string, data: { name: string; moduleName: string; summary?: string; assumptions?: string }) =>
     api.put<{ message: string; testSuite: TestSuite }>(`/testcases/suites/${id}`, data),
   deleteTestSuite: (id: string) => api.delete<{ message: string }>(`/testcases/suites/${id}`),
+};
+
+// Upload API for Test Execution Images
+export const uploadApi = {
+  uploadImages: (executionId: string, files: File[]) => {
+    const formData = new FormData();
+    files.forEach((file) => formData.append('images', file));
+    return api.post<{
+      message: string;
+      images: TestExecutionImage[];
+      currentCount: number;
+      maxFiles: number;
+    }>(`/uploads/executions/${executionId}/images`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  getExecutionImages: (executionId: string) =>
+    api.get<{
+      images: TestExecutionImage[];
+      maxFiles: number;
+      maxFileSizeMB: number;
+    }>(`/uploads/executions/${executionId}/images`),
+  getTestCaseImages: (testCaseId: string) =>
+    api.get<{
+      images: TestExecutionImage[];
+      maxFiles: number;
+      maxFileSizeMB: number;
+    }>(`/uploads/testcases/${testCaseId}/images`),
+  deleteImage: (imageId: string) =>
+    api.delete<{ message: string }>(`/uploads/images/${imageId}`),
+  getImageUrl: (imageId: string) => {
+    const token = localStorage.getItem('auth_token');
+    const base = `${API_BASE_URL}/uploads/images/${imageId}/view`;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  },
+};
+
+// Storage Settings API
+export const storageApi = {
+  getConfig: () => api.get<{ config: StorageConfig }>('/settings/storage'),
+  saveConfig: (data: Partial<StorageConfig>) =>
+    api.post<{ message: string; provider: string }>('/settings/storage', data),
+  testConnection: (data: Partial<StorageConfig>) =>
+    api.post<{ success: boolean; message: string }>('/settings/storage/test', data),
 };
 

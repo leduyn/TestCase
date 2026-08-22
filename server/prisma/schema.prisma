@@ -175,7 +175,24 @@ model TestExecution {
   executedAt   DateTime            @default(now()) @map("executed_at")
   updatedAt    DateTime            @updatedAt @map("updated_at")
 
+  images       TestExecutionImage[]
+
   @@map("test_executions")
+}
+
+model TestExecutionImage {
+  id              String        @id @default(uuid())
+  executionId     String        @map("execution_id")
+  execution       TestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  filename        String
+  storagePath     String        @map("storage_path")
+  storageType     String        @map("storage_type")  // local | smb | ftp | google_drive
+  mimeType        String        @map("mime_type")
+  fileSize        Int           @map("file_size")
+  publicUrl       String?       @map("public_url")
+  uploadedAt      DateTime      @default(now()) @map("uploaded_at")
+
+  @@map("test_execution_images")
 }
 
 model AiConfig {

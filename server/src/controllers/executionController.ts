@@ -33,6 +33,9 @@ export class ExecutionController {
           executedBy: {
             select: { fullName: true, email: true },
           },
+          images: {
+            orderBy: { uploadedAt: 'asc' },
+          },
         },
       });
 
@@ -68,6 +71,9 @@ export class ExecutionController {
         include: {
           executedBy: {
             select: { fullName: true, email: true },
+          },
+          images: {
+            orderBy: { uploadedAt: 'asc' },
           },
         },
       });

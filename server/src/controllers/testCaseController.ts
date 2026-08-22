@@ -264,6 +264,9 @@ export class TestCaseController {
                   executedBy: {
                     select: { id: true, fullName: true, email: true },
                   },
+                  images: {
+                    orderBy: { uploadedAt: 'asc' },
+                  },
                 },
               },
             },
@@ -349,6 +352,9 @@ export class TestCaseController {
                 include: {
                   executedBy: {
                     select: { id: true, fullName: true, email: true },
+                  },
+                  images: {
+                    orderBy: { uploadedAt: 'asc' },
                   },
                 },
               },
@@ -478,6 +484,9 @@ export class TestCaseController {
           executedBy: {
             select: { id: true, fullName: true, email: true },
           },
+          images: {
+            orderBy: { uploadedAt: 'asc' },
+          },
         },
       });
 
@@ -525,6 +534,9 @@ export class TestCaseController {
             include: {
               executedBy: {
                 select: { id: true, fullName: true, email: true },
+              },
+              images: {
+                orderBy: { uploadedAt: 'asc' },
               },
             },
           },

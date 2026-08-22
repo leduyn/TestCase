@@ -12,6 +12,18 @@ export interface User {
 
 export type ExecutionStatus = 'PASSED' | 'FAILED' | 'BLOCKED' | 'UNTESTED';
 
+export interface TestExecutionImage {
+  id: string;
+  executionId: string;
+  filename: string;
+  storagePath: string;
+  storageType: string;
+  mimeType: string;
+  fileSize: number;
+  publicUrl?: string | null;
+  uploadedAt: string;
+}
+
 export interface TestExecution {
   id: string;
   testCaseId: string;
@@ -26,6 +38,7 @@ export interface TestExecution {
   actualResult?: string | null;
   evaluation?: string | null;
   notes?: string | null;
+  images?: TestExecutionImage[];
   executedAt: string;
   updatedAt?: string;
 }
@@ -178,6 +191,41 @@ export interface UserTestStatsResponse {
   canViewAll: boolean;
   totalTestCases: number;
   userStats: UserTestStat[];
+}
+
+export interface StorageConfig {
+  provider: 'local' | 'smb' | 'ftp' | 'google_drive';
+  maxFilesPerExecution: number;
+  maxFileSizeMB: number;
+  local: {
+    uploadPath: string;
+  };
+  smb: {
+    host: string;
+    share: string;
+    username: string;
+    password?: string;
+    domain: string;
+    remotePath: string;
+  };
+  ftp: {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    remotePath: string;
+    secure: boolean;
+  };
+  googleDrive: {
+    authType: 'service_account' | 'oauth2';
+    folderId: string;
+    credentials?: any;
+    oauth2?: {
+      clientId: string;
+      clientSecret?: string;
+      refreshToken?: string;
+    };
+  };
 }
 
 

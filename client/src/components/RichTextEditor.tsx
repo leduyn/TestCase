@@ -22,7 +22,11 @@ import {
   AlertTriangle,
   AlertCircle,
   Palette,
+  Upload,
+  X,
 } from 'lucide-react';
+import type { TestExecutionImage } from '../types';
+import { uploadApi } from '../services/api';
 
 interface RichTextEditorProps {
   value: string;
@@ -30,6 +34,8 @@ interface RichTextEditorProps {
   placeholder?: string;
   minHeight?: string;
   isFailed?: boolean;
+  availableImages?: TestExecutionImage[];
+  onUploadImage?: (file: File) => Promise<string>;
 }
 
 export const RichTextEditor: React.FC<RichTextEditorProps> = ({
@@ -38,12 +44,17 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   placeholder = 'Nhập kết quả thực tế khi kiểm thử...',
   minHeight = '180px',
   isFailed = false,
+  availableImages = [],
+  onUploadImage,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isHtmlMode, setIsHtmlMode] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [showImageMenu, setShowImageMenu] = useState(false);
+  const [customImageUrl, setCustomImageUrl] = useState('');
   const isUpdatingRef = useRef(false);
 
   // Sync value from props to editor contentEditable
@@ -74,6 +85,13 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   };
 
+  const insertHtmlAtCursor = (html: string) => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+    execCmd('insertHTML', html);
+  };
+
   const insertLink = () => {
     const url = prompt('Nhập đường dẫn liên kết (URL):', 'https://');
     if (url && url !== 'https://') {
@@ -81,10 +99,56 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   };
 
-  const insertImage = () => {
-    const url = prompt('Nhập đường dẫn ảnh (URL hoặc Data URL):', 'https://');
-    if (url && url !== 'https://') {
-      execCmd('insertImage', url);
+  const insertImageFromUrl = (url: string, alt: string = 'Evidence') => {
+    if (!url) return;
+    const imgHtml = `<p><img src="${url}" alt="${alt}" style="max-width: 100%; border-radius: 8px; margin: 8px 0; border: 1px solid #e2e8f0; display: inline-block;" /></p><p></p>`;
+    insertHtmlAtCursor(imgHtml);
+    setShowImageMenu(false);
+    setCustomImageUrl('');
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (onUploadImage) {
+      onUploadImage(file).then((url) => {
+        insertImageFromUrl(url, file.name);
+      });
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        insertImageFromUrl(base64, file.name);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Handle paste image from clipboard
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const base64 = event.target?.result as string;
+            insertImageFromUrl(base64, 'Pasted image');
+          };
+          reader.readAsDataURL(file);
+          return;
+        }
+      }
     }
   };
 
@@ -337,7 +401,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
         <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 mx-1" />
 
-        {/* Inserts: Link, Image, Table */}
+        {/* Inserts: Link, Image Popover, Table */}
         <button
           type="button"
           onClick={insertLink}
@@ -347,14 +411,122 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           <LinkIcon className="w-4 h-4" />
         </button>
 
-        <button
-          type="button"
-          onClick={insertImage}
-          title="Chèn ảnh / screenshot"
-          className="p-1.5 rounded text-slate-700 hover:text-slate-900 hover:bg-slate-200 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-700 transition-colors"
-        >
-          <ImageIcon className="w-4 h-4" />
-        </button>
+        {/* Hidden File Input for Direct Local Image Selection */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+
+        {/* Image Dropdown / Popover */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowImageMenu(!showImageMenu)}
+            title="Chèn ảnh / screenshot (từ máy tính, ảnh upload, hoặc URL)"
+            className={`p-1.5 rounded transition-colors ${
+              showImageMenu
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300'
+                : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-700'
+            }`}
+          >
+            <ImageIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+          </button>
+
+          {showImageMenu && (
+            <div className="absolute left-0 top-full mt-1.5 w-72 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 p-3 text-xs space-y-3 animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
+                <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                  Chèn hình ảnh
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowImageMenu(false)}
+                  className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Option 1: Select from Uploaded Evidence Images */}
+              {availableImages && availableImages.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">
+                    Chọn từ ảnh minh chứng đã tải lên ({availableImages.length}):
+                  </span>
+                  <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                    {availableImages.map((img) => {
+                      const imgUrl = uploadApi.getImageUrl(img.id);
+                      return (
+                        <button
+                          key={img.id}
+                          type="button"
+                          onClick={() => insertImageFromUrl(imgUrl, img.filename)}
+                          className="group relative aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:scale-105 transition-all"
+                          title={`Chèn ảnh: ${img.filename}`}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={img.filename}
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-blue-600/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-[10px]">
+                            + Chèn
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Option 2: Upload / Choose from Local Computer */}
+              <div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-semibold rounded-lg border border-blue-200 dark:border-blue-800 transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Tải ảnh từ máy tính</span>
+                </button>
+              </div>
+
+              {/* Option 3: Insert by URL */}
+              <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-700">
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">
+                  Hoặc chèn theo đường dẫn URL:
+                </span>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={customImageUrl}
+                    onChange={(e) => setCustomImageUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="flex-1 px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        insertImageFromUrl(customImageUrl);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => insertImageFromUrl(customImageUrl)}
+                    disabled={!customImageUrl.trim()}
+                    className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg disabled:opacity-40 transition-colors shrink-0 text-xs"
+                  >
+                    Chèn
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         <button
           type="button"
@@ -459,6 +631,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             contentEditable
             onInput={handleInput}
             onBlur={handleInput}
+            onPaste={handlePaste}
             style={{ minHeight }}
             data-placeholder={placeholder}
             className="rich-text-content w-full flex-1 p-3.5 text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 focus:outline-none rounded-b-xl overflow-y-auto leading-relaxed"

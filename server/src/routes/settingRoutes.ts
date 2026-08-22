@@ -10,4 +10,9 @@ router.post('/environments', authenticate, requirePermission('settings:env:write
 router.get('/system-prompt', authenticate, requirePermission('settings:prompt:read'), SettingController.getSystemPrompt);
 router.put('/system-prompt', authenticate, requirePermission('settings:prompt:write'), SettingController.updateSystemPrompt);
 
+// Storage config routes
+router.get('/storage', authenticate, requirePermission('settings:env:read'), SettingController.getStorageConfig);
+router.post('/storage', authenticate, requirePermission('settings:env:write'), SettingController.saveStorageConfig);
+router.post('/storage/test', authenticate, requirePermission('settings:env:write'), SettingController.testStorageConnection);
+
 export default router;
