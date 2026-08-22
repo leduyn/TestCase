@@ -3,7 +3,7 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { parseDocument } from '../services/documentParser';
 import { AIService } from '../services/ai/aiService';
-import { canViewAllExecutionHistory } from '../services/permissionService';
+import { canViewAllExecutionHistory, canViewAllUserTestStats, canViewUserTestStats } from '../services/permissionService';
 
 export class TestCaseController {
   static async generate(req: AuthRequest, res: Response) {
@@ -603,6 +603,126 @@ export class TestCaseController {
       return res.json({ message: 'Đã xóa Test Suite thành công' });
     } catch (error: any) {
       return res.status(500).json({ message: 'Lỗi xóa Test Suite', error: error.message });
+    }
+  }
+
+  static async getUserExecutionStats(req: AuthRequest, res: Response) {
+    try {
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+
+      if (!currentUserId || !currentUserRole) {
+        return res.status(401).json({ message: 'Chưa đăng nhập' });
+      }
+
+      const canView = await canViewUserTestStats(currentUserId, currentUserRole);
+      if (!canView) {
+        return res.status(403).json({ message: 'Bạn không có quyền xem thống kê kiểm thử' });
+      }
+
+      const canViewAll = await canViewAllUserTestStats(currentUserId, currentUserRole);
+
+      // Total test cases in the system
+      const totalTestCases = await prisma.testCase.count();
+
+      // Find target users
+      let targetUsers;
+      if (canViewAll) {
+        targetUsers = await prisma.user.findMany({
+          where: {
+            role: { in: ['ADMIN', 'TESTER'] },
+          },
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            role: true,
+            status: true,
+            lastLogin: true,
+          },
+          orderBy: [
+            { role: 'asc' },
+            { fullName: 'asc' },
+          ],
+        });
+      } else {
+        targetUsers = await prisma.user.findMany({
+          where: { id: currentUserId },
+          select: {
+            id: true,
+            email: true,
+            fullName: true,
+            role: true,
+            status: true,
+            lastLogin: true,
+          },
+        });
+      }
+
+      // Calculate stats for each user
+      const userStats = await Promise.all(
+        targetUsers.map(async (user) => {
+          // Get all executions by this user
+          const executions = await prisma.testExecution.findMany({
+            where: { executedById: user.id },
+            select: {
+              testCaseId: true,
+              status: true,
+              executedAt: true,
+            },
+            orderBy: { executedAt: 'desc' },
+          });
+
+          // Deduplicate to get latest execution status per testCaseId
+          const latestStatusMap = new Map<string, string>();
+          for (const exec of executions) {
+            if (!latestStatusMap.has(exec.testCaseId)) {
+              latestStatusMap.set(exec.testCaseId, exec.status);
+            }
+          }
+
+          let passed = 0;
+          let failed = 0;
+          let blocked = 0;
+
+          for (const status of latestStatusMap.values()) {
+            if (status === 'PASSED') passed++;
+            else if (status === 'FAILED') failed++;
+            else if (status === 'BLOCKED') blocked++;
+          }
+
+          const testedCount = passed + failed + blocked;
+          const untested = Math.max(0, totalTestCases - testedCount);
+          const passRate = testedCount > 0 ? Math.round((passed / testedCount) * 100) : 0;
+          const completionRate = totalTestCases > 0 ? Math.round((testedCount / totalTestCases) * 100) : 0;
+
+          return {
+            userId: user.id,
+            fullName: user.fullName,
+            email: user.email,
+            role: user.role,
+            status: user.status,
+            lastLogin: user.lastLogin,
+            totalTestCases,
+            untested,
+            passed,
+            failed,
+            blocked,
+            testedCount,
+            passRate,
+            completionRate,
+          };
+        })
+      );
+
+      return res.json({
+        canViewAll,
+        totalTestCases,
+        userStats,
+      });
+    } catch (error: any) {
+      console.error('Error fetching user execution stats:', error);
+      return res.status(500).json({ message: 'Lỗi khi lấy thống kê kiểm thử', error: error.message });
     }
   }
 }

@@ -233,3 +233,19 @@ export async function canViewOwnExecutionHistory(userId: string | undefined, rol
   if (role === 'ADMIN') return true;
   return hasPermission(userId, role, 'execution:read-own');
 }
+
+export async function canViewAllUserTestStats(userId: string | undefined, role: string | undefined): Promise<boolean> {
+  if (!userId || !role) return false;
+  if (role === 'ADMIN') return true;
+  const hasReadAll = await hasPermission(userId, role, 'dashboard:user-stats:read-all');
+  if (hasReadAll) return true;
+  return hasPermission(userId, role, 'execution:read-all');
+}
+
+export async function canViewUserTestStats(userId: string | undefined, role: string | undefined): Promise<boolean> {
+  if (!userId || !role) return false;
+  if (role === 'ADMIN') return true;
+  const hasRead = await hasPermission(userId, role, 'dashboard:user-stats:read');
+  if (hasRead) return true;
+  return hasPermission(userId, role, 'dashboard:user-stats:read-all');
+}

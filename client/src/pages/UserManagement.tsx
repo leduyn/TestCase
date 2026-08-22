@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { userApi } from '../services/api';
 import type { User, Role } from '../types';
 import { PermissionManagement } from '../components/PermissionManagement';
+import { usePermissions } from '../hooks/usePermissions';
 import {
   UserPlus,
   Search,
@@ -13,8 +14,9 @@ import {
   Shield,
   X,
   CheckCircle,
+  CheckCircle2,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
 } from 'lucide-react';
 
 interface ModalState {
@@ -25,11 +27,18 @@ interface ModalState {
 
 const UserManagement: React.FC = () => {
   const { user: currentUser } = useAuth();
+  const { hasPermission } = usePermissions();
+
+  const canCreateUser = hasPermission('users:create');
+  const canUpdateUser = hasPermission('users:update');
+  const canDeleteUser = hasPermission('users:delete');
+  const canToggleStatus = hasPermission('users:status');
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
   // Add / Edit Modal
   const [modalState, setModalState] = useState<ModalState>({
@@ -195,11 +204,13 @@ const UserManagement: React.FC = () => {
 
   const filteredUsers = users.filter((u) => {
     const q = search.toLowerCase();
-    return (
-      u.email.toLowerCase().includes(q) ||
-      (u.fullName && u.fullName.toLowerCase().includes(q))
-    );
+    const matchesSearch = u.email.toLowerCase().includes(q) ||
+      (u.fullName && u.fullName.toLowerCase().includes(q));
+    const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
+    return matchesSearch && matchesStatus;
   });
+
+  const pendingCount = users.filter(u => u.status === 'PENDING').length;
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
@@ -236,13 +247,15 @@ const UserManagement: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-sm transition-colors text-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            Thêm người dùng mới
-          </button>
+          {canCreateUser && (
+            <button
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow-sm transition-colors text-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              Thêm người dùng mới
+            </button>
+          )}
         </div>
       </div>
 
@@ -256,6 +269,34 @@ const UserManagement: React.FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
         />
+      </div>
+
+      {/* Status Filter Buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {(['ALL', 'PENDING', 'ACTIVE', 'INACTIVE'] as const).map((filter) => {
+          const labels: Record<string, string> = { ALL: 'Tất cả', PENDING: 'Chờ duyệt', ACTIVE: 'Hoạt động', INACTIVE: 'Đã khóa' };
+          const isActive = statusFilter === filter;
+          return (
+            <button
+              key={filter}
+              onClick={() => setStatusFilter(filter)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                isActive
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {labels[filter]}
+              {filter === 'PENDING' && pendingCount > 0 && (
+                <span className={`ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold rounded-full ${
+                  isActive ? 'bg-white text-indigo-600' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Users Table */}
@@ -311,15 +352,21 @@ const UserManagement: React.FC = () => {
                         className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           u.status === 'ACTIVE'
                             ? 'bg-emerald-50 text-emerald-700'
+                            : u.status === 'PENDING'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
                             : 'bg-slate-100 text-slate-600'
                         }`}
                       >
                         <span
                           className={`w-1.5 h-1.5 rounded-full ${
-                            u.status === 'ACTIVE' ? 'bg-emerald-500' : 'bg-slate-400'
+                            u.status === 'ACTIVE'
+                              ? 'bg-emerald-500'
+                              : u.status === 'PENDING'
+                              ? 'bg-amber-500 animate-pulse'
+                              : 'bg-slate-400'
                           }`}
                         />
-                        {u.status === 'ACTIVE' ? 'Hoạt động' : 'Đã khóa'}
+                        {u.status === 'ACTIVE' ? 'Hoạt động' : u.status === 'PENDING' ? 'Chờ duyệt' : 'Đã khóa'}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-xs text-slate-500">
@@ -327,38 +374,44 @@ const UserManagement: React.FC = () => {
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="inline-flex items-center gap-1">
-                        <button
-                          onClick={() => openEditModal(u)}
-                          className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                          title="Sửa"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        {currentUser.role === 'ADMIN' && (
-                          <>
-                            <button
-                              onClick={() => setStatusModal({ open: true, user: u })}
-                              className={`p-1.5 rounded transition-colors ${
-                                u.status === 'ACTIVE'
-                                  ? 'text-amber-600 hover:bg-amber-50'
-                                  : 'text-emerald-600 hover:bg-emerald-50'
-                              }`}
-                              title={u.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'}
-                            >
-                              {u.status === 'ACTIVE' ? (
-                                <Lock className="w-4 h-4" />
-                              ) : (
-                                <Unlock className="w-4 h-4" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => setDeleteModal({ open: true, user: u })}
-                              className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                              title="Xóa"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
+                        {canUpdateUser && (
+                          <button
+                            onClick={() => openEditModal(u)}
+                            className="p-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            title="Sửa"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canToggleStatus && (
+                          <button
+                            onClick={() => setStatusModal({ open: true, user: u })}
+                            className={`p-1.5 rounded transition-colors ${
+                              u.status === 'PENDING'
+                                ? 'text-blue-600 hover:bg-blue-50'
+                                : u.status === 'ACTIVE'
+                                ? 'text-amber-600 hover:bg-amber-50'
+                                : 'text-emerald-600 hover:bg-emerald-50'
+                            }`}
+                            title={u.status === 'PENDING' ? 'Duyệt tài khoản' : u.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Kích hoạt tài khoản'}
+                          >
+                            {u.status === 'PENDING' ? (
+                              <CheckCircle2 className="w-4 h-4" />
+                            ) : u.status === 'ACTIVE' ? (
+                              <Lock className="w-4 h-4" />
+                            ) : (
+                              <Unlock className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                        {canDeleteUser && (
+                          <button
+                            onClick={() => setDeleteModal({ open: true, user: u })}
+                            className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                            title="Xóa"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         )}
                       </div>
                     </td>
@@ -508,12 +561,16 @@ const UserManagement: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-sm p-6 space-y-4">
             <div
               className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto ${
-                statusModal.user.status === 'ACTIVE'
+                statusModal.user.status === 'PENDING'
+                  ? 'bg-blue-100 text-blue-600'
+                  : statusModal.user.status === 'ACTIVE'
                   ? 'bg-amber-100 text-amber-600'
                   : 'bg-emerald-100 text-emerald-600'
               }`}
             >
-              {statusModal.user.status === 'ACTIVE' ? (
+              {statusModal.user.status === 'PENDING' ? (
+                <CheckCircle2 className="w-6 h-6" />
+              ) : statusModal.user.status === 'ACTIVE' ? (
                 <Lock className="w-6 h-6" />
               ) : (
                 <Unlock className="w-6 h-6" />
@@ -521,12 +578,27 @@ const UserManagement: React.FC = () => {
             </div>
             <div className="text-center">
               <h3 className="text-lg font-bold text-slate-900">
-                {statusModal.user.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
+                {statusModal.user.status === 'PENDING'
+                  ? 'Phê duyệt tài khoản'
+                  : statusModal.user.status === 'ACTIVE'
+                  ? 'Khóa tài khoản'
+                  : 'Mở khóa tài khoản'}
               </h3>
               <p className="text-sm text-slate-500 mt-2">
-                Bạn có chắc chắn muốn {statusModal.user.status === 'ACTIVE' ? 'khóa' : 'mở khóa'} tài khoản{' '}
+                Bạn có chắc chắn muốn{' '}
+                {statusModal.user.status === 'PENDING'
+                  ? 'phê duyệt'
+                  : statusModal.user.status === 'ACTIVE'
+                  ? 'khóa'
+                  : 'mở khóa'}{' '}
+                tài khoản{' '}
                 <span className="font-semibold text-slate-800">{statusModal.user.email}</span>?
               </p>
+              {statusModal.user.status === 'PENDING' && (
+                <p className="text-xs text-blue-600 mt-2">
+                  Sau khi phê duyệt, người dùng có thể đăng nhập và sử dụng hệ thống.
+                </p>
+              )}
             </div>
             <div className="flex items-center justify-center gap-3 pt-2">
               <button
@@ -540,12 +612,18 @@ const UserManagement: React.FC = () => {
                 type="button"
                 onClick={() => handleToggleStatus(statusModal.user!)}
                 className={`px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm transition-colors ${
-                  statusModal.user.status === 'ACTIVE'
+                  statusModal.user.status === 'PENDING'
+                    ? 'bg-blue-600 hover:bg-blue-700'
+                    : statusModal.user.status === 'ACTIVE'
                     ? 'bg-amber-600 hover:bg-amber-700'
                     : 'bg-emerald-600 hover:bg-emerald-700'
                 }`}
               >
-                {statusModal.user.status === 'ACTIVE' ? 'Khóa tài khoản' : 'Mở khóa'}
+                {statusModal.user.status === 'PENDING'
+                  ? 'Phê duyệt'
+                  : statusModal.user.status === 'ACTIVE'
+                  ? 'Khóa tài khoản'
+                  : 'Mở khóa'}
               </button>
             </div>
           </div>

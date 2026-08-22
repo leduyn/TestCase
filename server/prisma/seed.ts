@@ -16,6 +16,10 @@ const PERMISSIONS = [
   { key: 'execution:read-own', name: 'Xem lịch sử thực thi của mình', category: 'TESTCASE', description: 'Chỉ xem lịch sử thực thi do chính mình thực hiện' },
   { key: 'execution:read-all', name: 'Xem lịch sử thực thi của tất cả', category: 'TESTCASE', description: 'Xem lịch sử thực thi của tất cả thành viên trong team' },
 
+  // DASHBOARD / STATS
+  { key: 'dashboard:user-stats:read', name: 'Xem thống kê test cá nhân', category: 'DASHBOARD', description: 'Xem thống kê kết quả test cá nhân trên Dashboard' },
+  { key: 'dashboard:user-stats:read-all', name: 'Xem thống kê test toàn đội', category: 'DASHBOARD', description: 'Xem thống kê kết quả test của tất cả Admin và Tester trên Dashboard' },
+
   // TESTSUITE
   { key: 'testsuite:create', name: 'Tạo Test Suite', category: 'TESTSUITE', description: 'Tạo mới Test Suite' },
   { key: 'testsuite:read', name: 'Xem Test Suite', category: 'TESTSUITE', description: 'Xem danh sách và chi tiết Test Suite' },
@@ -44,11 +48,13 @@ const ROLE_PERMISSIONS: Record<Role, string[]> = {
     'testcase:create', 'testcase:read', 'testcase:update', 'testcase:execute',
     'testcase:import', 'testcase:generate', 'testcase:export',
     'execution:read-own',
+    'dashboard:user-stats:read',
     'testsuite:create', 'testsuite:read', 'testsuite:update',
   ],
   VIEWER: [
     'testcase:read', 'testcase:export',
     'execution:read-own',
+    'dashboard:user-stats:read',
     'testsuite:read',
   ],
 };

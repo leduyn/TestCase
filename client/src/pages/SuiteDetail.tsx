@@ -35,6 +35,7 @@ export const SuiteDetail: React.FC = () => {
   const canExecuteTestCase = hasPermission('testcase:execute');
   const canUpdateSuite = hasPermission('testsuite:update');
   const canDeleteSuite = hasPermission('testsuite:delete');
+  const canExport = hasPermission('testcase:export');
 
   const [suite, setSuite] = useState<TestSuite | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
@@ -424,22 +425,26 @@ export const SuiteDetail: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <a
-            href={exportApi.getExcelDownloadUrl(suite.id)}
-            download
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-emerald-500/20 transition-all"
-          >
-            <Download className="w-4 h-4" />
-            Xuất file Excel (.xlsx)
-          </a>
-          <button
-            onClick={() => exportApi.downloadResultsExcel(suite.id, `TestCase_Results_${suite.name.replace(/[^a-zA-Z0-9_\u00C0-\u1EF9]/g, '_')}.xlsx`)}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-indigo-500/20 transition-all"
-            title="Xuất kết quả test theo từng người dùng"
-          >
-            <Download className="w-4 h-4" />
-            Xuất kết quả test
-          </button>
+          {canExport && (
+            <>
+              <a
+                href={exportApi.getExcelDownloadUrl(suite.id)}
+                download
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-emerald-500/20 transition-all"
+              >
+                <Download className="w-4 h-4" />
+                Xuất file Excel (.xlsx)
+              </a>
+              <button
+                onClick={() => exportApi.downloadResultsExcel(suite.id, `TestCase_Results_${suite.name.replace(/[^a-zA-Z0-9_\u00C0-\u1EF9]/g, '_')}.xlsx`)}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-indigo-500/20 transition-all"
+                title="Xuất kết quả test theo từng người dùng"
+              >
+                <Download className="w-4 h-4" />
+                Xuất kết quả test
+              </button>
+            </>
+          )}
         </div>
       </div>
 

@@ -7,7 +7,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName: string) => Promise<void>;
+  register: (email: string, password: string, fullName: string) => Promise<string>;
   logout: () => void;
 }
 
@@ -46,11 +46,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.data.user);
   };
 
-  const register = async (email: string, password: string, fullName: string) => {
+  const register = async (email: string, password: string, fullName: string): Promise<string> => {
     const res = await authApi.register({ email, password, fullName });
-    localStorage.setItem('auth_token', res.data.token);
-    setToken(res.data.token);
-    setUser(res.data.user);
+    // Tài khoản PENDING - không lưu token, không đăng nhập tự động
+    return res.data.message;
   };
 
   const logout = () => {

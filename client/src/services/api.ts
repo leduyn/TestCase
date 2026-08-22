@@ -8,6 +8,7 @@ import type {
   AIConfig,
   Permission,
   UserPermissionsResponse,
+  UserTestStatsResponse,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -88,7 +89,7 @@ export const setupApi = {
 // Auth API
 export const authApi = {
   register: (data: { email: string; password: string; fullName: string }) =>
-    api.post<{ message: string; token: string; user: User }>('/auth/register', data),
+    api.post<{ message: string; token?: string; user?: User }>('/auth/register', data),
   login: (data: { email: string; password: string }) =>
     api.post<{ message: string; token: string; user: User }>('/auth/login', data),
   getMe: () => api.get<{ user: User }>('/auth/me'),
@@ -171,6 +172,8 @@ export const testCaseApi = {
       skipped: Array<{ row: number; reason: string }>;
       testCases: TestCase[];
     }>('/testcases/import/json', data),
+  getUserExecutionStats: () =>
+    api.get<UserTestStatsResponse>('/testcases/stats/user-executions'),
 };
 
 // Execution API

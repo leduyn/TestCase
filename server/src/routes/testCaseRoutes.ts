@@ -17,6 +17,7 @@ router.post('/generate', authenticate, requirePermission('testcase:generate'), u
 router.post('/import/preview', authenticate, requirePermission('testcase:import'), upload.single('file'), ImportController.preview);
 router.post('/import', authenticate, requirePermission('testcase:import'), upload.single('file'), ImportController.import);
 router.post('/import/json', authenticate, requirePermission('testcase:import'), ImportController.importJson);
+router.get('/stats/user-executions', authenticate, TestCaseController.getUserExecutionStats);
 router.get('/suites', authenticate, requirePermission('testsuite:read'), TestCaseController.getSuites);
 router.get('/suites/:id', authenticate, requirePermission('testsuite:read'), TestCaseController.getSuiteById);
 router.put('/:id', authenticate, requirePermission('testcase:update'), TestCaseController.updateTestCase);

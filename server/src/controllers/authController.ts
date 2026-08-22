@@ -28,19 +28,12 @@ export class AuthController {
           passwordHash,
           fullName,
           role: 'TESTER',
-          status: 'ACTIVE',
+          status: 'PENDING',
         },
       });
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email, fullName: user.fullName, role: user.role, status: user.status },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
       return res.status(201).json({
-        message: 'Đăng ký tài khoản thành công',
-        token,
+        message: 'Đăng ký tài khoản thành công. Tài khoản đang chờ quản trị viên phê duyệt.',
         user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role, status: user.status },
       });
     } catch (error: any) {
@@ -60,6 +53,14 @@ export class AuthController {
       const user = await prisma.user.findUnique({ where: { email } });
       if (!user) {
         return res.status(401).json({ message: 'Email hoặc mật khẩu không chính xác' });
+      }
+
+      // Kiểm tra trạng thái tài khoản trước khi cho phép đăng nhập
+      if (user.status === 'PENDING') {
+        return res.status(403).json({ message: 'Tài khoản đang chờ phê duyệt. Vui lòng liên hệ quản trị viên.' });
+      }
+      if (user.status === 'INACTIVE') {
+        return res.status(403).json({ message: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.' });
       }
 
       const isMatch = await bcrypt.compare(password, user.passwordHash);
@@ -181,7 +182,7 @@ export class AuthController {
       }
 
       const { status } = req.body;
-      if (!status || !['ACTIVE', 'INACTIVE'].includes(status)) {
+      if (!status || !['ACTIVE', 'INACTIVE', 'PENDING'].includes(status)) {
         return res.status(400).json({ message: 'Trạng thái không hợp lệ' });
       }
 

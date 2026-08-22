@@ -23,6 +23,7 @@ import { AIConfigRow } from '../components/AIConfigRow';
 import { SystemPromptEditor } from '../components/SystemPromptEditor';
 import type { AIProviderInfo, AIConfig } from '../types';
 import { usePermissions } from '../hooks/usePermissions';
+import { useAuth } from '../context/AuthContext';
 
 const DEFAULT_SERVERS = ['DEV', 'STAGING', 'UAT', 'PRODUCTION'];
 const DEFAULT_OS_LIST = [
@@ -38,8 +39,10 @@ const DEFAULT_OS_LIST = [
 ];
 
 export const Settings: React.FC = () => {
+  const { user: currentUser } = useAuth();
   const { hasPermission } = usePermissions();
   
+  const isAdmin = currentUser?.role === 'ADMIN';
   const canManageAI = hasPermission('settings:ai:write');
   const canReadAI = hasPermission('settings:ai:read');
   const canManageEnv = hasPermission('settings:env:write');
@@ -502,13 +505,15 @@ export const Settings: React.FC = () => {
             </div>
           </div>
 
-          <Link
-            to="/setup"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 transition-colors"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            Cấu hình / Tạo mới Database
-          </Link>
+          {isAdmin && (
+            <Link
+              to="/setup"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 transition-colors"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Cấu hình / Tạo mới Database
+            </Link>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import { UserStatus } from '@prisma/client';
 import prisma from '../config/database';
 import { authenticate } from '../middleware/auth';
 import { requirePermission } from '../middleware/rbac';
@@ -150,7 +151,14 @@ router.post('/:id/toggle-status', authenticate, requirePermission('users:status'
       return res.status(404).json({ message: 'Không tìm thấy người dùng' });
     }
 
-    const newStatus = currentUser.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    // PENDING → ACTIVE (duyệt), ACTIVE → INACTIVE (khóa), INACTIVE → ACTIVE (mở khóa)
+    let newStatus: UserStatus;
+    if (currentUser.status === 'ACTIVE') {
+      newStatus = 'INACTIVE';
+    } else {
+      // PENDING hoặc INACTIVE → ACTIVE
+      newStatus = 'ACTIVE';
+    }
 
     const updatedUser = await prisma.user.update({
       where: { id },
@@ -164,8 +172,12 @@ router.post('/:id/toggle-status', authenticate, requirePermission('users:status'
       },
     });
 
+    const statusLabel = newStatus === 'ACTIVE'
+      ? (currentUser.status === 'PENDING' ? 'phê duyệt' : 'kích hoạt')
+      : 'khóa';
+
     res.json({
-      message: `Tài khoản ${newStatus === 'ACTIVE' ? 'kích hoạt' : 'khóa'} thành công`,
+      message: `Tài khoản đã được ${statusLabel} thành công`,
       user: updatedUser,
     });
   } catch (error: any) {

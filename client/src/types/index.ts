@@ -157,3 +157,27 @@ export interface UserPermissionsResponse {
   }>;
 }
 
+export interface UserTestStat {
+  userId: string;
+  fullName: string;
+  email: string;
+  role: Role;
+  status?: string;
+  lastLogin?: string | null;
+  totalTestCases: number;
+  untested: number;
+  passed: number;
+  failed: number;
+  blocked: number;
+  testedCount: number;
+  passRate: number;
+  completionRate: number;
+}
+
+export interface UserTestStatsResponse {
+  canViewAll: boolean;
+  totalTestCases: number;
+  userStats: UserTestStat[];
+}
+
+
