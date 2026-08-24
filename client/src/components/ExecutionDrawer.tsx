@@ -214,8 +214,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
         const uKey = getUserKey(initialExecution);
         setSelectedUserId(uKey);
         loadExecutionData(initialExecution);
-        if (initialEditing) {
+        const isOwner = !initialExecution.executedById || initialExecution.executedById === currentUser?.id;
+        if (initialEditing && isOwner) {
           setIsEditing(true);
+        } else {
+          setIsEditing(false);
         }
       } else {
         // Default to logged-in user or first tester
@@ -403,6 +406,14 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     if (!selectedExecutionId) return null;
     return allExecutions.find((e) => e.id === selectedExecutionId) || null;
   }, [allExecutions, selectedExecutionId]);
+
+  // Check if current user owns this execution
+  const isOwnExecution = useMemo(() => {
+    if (!activeExecution || !activeExecution.executedById) return true;
+    return activeExecution.executedById === currentUser?.id;
+  }, [activeExecution, currentUser]);
+
+  const canEditCurrentExecution = isOwnExecution;
 
   const selectedUserObj = userOptions.find((u) => u.id === selectedUserId);
 
@@ -918,7 +929,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                   // ==================== VIEW ONLY MODE ====================
                   <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5 border border-slate-200 dark:border-slate-700 space-y-5 shadow-sm">
                     {/* Top Bar: Title & Edit Action Button */}
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 gap-2 flex-wrap">
                       <div>
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                           <FileText className="w-4 h-4 text-blue-600" />
@@ -946,15 +957,37 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         )}
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setIsEditing(true)}
-                        className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                        <span>Điều chỉnh kết quả</span>
-                      </button>
+                      {canEditCurrentExecution ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditing(true)}
+                          className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Điều chỉnh kết quả</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleStartNewExecution}
+                          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
+                          title="Ghi nhận kết quả kiểm thử mới của riêng bạn"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5" />
+                          <span>Ghi nhận kết quả của bạn</span>
+                        </button>
+                      )}
                     </div>
+
+                    {/* Notice if viewing other user's execution */}
+                    {!canEditCurrentExecution && activeExecution && (
+                      <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <span>
+                          Bạn đang xem kết quả của <strong>{activeExecution.executedBy?.fullName || activeExecution.executedBy?.email || 'người khác'}</strong>. Bạn không thể chỉnh sửa kết quả của người khác. Nhấn <strong>"Ghi nhận kết quả của bạn"</strong> để lưu kết quả mới.
+                        </span>
+                      </div>
+                    )}
 
                     {/* Status Banner */}
                     <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
@@ -1035,14 +1068,25 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         >
                           Đóng
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setIsEditing(true)}
-                          className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>Điều chỉnh kết quả</span>
-                        </button>
+                        {canEditCurrentExecution ? (
+                          <button
+                            type="button"
+                            onClick={() => setIsEditing(true)}
+                            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Điều chỉnh kết quả</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleStartNewExecution}
+                            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Ghi nhận kết quả mới</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
