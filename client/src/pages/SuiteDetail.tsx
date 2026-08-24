@@ -21,7 +21,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { testCaseApi, exportApi, environmentApi, suiteApi, uploadApi } from '../services/api';
-import type { TestSuite, TestCase, TestExecutionImage } from '../types';
+import type { TestSuite, TestCase, TestExecution, TestExecutionImage } from '../types';
 import { StatusBadge, PlatformBadge, PriorityBadge, TestTypeBadge } from '../components/Badge';
 import { ExecutionDrawer } from '../components/ExecutionDrawer';
 import { TestCaseModal } from '../components/TestCaseModal';
@@ -65,6 +65,7 @@ export const SuiteDetail: React.FC = () => {
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerInitialEditing, setDrawerInitialEditing] = useState(false);
+  const [drawerInitialExecution, setDrawerInitialExecution] = useState<TestExecution | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Create / Edit TestCase Modal
@@ -143,10 +144,26 @@ export const SuiteDetail: React.FC = () => {
     });
   }, [id, user?.id]);
 
-  const handleOpenDrawer = (tc: TestCase, editMode: boolean = false) => {
+  const handleOpenDrawer = (tc: TestCase, editMode: boolean = false, initialExec?: TestExecution | null) => {
     setSelectedTestCase(tc);
     setDrawerInitialEditing(editMode);
+    setDrawerInitialExecution(initialExec || null);
     setIsDrawerOpen(true);
+  };
+
+  const getLatestExecutionsByUser = (executions?: TestExecution[]) => {
+    if (!executions || executions.length === 0) return [];
+    const seenUserKeys = new Set<string>();
+    const result: TestExecution[] = [];
+
+    for (const ex of executions) {
+      const userKey = ex.executedById || ex.executedBy?.email || ex.executedBy?.fullName || 'ANONYMOUS';
+      if (!seenUserKeys.has(userKey)) {
+        seenUserKeys.add(userKey);
+        result.push(ex);
+      }
+    }
+    return result;
   };
 
   const handleSaveExecution = (updatedTc: TestCase) => {
@@ -706,7 +723,7 @@ export const SuiteDetail: React.FC = () => {
                 <th className="py-3 px-4 w-[240px]">Các bước thực hiện</th>
                 <th className="py-3 px-4 w-[240px]">Kết quả mong đợi</th>
                 <th className="py-3 px-3 text-center w-[110px]">Đánh giá</th>
-                <th className="py-3 px-3 text-center w-[60px]">Lịch sử</th>
+                <th className="py-3 px-3 text-center w-[60px]">Thực thi</th>
                 <th className="py-3 px-3 text-center w-[130px]">Thao tác</th>
               </tr>
             </thead>
@@ -856,116 +873,126 @@ export const SuiteDetail: React.FC = () => {
                       </tr>
 
                       {/* Expanded execution history row */}
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={12} className="p-4 bg-slate-50/80 dark:bg-slate-800/40 border-y border-slate-200 dark:border-slate-800">
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
-                                  <Clock className="w-3.5 h-3.5 text-blue-600" />
-                                  Lịch sử thực thi ({tc.executions?.length || 0} lần)
-                                </p>
-                              </div>
-                              {tc.executions && tc.executions.length > 0 ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                  {tc.executions.map((ex) => (
-                                    <div
-                                      key={ex.id}
-                                      className="border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 bg-white dark:bg-slate-800 shadow-sm flex flex-col justify-between space-y-2 hover:border-blue-300 dark:hover:border-blue-700 transition-all text-xs"
-                                    >
-                                      <div>
-                                        {/* Card Top: User + Status */}
-                                        <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-700/60">
-                                          <div className="min-w-0 flex-1">
-                                            <p
-                                              className="font-bold text-slate-900 dark:text-white truncate"
-                                              title={ex.executedBy?.fullName || ex.executedBy?.email || 'Người dùng'}
-                                            >
-                                              {ex.executedBy?.fullName || ex.executedBy?.email || 'Người dùng'}
-                                            </p>
-                                            <p className="text-[10px] text-slate-400 mt-0.5">
-                                              {ex.executedAt ? new Date(ex.executedAt).toLocaleString('vi-VN') : '—'}
-                                            </p>
+                      {isExpanded && (() => {
+                        const latestUserExecs = getLatestExecutionsByUser(tc.executions);
+                        return (
+                          <tr>
+                            <td colSpan={12} className="p-4 bg-slate-50/80 dark:bg-slate-800/40 border-y border-slate-200 dark:border-slate-800">
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <p className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                    Kết quả thực thi mới nhất theo người dùng ({latestUserExecs.length} người)
+                                  </p>
+                                  <span className="text-[11px] text-slate-400">
+                                    Nhấp vào thẻ để mở xem chi tiết & toàn bộ lịch sử theo người dùng
+                                  </span>
+                                </div>
+                                {latestUserExecs.length > 0 ? (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                    {latestUserExecs.map((ex) => (
+                                      <div
+                                        key={ex.id}
+                                        onClick={() => handleOpenDrawer(tc, false, ex)}
+                                        className="border border-slate-200 dark:border-slate-700/80 rounded-xl p-3 bg-white dark:bg-slate-800 shadow-sm flex flex-col justify-between space-y-2 hover:border-blue-400 dark:hover:border-blue-600 hover:shadow-md transition-all text-xs cursor-pointer group"
+                                      >
+                                        <div>
+                                          {/* Card Top: User + Status */}
+                                          <div className="flex items-start justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-700/60">
+                                            <div className="min-w-0 flex-1">
+                                              <p
+                                                className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate"
+                                                title={ex.executedBy?.fullName || ex.executedBy?.email || 'Người dùng'}
+                                              >
+                                                {ex.executedBy?.fullName || ex.executedBy?.email || 'Người dùng'}
+                                              </p>
+                                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                                {ex.executedAt ? new Date(ex.executedAt).toLocaleString('vi-VN') : '—'}
+                                              </p>
+                                            </div>
+                                            <StatusBadge status={ex.status} size="sm" />
                                           </div>
-                                          <StatusBadge status={ex.status} size="sm" />
-                                        </div>
 
-                                        {/* Card Meta: Server / OS */}
-                                        <div className="flex items-center gap-2 mt-2 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
-                                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono">
-                                            {ex.server || 'Server: —'}
-                                          </span>
-                                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700">
-                                            {ex.os || 'OS: —'}
-                                          </span>
-                                        </div>
+                                          {/* Card Meta: Server / OS */}
+                                          <div className="flex items-center gap-2 mt-2 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
+                                            <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 font-mono">
+                                              {ex.server || 'Server: —'}
+                                            </span>
+                                            <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700">
+                                              {ex.os || 'OS: —'}
+                                            </span>
+                                          </div>
 
-                                        {/* Card Content: Actual Result (max 4 lines, no images) */}
-                                        <div className="mt-2 text-slate-700 dark:text-slate-300">
-                                          <span className="font-semibold text-slate-800 dark:text-slate-200 text-[11px] block mb-0.5">
-                                            Kết quả thực tế:
-                                          </span>
-                                          {ex.actualResult ? (
-                                            <div
-                                              className="history-actual-result rich-text-content text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-100 dark:border-slate-800/80 line-clamp-4"
-                                              dangerouslySetInnerHTML={{
-                                                __html: ex.actualResult.replace(/<img[^>]*>/gi, ''),
-                                              }}
-                                            />
-                                          ) : (
-                                            <span className="text-slate-400 italic text-[11px]">Chưa ghi nhận</span>
+                                          {/* Card Content: Actual Result (max 4 lines, no images) */}
+                                          <div className="mt-2 text-slate-700 dark:text-slate-300">
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200 text-[11px] block mb-0.5">
+                                              Kết quả thực tế:
+                                            </span>
+                                            {ex.actualResult ? (
+                                              <div
+                                                className="history-actual-result rich-text-content text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/60 p-2 rounded-lg border border-slate-100 dark:border-slate-800/80 line-clamp-4"
+                                                dangerouslySetInnerHTML={{
+                                                  __html: ex.actualResult.replace(/<img[^>]*>/gi, ''),
+                                                }}
+                                              />
+                                            ) : (
+                                              <span className="text-slate-400 italic text-[11px]">Chưa ghi nhận</span>
+                                            )}
+                                          </div>
+
+                                          {/* Evidence Images */}
+                                          {ex.images && ex.images.length > 0 && (
+                                            <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
+                                              <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1 mb-1.5">
+                                                <ImageIcon className="w-3 h-3 text-blue-500" />
+                                                Ảnh minh chứng ({ex.images.length})
+                                              </span>
+                                              <div className="flex items-center gap-1.5 flex-wrap">
+                                                {ex.images.slice(0, 4).map((img: TestExecutionImage, imgIdx: number) => (
+                                                  <button
+                                                    key={img.id}
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      openEvidenceLightbox(ex.images || [], imgIdx);
+                                                    }}
+                                                    className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform"
+                                                    title={img.filename}
+                                                  >
+                                                    <img
+                                                      src={uploadApi.getImageUrl(img.id)}
+                                                      alt={img.filename}
+                                                      className="w-full h-full object-cover"
+                                                    />
+                                                    {imgIdx === 3 && (ex.images?.length || 0) > 4 && (
+                                                      <div className="absolute inset-0 bg-black/60 text-white text-[10px] font-bold flex items-center justify-center">
+                                                        +{(ex.images?.length || 0) - 4}
+                                                      </div>
+                                                    )}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </div>
                                           )}
                                         </div>
 
-                                        {/* Evidence Images */}
-                                        {ex.images && ex.images.length > 0 && (
-                                          <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                                            <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1 mb-1.5">
-                                              <ImageIcon className="w-3 h-3 text-blue-500" />
-                                              Ảnh minh chứng ({ex.images.length})
-                                            </span>
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                              {ex.images.slice(0, 4).map((img, imgIdx) => (
-                                                <button
-                                                  key={img.id}
-                                                  type="button"
-                                                  onClick={() => openEvidenceLightbox(ex.images || [], imgIdx)}
-                                                  className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform"
-                                                  title={img.filename}
-                                                >
-                                                  <img
-                                                    src={uploadApi.getImageUrl(img.id)}
-                                                    alt={img.filename}
-                                                    className="w-full h-full object-cover"
-                                                  />
-                                                  {imgIdx === 3 && (ex.images?.length || 0) > 4 && (
-                                                    <div className="absolute inset-0 bg-black/60 text-white text-[10px] font-bold flex items-center justify-center">
-                                                      +{(ex.images?.length || 0) - 4}
-                                                    </div>
-                                                  )}
-                                                </button>
-                                              ))}
-                                            </div>
+                                        {/* Card Footer: Notes if present */}
+                                        {ex.notes && (
+                                          <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">
+                                            <span className="font-semibold text-slate-700 dark:text-slate-300">Ghi chú:</span> {ex.notes}
                                           </div>
                                         )}
                                       </div>
-
-                                      {/* Card Footer: Notes if present */}
-                                      {ex.notes && (
-                                        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">
-                                          <span className="font-semibold text-slate-700 dark:text-slate-300">Ghi chú:</span> {ex.notes}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-slate-400 text-xs italic py-2">Chưa có lịch sử thực thi nào cho test case này.</p>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-slate-400 text-xs italic py-2">Chưa có thực thi nào cho test case này.</p>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })()}
                     </React.Fragment>
                   );
                 })
@@ -1041,8 +1068,8 @@ export const SuiteDetail: React.FC = () => {
                       type="button"
                       onClick={() => setCurrentPage(Number(p))}
                       className={`min-w-[32px] h-8 px-2 text-xs font-bold rounded-lg transition-all shadow-sm ${validCurrentPage === p
-                          ? 'bg-blue-600 text-white shadow-blue-500/30'
-                          : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        ? 'bg-blue-600 text-white shadow-blue-500/30'
+                        : 'border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'
                         }`}
                     >
                       {p}
@@ -1079,7 +1106,11 @@ export const SuiteDetail: React.FC = () => {
         testCase={selectedTestCase}
         isOpen={isDrawerOpen}
         initialEditing={drawerInitialEditing}
-        onClose={() => setIsDrawerOpen(false)}
+        initialExecution={drawerInitialExecution}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setDrawerInitialExecution(null);
+        }}
         onSaved={handleSaveExecution}
         onEditTestCase={handleOpenEditModal}
       />
@@ -1251,7 +1282,7 @@ export const SuiteDetail: React.FC = () => {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
                   Xác nhận xóa bộ Test Suite?
                 </h3>
-                <p className="text-xs text-slate-500">Hành động này sẽ xóa vĩnh영 cả các Test Case trong suite.</p>
+                <p className="text-xs text-slate-500">Hành động này sẽ xóa vĩnh viễn tất cả các Test Case trong suite.</p>
               </div>
             </div>
 
