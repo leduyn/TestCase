@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Plus, AlertCircle, Sparkles } from 'lucide-react';
+import { X, Save, Plus, AlertCircle, Sparkles, Copy } from 'lucide-react';
 import type { TestCase } from '../types';
 import { testCaseApi } from '../services/api';
 
@@ -9,6 +9,7 @@ interface TestCaseModalProps {
   testSuiteId: string;
   defaultModule?: string;
   testCaseToEdit?: TestCase | null;
+  isDuplicate?: boolean;
   onSuccess: (savedTestCase: TestCase, isEdit: boolean) => void;
 }
 
@@ -18,9 +19,10 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
   testSuiteId,
   defaultModule = '',
   testCaseToEdit,
+  isDuplicate = false,
   onSuccess,
 }) => {
-  const isEdit = Boolean(testCaseToEdit);
+  const isEdit = Boolean(testCaseToEdit) && !isDuplicate;
 
   const [testCaseCode, setTestCaseCode] = useState('');
   const [module, setModule] = useState(defaultModule);
@@ -39,10 +41,10 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
     if (isOpen) {
       setError(null);
       if (testCaseToEdit) {
-        setTestCaseCode(testCaseToEdit.testCaseCode || '');
+        setTestCaseCode(isDuplicate ? '' : (testCaseToEdit.testCaseCode || ''));
         setModule(testCaseToEdit.module || defaultModule);
         setPlatform(testCaseToEdit.platform || 'App');
-        setTitle(testCaseToEdit.title || '');
+        setTitle(isDuplicate ? `${testCaseToEdit.title} (Bản sao)` : (testCaseToEdit.title || ''));
         setTestType(testCaseToEdit.testType || 'Luồng chuẩn');
         setPriority(testCaseToEdit.priority || 'Cao');
         setPreconditions(testCaseToEdit.preconditions || '');
@@ -60,7 +62,7 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
         setExpectedResult('');
       }
     }
-  }, [isOpen, testCaseToEdit, defaultModule]);
+  }, [isOpen, testCaseToEdit, defaultModule, isDuplicate]);
 
   if (!isOpen) return null;
 
@@ -121,15 +123,21 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
-              {isEdit ? <Sparkles className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            <div className={`w-8 h-8 rounded-lg text-white flex items-center justify-center shadow-sm ${
+              isDuplicate ? 'bg-indigo-600' : isEdit ? 'bg-blue-600' : 'bg-emerald-600'
+            }`}>
+              {isDuplicate ? <Copy className="w-4 h-4" /> : isEdit ? <Sparkles className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                {isEdit ? 'Chỉnh sửa Test Case' : 'Tạo thêm Test Case mới'}
+                {isDuplicate ? 'Nhân bản Test Case' : isEdit ? 'Chỉnh sửa Test Case' : 'Tạo thêm Test Case mới'}
               </h2>
-              <p className="text-xs text-slate-500">
-                {isEdit ? `Mã: ${testCaseToEdit?.testCaseCode}` : 'Bổ sung kịch bản kiểm thử vào bộ Test Suite hiện tại'}
+              <p className="text-xs text-slate-500 line-clamp-1">
+                {isDuplicate
+                  ? `Nhân bản từ: ${testCaseToEdit?.testCaseCode} - ${testCaseToEdit?.title}`
+                  : isEdit
+                  ? `Mã: ${testCaseToEdit?.testCaseCode}`
+                  : 'Bổ sung kịch bản kiểm thử vào bộ Test Suite hiện tại'}
               </p>
             </div>
           </div>
@@ -302,10 +310,14 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
+              className={`flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-lg shadow-md transition-all disabled:opacity-60 ${
+                isDuplicate
+                  ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20'
+                  : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'
+              }`}
             >
-              <Save className="w-4 h-4" />
-              {loading ? 'Đang lưu...' : isEdit ? 'Lưu thay đổi' : 'Tạo Test Case'}
+              {isDuplicate ? <Copy className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              {loading ? 'Đang lưu...' : isDuplicate ? 'Tạo bản sao' : isEdit ? 'Lưu thay đổi' : 'Tạo Test Case'}
             </button>
           </div>
         </form>

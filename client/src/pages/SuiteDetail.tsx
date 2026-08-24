@@ -19,6 +19,7 @@ import {
   Edit3,
   Trash2,
   Image as ImageIcon,
+  Copy,
 } from 'lucide-react';
 import { testCaseApi, exportApi, environmentApi, suiteApi, uploadApi } from '../services/api';
 import type { TestSuite, TestCase, TestExecution, TestExecutionImage } from '../types';
@@ -68,9 +69,10 @@ export const SuiteDetail: React.FC = () => {
   const [drawerInitialExecution, setDrawerInitialExecution] = useState<TestExecution | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  // Create / Edit TestCase Modal
+  // Create / Edit / Duplicate TestCase Modal
   const [isTestCaseModalOpen, setIsTestCaseModalOpen] = useState(false);
   const [testCaseToEdit, setTestCaseToEdit] = useState<TestCase | null>(null);
+  const [isDuplicateMode, setIsDuplicateMode] = useState(false);
 
   // Delete Confirmation Modal
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -194,14 +196,22 @@ export const SuiteDetail: React.FC = () => {
     }
   };
 
-  // Create & Edit Test Case Handlers
+  // Create, Edit & Duplicate Test Case Handlers
   const handleOpenCreateModal = () => {
     setTestCaseToEdit(null);
+    setIsDuplicateMode(false);
     setIsTestCaseModalOpen(true);
   };
 
   const handleOpenEditModal = (tc: TestCase) => {
     setTestCaseToEdit(tc);
+    setIsDuplicateMode(false);
+    setIsTestCaseModalOpen(true);
+  };
+
+  const handleOpenDuplicateModal = (tc: TestCase) => {
+    setTestCaseToEdit(tc);
+    setIsDuplicateMode(true);
     setIsTestCaseModalOpen(true);
   };
 
@@ -859,6 +869,15 @@ export const SuiteDetail: React.FC = () => {
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                             )}
+                            {canCreateTestCase && (
+                              <button
+                                onClick={() => handleOpenDuplicateModal(tc)}
+                                className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition-colors"
+                                title="Nhân bản Test Case này"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             {canDeleteTestCase && (
                               <button
                                 onClick={() => handleOpenDeleteModal(tc)}
@@ -1115,16 +1134,18 @@ export const SuiteDetail: React.FC = () => {
         onEditTestCase={handleOpenEditModal}
       />
 
-      {/* Create / Edit TestCase Modal */}
+      {/* Create / Edit / Duplicate TestCase Modal */}
       <TestCaseModal
         isOpen={isTestCaseModalOpen}
         onClose={() => {
           setIsTestCaseModalOpen(false);
           setTestCaseToEdit(null);
+          setIsDuplicateMode(false);
         }}
         testSuiteId={suite.id}
         defaultModule={suite.moduleName || ''}
         testCaseToEdit={testCaseToEdit}
+        isDuplicate={isDuplicateMode}
         onSuccess={handleTestCaseModalSuccess}
       />
 

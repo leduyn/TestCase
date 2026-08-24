@@ -152,7 +152,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   // Compute distinct users who tested this testcase
   const userOptions: UserOption[] = useMemo(() => {
     const map = new Map<string, UserOption>();
-    
+
     // Add current logged-in user first if available
     if (currentUser?.id) {
       map.set(currentUser.id, {
@@ -224,7 +224,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
         // Default to logged-in user or first tester
         const currentUserId = currentUser?.id;
         const hasCurrentUserExec = currentUserId && execs.some((e) => getUserKey(e) === currentUserId);
-        
+
         let targetUser = currentUserId || '';
         if (!hasCurrentUserExec && execs.length > 0) {
           targetUser = getUserKey(execs[0]);
@@ -297,7 +297,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       execId = res.data.execution.id;
       setCurrentExecutionId(execId);
       setSelectedExecutionId(execId);
-      
+
       const newExec = res.data.execution;
       const updatedExecs = [newExec, ...allExecutions.filter((e) => e.id !== newExec.id)];
       setAllExecutions(updatedExecs);
@@ -419,7 +419,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-sm flex justify-end">
-      <div className="w-full max-w-7xl bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+      <div className="w-full bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
         {/* Drawer Header */}
         <div className="px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -467,7 +467,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
         {/* Drawer Body: 3-Panel Layout (Left: History Timeline by User | Middle: Specification & Evidence | Right: Execution View/Form) */}
         <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-          
+
           {/* ==================== PANEL 1: HISTORY TIMELINE (LEFT) ==================== */}
           <div className="w-full lg:w-72 xl:w-80 border-r border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col shrink-0 overflow-hidden">
             {/* Timeline Header & User Selector */}
@@ -538,9 +538,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                       <div key={exec.id} className="relative pl-5">
                         {/* Timeline Node Dot */}
                         <div
-                          className={`absolute left-0 top-3 -translate-x-1/2 w-3.5 h-3.5 rounded-full ring-4 transition-all ${statusDotColor} ${
-                            isSelected ? 'scale-125 ring-blue-400 shadow-sm' : ''
-                          }`}
+                          className={`absolute left-0 top-3 -translate-x-1/2 w-3.5 h-3.5 rounded-full ring-4 transition-all ${statusDotColor} ${isSelected ? 'scale-125 ring-blue-400 shadow-sm' : ''
+                            }`}
                         />
 
                         {/* Timeline Card Button */}
@@ -550,23 +549,22 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                             loadExecutionData(exec);
                             setIsEditing(false);
                           }}
-                          className={`w-full text-left p-3 rounded-xl border transition-all relative ${
-                            isSelected
+                          className={`w-full text-left p-3 rounded-xl border transition-all relative ${isSelected
                               ? 'bg-blue-50/90 dark:bg-blue-950/60 border-blue-500 shadow-md shadow-blue-500/10 ring-1 ring-blue-400'
                               : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-start justify-between gap-1.5 mb-1.5">
                             <span className="text-[11px] font-bold text-slate-900 dark:text-white flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
                               {exec.executedAt
                                 ? new Date(exec.executedAt).toLocaleString('vi-VN', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                  })
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  year: 'numeric',
+                                })
                                 : '—'}
                             </span>
                             <StatusBadge status={exec.status} size="sm" />
@@ -608,7 +606,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           {/* ==================== MAIN CONTENT: SPECIFICATION & EXECUTION DETAILS ==================== */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              
+
               {/* Left/Middle Column: Specification Details & Evidence Images */}
               <div className="space-y-5">
                 {/* Specification Details Box */}
@@ -766,11 +764,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => setStatus('PASSED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                            status === 'PASSED'
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'PASSED'
                               ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400 ring-offset-2'
                               : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                          }`}
+                            }`}
                         >
                           <CheckCircle2 className="w-4 h-4 mb-1" />
                           PASSED
@@ -779,11 +776,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => setStatus('FAILED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                            status === 'FAILED'
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'FAILED'
                               ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20 ring-2 ring-rose-400 ring-offset-2 animate-pulse'
                               : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
-                          }`}
+                            }`}
                         >
                           <AlertTriangle className="w-4 h-4 mb-1" />
                           FAILED
@@ -792,11 +788,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => setStatus('BLOCKED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                            status === 'BLOCKED'
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'BLOCKED'
                               ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20 ring-2 ring-amber-400 ring-offset-2'
                               : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                          }`}
+                            }`}
                         >
                           <AlertCircle className="w-4 h-4 mb-1" />
                           BLOCKED
@@ -805,11 +800,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => setStatus('UNTESTED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${
-                            status === 'UNTESTED'
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'UNTESTED'
                               ? 'bg-slate-700 text-white border-slate-700 shadow-md'
                               : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                          }`}
+                            }`}
                         >
                           <Clock className="w-4 h-4 mb-1" />
                           CHƯA TEST
