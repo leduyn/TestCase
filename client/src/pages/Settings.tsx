@@ -1527,10 +1527,7 @@ export const Settings: React.FC = () => {
                 type="number"
                 min={50}
                 max={2000}
-                value={(() => {
-                  const v = localStorage.getItem('display_expectedResult_maxChars');
-                  return v ? parseInt(v, 10) : 255;
-                })()}
+                value={displayTruncateLimit}
                 onChange={(e) => {
                   const val = Math.max(50, Math.min(2000, parseInt(e.target.value, 10) || 255));
                   localStorage.setItem('display_expectedResult_maxChars', String(val));
