@@ -108,6 +108,12 @@ export const Settings: React.FC = () => {
   const [storageTestResult, setStorageTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [gdriveCredsFile, setGdriveCredsFile] = useState<string | null>(null);
 
+  // Display Settings
+  const [displayTruncateLimit, setDisplayTruncateLimit] = useState(() => {
+    const v = localStorage.getItem('display_expectedResult_maxChars');
+    return v ? parseInt(v, 10) : 255;
+  });
+
   const loadData = async () => {
     try {
       const [provRes, confRes, envRes, storageRes] = await Promise.all([
@@ -1495,6 +1501,48 @@ export const Settings: React.FC = () => {
 
         </div>
       )}
+
+      {/* Cấu hình Hiển thị */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-5">
+        <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Monitor className="w-5 h-5 text-violet-600" />
+            Cấu hình Hiển thị
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Tùy chỉnh cách hiển thị dữ liệu trên giao diện.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+              Giới hạn ký tự Kết quả mong đợi (trên danh sách Test Case)
+            </label>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+              Nội dung vượt quá số ký tự này sẽ được cắt ngắn và hiển thị "..." trên bảng danh sách. Hover để xem đầy đủ.
+            </p>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={50}
+                max={2000}
+                value={(() => {
+                  const v = localStorage.getItem('display_expectedResult_maxChars');
+                  return v ? parseInt(v, 10) : 255;
+                })()}
+                onChange={(e) => {
+                  const val = Math.max(50, Math.min(2000, parseInt(e.target.value, 10) || 255));
+                  localStorage.setItem('display_expectedResult_maxChars', String(val));
+                  setDisplayTruncateLimit(val);
+                }}
+                className="w-28 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-violet-500 focus:outline-none text-center font-mono font-bold"
+              />
+              <span className="text-xs text-slate-500">ký tự (mặc định: 255)</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* System Prompt AI */}
       <SystemPromptEditor />

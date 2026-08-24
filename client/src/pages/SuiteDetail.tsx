@@ -44,6 +44,12 @@ export const SuiteDetail: React.FC = () => {
   const canDeleteSuite = hasPermission('testsuite:delete');
   const canExport = hasPermission('testcase:export');
 
+  // Display Settings
+  const expectedResultMaxChars = (() => {
+    const v = localStorage.getItem('display_expectedResult_maxChars');
+    return v ? parseInt(v, 10) : 255;
+  })();
+
   const [suite, setSuite] = useState<TestSuite | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -823,8 +829,13 @@ export const SuiteDetail: React.FC = () => {
 
                         {/* Kết quả mong đợi */}
                         <td className="py-3 px-4">
-                          <div className="whitespace-pre-line break-words line-clamp-4 leading-relaxed text-emerald-900 dark:text-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/30 p-2 rounded-lg border border-emerald-200/70 dark:border-emerald-900/50 font-medium">
-                            {tc.expectedResult}
+                          <div
+                            className="whitespace-pre-line break-words leading-relaxed text-emerald-900 dark:text-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/30 p-2 rounded-lg border border-emerald-200/70 dark:border-emerald-900/50 font-medium"
+                            title={tc.expectedResult}
+                          >
+                            {tc.expectedResult && tc.expectedResult.length > expectedResultMaxChars
+                              ? tc.expectedResult.substring(0, expectedResultMaxChars) + '...'
+                              : tc.expectedResult}
                           </div>
                         </td>
 
