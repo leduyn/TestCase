@@ -206,12 +206,12 @@ export class TestCaseController {
             },
           });
 
-          // Create initial UNTESTED execution
+          // Create initial UNREVIEWED execution
           const execution = await prisma.testExecution.create({
             data: {
               testCaseId: testCase.id,
               executedById: userId,
-              status: 'UNTESTED',
+              status: 'UNREVIEWED',
             },
           });
 
@@ -293,17 +293,21 @@ export class TestCaseController {
         });
 
         const total = testCasesWithExtras.length;
+        let unreviewed = 0;
+        let untested = 0;
         let passed = 0;
         let failed = 0;
         let blocked = 0;
-        let untested = 0;
+        let retest = 0;
 
         testCasesWithExtras.forEach((tc) => {
-          const status = tc.latestExecution?.status || 'UNTESTED';
+          const status = tc.latestExecution?.status || 'UNREVIEWED';
           if (status === 'PASSED') passed++;
           else if (status === 'FAILED') failed++;
           else if (status === 'BLOCKED') blocked++;
-          else untested++;
+          else if (status === 'RETEST') retest++;
+          else if (status === 'UNTESTED') untested++;
+          else unreviewed++;
         });
 
         return {
@@ -318,10 +322,12 @@ export class TestCaseController {
           testCases: testCasesWithExtras,
           stats: {
             total,
+            unreviewed,
+            untested,
             passed,
             failed,
             blocked,
-            untested,
+            retest,
             passRate: total > 0 ? Math.round((passed / total) * 100) : 0,
           },
         };
@@ -474,12 +480,12 @@ export class TestCaseController {
         },
       });
 
-      // Create initial UNTESTED execution
+      // Create initial UNREVIEWED execution
       const initialExec = await prisma.testExecution.create({
         data: {
           testCaseId: testCase.id,
           executedById: req.user?.id || null,
-          status: 'UNTESTED',
+          status: 'UNREVIEWED',
         },
         include: {
           executedBy: {
@@ -697,15 +703,21 @@ export class TestCaseController {
           let passed = 0;
           let failed = 0;
           let blocked = 0;
+          let retest = 0;
+          let untested = 0;
+          let unreviewed = 0;
 
           for (const status of latestStatusMap.values()) {
             if (status === 'PASSED') passed++;
             else if (status === 'FAILED') failed++;
             else if (status === 'BLOCKED') blocked++;
+            else if (status === 'RETEST') retest++;
+            else if (status === 'UNTESTED') untested++;
+            else if (status === 'UNREVIEWED') unreviewed++;
           }
 
-          const testedCount = passed + failed + blocked;
-          const untested = Math.max(0, totalTestCases - testedCount);
+          const testedCount = passed + failed + blocked + retest;
+          const remainingUntested = Math.max(0, totalTestCases - testedCount);
           const passRate = testedCount > 0 ? Math.round((passed / testedCount) * 100) : 0;
           const completionRate = totalTestCases > 0 ? Math.round((testedCount / totalTestCases) * 100) : 0;
 
@@ -717,10 +729,12 @@ export class TestCaseController {
             status: user.status,
             lastLogin: user.lastLogin,
             totalTestCases,
-            untested,
+            unreviewed,
+            untested: untested || remainingUntested,
             passed,
             failed,
             blocked,
+            retest,
             testedCount,
             passRate,
             completionRate,

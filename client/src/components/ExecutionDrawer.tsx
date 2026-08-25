@@ -91,7 +91,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   // Form states
   const [server, setServer] = useState('STAGING');
   const [os, setOs] = useState('Windows 11');
-  const [status, setStatus] = useState<ExecutionStatus>('UNTESTED');
+  const [status, setStatus] = useState<ExecutionStatus>('UNREVIEWED');
   const [actualResult, setActualResult] = useState('');
   const [evaluation, setEvaluation] = useState('');
   const [notes, setNotes] = useState('');
@@ -632,6 +632,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     if (exec.status === 'PASSED') statusDotColor = 'bg-emerald-500 ring-emerald-200 dark:ring-emerald-950';
                     else if (exec.status === 'FAILED') statusDotColor = 'bg-rose-500 ring-rose-200 dark:ring-rose-950';
                     else if (exec.status === 'BLOCKED') statusDotColor = 'bg-amber-500 ring-amber-200 dark:ring-amber-950';
+                    else if (exec.status === 'RETEST') statusDotColor = 'bg-purple-500 ring-purple-200 dark:ring-purple-950';
+                    else if (exec.status === 'UNTESTED') statusDotColor = 'bg-sky-500 ring-sky-200 dark:ring-sky-950';
 
                     return (
                       <div key={exec.id} className="relative pl-5">
@@ -938,6 +940,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                                             ? 'bg-rose-500'
                                             : img.execution.status === 'BLOCKED'
                                             ? 'bg-amber-500'
+                                            : img.execution.status === 'RETEST'
+                                            ? 'bg-purple-500'
+                                            : img.execution.status === 'UNTESTED'
+                                            ? 'bg-sky-500'
                                             : 'bg-slate-400'
                                         }`}
                                       />
@@ -998,12 +1004,48 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                         Đánh giá trạng thái (Status) <span className="text-rose-500">*</span>
                       </label>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStatus('UNREVIEWED')}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'UNREVIEWED'
+                              ? 'bg-slate-700 text-white border-slate-700 shadow-md ring-2 ring-slate-400 ring-offset-1'
+                              : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
+                            }`}
+                        >
+                          <Eye className="w-4 h-4 mb-1" />
+                          CHƯA KIỂM DUYỆT
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setStatus('UNTESTED')}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'UNTESTED'
+                              ? 'bg-sky-600 text-white border-sky-600 shadow-md ring-2 ring-sky-400 ring-offset-1'
+                              : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800'
+                            }`}
+                        >
+                          <Clock className="w-4 h-4 mb-1" />
+                          CHƯA TEST
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setStatus('RETEST')}
+                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'RETEST'
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-400 ring-offset-1'
+                              : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'
+                            }`}
+                        >
+                          <RotateCcw className="w-4 h-4 mb-1" />
+                          TEST LẠI
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => setStatus('PASSED')}
                           className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'PASSED'
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400 ring-offset-2'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400 ring-offset-1'
                               : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                             }`}
                         >
@@ -1015,7 +1057,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                           type="button"
                           onClick={() => setStatus('FAILED')}
                           className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'FAILED'
-                              ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20 ring-2 ring-rose-400 ring-offset-2 animate-pulse'
+                              ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20 ring-2 ring-rose-400 ring-offset-1 animate-pulse'
                               : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
                             }`}
                         >
@@ -1027,24 +1069,12 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                           type="button"
                           onClick={() => setStatus('BLOCKED')}
                           className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'BLOCKED'
-                              ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20 ring-2 ring-amber-400 ring-offset-2'
+                              ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20 ring-2 ring-amber-400 ring-offset-1'
                               : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
                             }`}
                         >
                           <AlertCircle className="w-4 h-4 mb-1" />
                           BLOCKED
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStatus('UNTESTED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'UNTESTED'
-                              ? 'bg-slate-700 text-white border-slate-700 shadow-md'
-                              : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                            }`}
-                        >
-                          <Clock className="w-4 h-4 mb-1" />
-                          CHƯA TEST
                         </button>
                       </div>
                     </div>

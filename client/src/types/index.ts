@@ -10,7 +10,7 @@ export interface User {
   lastLogin?: string;
 }
 
-export type ExecutionStatus = 'PASSED' | 'FAILED' | 'BLOCKED' | 'UNTESTED';
+export type ExecutionStatus = 'UNREVIEWED' | 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST';
 
 export interface TestExecutionImage {
   id: string;
@@ -79,10 +79,12 @@ export interface TestCase {
 
 export interface TestSuiteStats {
   total: number;
+  unreviewed?: number;
+  untested: number;
   passed: number;
   failed: number;
   blocked: number;
-  untested: number;
+  retest?: number;
   passRate: number;
 }
 
@@ -194,10 +196,12 @@ export interface UserTestStat {
   status?: string;
   lastLogin?: string | null;
   totalTestCases: number;
+  unreviewed?: number;
   untested: number;
   passed: number;
   failed: number;
   blocked: number;
+  retest?: number;
   testedCount: number;
   passRate: number;
   completionRate: number;

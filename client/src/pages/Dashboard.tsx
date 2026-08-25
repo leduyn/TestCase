@@ -19,6 +19,8 @@ import {
   AlertCircle,
   Shield,
   UserCheck,
+  RotateCcw,
+  Eye,
 } from 'lucide-react';
 import { testCaseApi, exportApi } from '../services/api';
 import type { TestSuite, UserTestStat } from '../types';
@@ -85,9 +87,12 @@ export const Dashboard: React.FC = () => {
   // Aggregated stats
   const totalSuites = suites.length;
   const totalCases = suites.reduce((acc, s) => acc + (s.stats?.total || 0), 0);
+  const totalUnreviewed = suites.reduce((acc, s) => acc + (s.stats?.unreviewed || 0), 0);
+  const totalUntested = suites.reduce((acc, s) => acc + (s.stats?.untested || 0), 0);
   const totalPassed = suites.reduce((acc, s) => acc + (s.stats?.passed || 0), 0);
   const totalFailed = suites.reduce((acc, s) => acc + (s.stats?.failed || 0), 0);
-  const totalUntested = suites.reduce((acc, s) => acc + (s.stats?.untested || 0), 0);
+  const totalBlocked = suites.reduce((acc, s) => acc + (s.stats?.blocked || 0), 0);
+  const totalRetest = suites.reduce((acc, s) => acc + (s.stats?.retest || 0), 0);
   const overallPassRate = totalCases > 0 ? Math.round((totalPassed / totalCases) * 100) : 0;
 
   return (
@@ -136,62 +141,92 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Tổng số Test Case
+            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Tổng số Case
             </p>
-            <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{totalCases}</p>
-            <p className="text-xs text-slate-500 mt-1">{totalSuites} bộ Test Suite</p>
+            <p className="text-xl font-black text-slate-900 dark:text-white mt-1">{totalCases}</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{totalSuites} Test Suite</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
-            <Layers className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
+            <Layers className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-              Đạt (Passed)
+            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              Chưa kiểm duyệt
             </p>
-            <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-              {totalPassed}
+            <p className="text-xl font-black text-slate-700 dark:text-slate-300 mt-1">
+              {totalUnreviewed}
             </p>
-            <p className="text-xs text-slate-500 mt-1">Tỷ lệ: {overallPassRate}%</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Chờ Lead duyệt</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center">
-            <CheckCircle2 className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 flex items-center justify-center">
+            <Eye className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
-              Thất bại (Failed)
+            <p className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 uppercase tracking-wider">
+              Chưa Test
             </p>
-            <p className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">
-              {totalFailed}
-            </p>
-            <p className="text-xs text-slate-500 mt-1">Cần xem xét & fix lỗi</p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
-            <AlertTriangle className="w-6 h-6" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Chưa Test (Untested)
-            </p>
-            <p className="text-2xl font-black text-slate-700 dark:text-slate-300 mt-1">
+            <p className="text-xl font-black text-sky-600 dark:text-sky-400 mt-1">
               {totalUntested}
             </p>
-            <p className="text-xs text-slate-500 mt-1">Đang chờ thực thi</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Sẵn sàng test</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 flex items-center justify-center">
-            <Clock className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 flex items-center justify-center">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+              Đạt (Passed)
+            </p>
+            <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+              {totalPassed}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Tỷ lệ: {overallPassRate}%</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+              Thất bại (Failed)
+            </p>
+            <p className="text-xl font-black text-rose-600 dark:text-rose-400 mt-1">
+              {totalFailed}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Cần fix lỗi</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider">
+              Test lại / Chặn
+            </p>
+            <p className="text-xl font-black text-purple-600 dark:text-purple-400 mt-1">
+              {totalRetest + totalBlocked}
+            </p>
+            <p className="text-[10px] text-slate-500 mt-0.5">{totalRetest} retest, {totalBlocked} block</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center">
+            <RotateCcw className="w-5 h-5" />
           </div>
         </div>
       </div>
@@ -405,6 +440,11 @@ export const Dashboard: React.FC = () => {
                                 style={{ width: `${stat.totalTestCases > 0 ? (stat.failed / stat.totalTestCases) * 100 : 0}%` }}
                                 className="bg-rose-500 h-full"
                                 title={`Failed: ${stat.failed}`}
+                              />
+                              <div
+                                style={{ width: `${stat.totalTestCases > 0 ? ((stat.retest || 0) / stat.totalTestCases) * 100 : 0}%` }}
+                                className="bg-purple-500 h-full"
+                                title={`Retest: ${stat.retest || 0}`}
                               />
                               <div
                                 style={{ width: `${stat.totalTestCases > 0 ? (stat.blocked / stat.totalTestCases) * 100 : 0}%` }}

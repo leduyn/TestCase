@@ -15,6 +15,8 @@ import {
   Image as ImageIcon,
   ChevronRight,
   Sparkles,
+  RotateCcw,
+  Eye,
 } from 'lucide-react';
 import type { TestCase, TestExecution, ExecutionStatus } from '../../types';
 import { PlatformBadge, PriorityBadge, TestTypeBadge } from '../Badge';
@@ -61,7 +63,7 @@ export const TestCaseKanbanCard: React.FC<TestCaseKanbanCardProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const exec = testCase.latestExecution;
-  const currentStatus: ExecutionStatus = (exec?.status || 'UNTESTED').toUpperCase() as ExecutionStatus;
+  const currentStatus: ExecutionStatus = (exec?.status || 'UNREVIEWED').toUpperCase() as ExecutionStatus;
   const isFailed = currentStatus === 'FAILED';
 
   // Close menu when clicking outside
@@ -179,6 +181,39 @@ export const TestCaseKanbanCard: React.FC<TestCaseKanbanCardProps> = ({
                           type="button"
                           onClick={() => {
                             setIsMenuOpen(false);
+                            onQuickStatusChange(testCase, 'UNREVIEWED');
+                          }}
+                          className="w-full px-2 py-1 text-left flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:underline"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>Chưa kiểm duyệt</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMenuOpen(false);
+                            onQuickStatusChange(testCase, 'UNTESTED');
+                          }}
+                          className="w-full px-2 py-1 text-left flex items-center gap-1.5 text-sky-600 dark:text-sky-400 hover:underline"
+                        >
+                          <Clock className="w-3 h-3" />
+                          <span>Chưa test</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMenuOpen(false);
+                            onQuickStatusChange(testCase, 'RETEST');
+                          }}
+                          className="w-full px-2 py-1 text-left flex items-center gap-1.5 text-purple-600 dark:text-purple-400 hover:underline"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Test lại</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsMenuOpen(false);
                             onQuickStatusChange(testCase, 'PASSED');
                           }}
                           className="w-full px-2 py-1 text-left flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 hover:underline"
@@ -207,17 +242,6 @@ export const TestCaseKanbanCard: React.FC<TestCaseKanbanCardProps> = ({
                         >
                           <AlertTriangle className="w-3 h-3" />
                           <span>Blocked</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsMenuOpen(false);
-                            onQuickStatusChange(testCase, 'UNTESTED');
-                          }}
-                          className="w-full px-2 py-1 text-left flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:underline"
-                        >
-                          <Clock className="w-3 h-3" />
-                          <span>Chưa test</span>
                         </button>
                       </div>
                     )}

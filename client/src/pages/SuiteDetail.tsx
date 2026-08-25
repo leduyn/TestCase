@@ -24,6 +24,8 @@ import {
   Play,
   LayoutGrid,
   List as ListIcon,
+  RotateCcw,
+  Eye,
 } from 'lucide-react';
 import { testCaseApi, exportApi, environmentApi, suiteApi, uploadApi } from '../services/api';
 import type { TestSuite, TestCase, TestExecution, TestExecutionImage } from '../types';
@@ -64,7 +66,7 @@ export const SuiteDetail: React.FC = () => {
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'UNTESTED'
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL' | 'UNREVIEWED' | 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST'
   const [selectedPlatform, setSelectedPlatform] = useState<string>('ALL'); // 'ALL' | 'App' | 'CMS' | 'Web'
   const [selectedPriority, setSelectedPriority] = useState<string>('ALL');
   const [selectedServer, setSelectedServer] = useState<string>('ALL');
@@ -365,12 +367,14 @@ export const SuiteDetail: React.FC = () => {
     });
   };
 
-  // Status sort order: UNTESTED → FAILED → BLOCKED → PASSED
+  // Status sort order: UNREVIEWED → UNTESTED → FAILED → BLOCKED → RETEST → PASSED
   const statusOrder: Record<string, number> = {
-    UNTESTED: 0,
-    FAILED: 1,
-    BLOCKED: 2,
-    PASSED: 3,
+    UNREVIEWED: 0,
+    UNTESTED: 1,
+    FAILED: 2,
+    BLOCKED: 3,
+    RETEST: 4,
+    PASSED: 5,
   };
 
   // Helper to extract the latest update timestamp of a TestCase
@@ -393,9 +397,9 @@ export const SuiteDetail: React.FC = () => {
 
   // Apply sort by status, then by latest update time (newest first within the same status)
   const sortedCases = [...testCases].sort((a, b) => {
-    const aStatus = (a.latestExecution?.status || 'UNTESTED').toUpperCase();
-    const bStatus = (b.latestExecution?.status || 'UNTESTED').toUpperCase();
-    const statusDiff = (statusOrder[aStatus] ?? 4) - (statusOrder[bStatus] ?? 4);
+    const aStatus = (a.latestExecution?.status || 'UNREVIEWED').toUpperCase();
+    const bStatus = (b.latestExecution?.status || 'UNREVIEWED').toUpperCase();
+    const statusDiff = (statusOrder[aStatus] ?? 6) - (statusOrder[bStatus] ?? 6);
 
     if (statusDiff !== 0) {
       return statusDiff;
@@ -414,7 +418,7 @@ export const SuiteDetail: React.FC = () => {
   // Filter logic
   const filteredCases = sortedCases.filter((tc) => {
     const exec = tc.latestExecution;
-    const status = (exec?.status || 'UNTESTED').toUpperCase();
+    const status = (exec?.status || 'UNREVIEWED').toUpperCase();
     const platform = (tc.platform || '').toUpperCase();
     const priority = (tc.priority || '').toLowerCase();
     const server = (exec?.server || '').toUpperCase();
@@ -486,17 +490,21 @@ export const SuiteDetail: React.FC = () => {
 
   // Calculate live stats
   const total = testCases.length;
+  let unreviewed = 0;
+  let untested = 0;
   let passed = 0;
   let failed = 0;
   let blocked = 0;
-  let untested = 0;
+  let retest = 0;
 
   testCases.forEach((tc) => {
-    const s = tc.latestExecution?.status || 'UNTESTED';
+    const s = tc.latestExecution?.status || 'UNREVIEWED';
     if (s === 'PASSED') passed++;
     else if (s === 'FAILED') failed++;
     else if (s === 'BLOCKED') blocked++;
-    else untested++;
+    else if (s === 'RETEST') retest++;
+    else if (s === 'UNTESTED') untested++;
+    else unreviewed++;
   });
   const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
 
@@ -681,6 +689,26 @@ export const SuiteDetail: React.FC = () => {
                 Tất cả ({total})
               </button>
               <button
+                onClick={() => setSelectedStatus('UNREVIEWED')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNREVIEWED'
+                  ? 'bg-slate-700 text-white shadow-sm ring-2 ring-slate-400'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Chưa kiểm duyệt ({unreviewed})
+              </button>
+              <button
+                onClick={() => setSelectedStatus('UNTESTED')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNTESTED'
+                  ? 'bg-sky-600 text-white shadow-sm ring-2 ring-sky-400'
+                  : 'bg-sky-50 text-sky-800 hover:bg-sky-100 dark:bg-sky-950/60 dark:text-sky-300'
+                  }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Chưa test ({untested})
+              </button>
+              <button
                 onClick={() => setSelectedStatus('PASSED')}
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'PASSED'
                   ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
@@ -711,14 +739,14 @@ export const SuiteDetail: React.FC = () => {
                 Blocked ({blocked})
               </button>
               <button
-                onClick={() => setSelectedStatus('UNTESTED')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNTESTED'
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                onClick={() => setSelectedStatus('RETEST')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'RETEST'
+                  ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-400'
+                  : 'bg-purple-50 text-purple-800 hover:bg-purple-100 dark:bg-purple-950/60 dark:text-purple-300'
                   }`}
               >
-                <Clock className="w-3.5 h-3.5" />
-                Chưa test ({untested})
+                <RotateCcw className="w-3.5 h-3.5" />
+                Test lại ({retest})
               </button>
             </div>
 

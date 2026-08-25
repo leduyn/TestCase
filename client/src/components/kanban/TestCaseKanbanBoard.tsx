@@ -8,6 +8,8 @@ import {
   ArrowRight,
   Server,
   Monitor,
+  RotateCcw,
+  Eye,
 } from 'lucide-react';
 import type { TestCase, TestExecution, ExecutionStatus } from '../../types';
 import { KanbanColumn } from './KanbanColumn';
@@ -53,9 +55,11 @@ interface ColumnConfig {
 
 // Status display info
 const STATUS_INFO: Record<ExecutionStatus, { label: string; color: string; bgColor: string; borderColor: string }> = {
-  UNTESTED: { label: 'Chưa thực hiện', color: 'text-slate-700 dark:text-slate-200', bgColor: 'bg-slate-100 dark:bg-slate-700', borderColor: 'border-slate-300' },
+  UNREVIEWED: { label: 'Chưa kiểm duyệt', color: 'text-slate-700 dark:text-slate-200', bgColor: 'bg-slate-100 dark:bg-slate-700', borderColor: 'border-slate-300' },
+  UNTESTED: { label: 'Chưa test', color: 'text-sky-700 dark:text-sky-300', bgColor: 'bg-sky-50 dark:bg-sky-950/60', borderColor: 'border-sky-300' },
   FAILED: { label: 'Failed', color: 'text-rose-700 dark:text-rose-300', bgColor: 'bg-rose-50 dark:bg-rose-950/60', borderColor: 'border-rose-300' },
   BLOCKED: { label: 'Blocked', color: 'text-amber-700 dark:text-amber-300', bgColor: 'bg-amber-50 dark:bg-amber-950/60', borderColor: 'border-amber-300' },
+  RETEST: { label: 'Test lại', color: 'text-purple-700 dark:text-purple-300', bgColor: 'bg-purple-50 dark:bg-purple-950/60', borderColor: 'border-purple-300' },
   PASSED: { label: 'Passed', color: 'text-emerald-700 dark:text-emerald-300', bgColor: 'bg-emerald-50 dark:bg-emerald-950/60', borderColor: 'border-emerald-300' },
 };
 
@@ -101,9 +105,9 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
 
   const columnsConfig: ColumnConfig[] = [
     {
-      status: 'UNTESTED',
-      title: 'Chưa thực hiện',
-      icon: <Clock className="w-4 h-4 text-slate-500" />,
+      status: 'UNREVIEWED',
+      title: 'Chưa kiểm duyệt',
+      icon: <Eye className="w-4 h-4 text-slate-500" />,
       theme: {
         headerBg: 'bg-slate-50/90 dark:bg-slate-900/80',
         borderTop: 'border-t-slate-400',
@@ -112,6 +116,20 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
         countBg: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200',
         highlightBorder: 'ring-slate-400 border-slate-400',
         highlightBg: 'bg-slate-100/60 dark:bg-slate-800/60',
+      },
+    },
+    {
+      status: 'UNTESTED',
+      title: 'Chưa test',
+      icon: <Clock className="w-4 h-4 text-sky-600 dark:text-sky-400" />,
+      theme: {
+        headerBg: 'bg-sky-50/60 dark:bg-sky-950/40',
+        borderTop: 'border-t-sky-500',
+        badgeBg: 'bg-sky-100 dark:bg-sky-950/60',
+        badgeText: 'text-sky-700 dark:text-sky-300',
+        countBg: 'bg-sky-100 dark:bg-sky-900/60 text-sky-700 dark:text-sky-300',
+        highlightBorder: 'ring-sky-400 border-sky-400',
+        highlightBg: 'bg-sky-50/60 dark:bg-sky-950/40',
       },
     },
     {
@@ -143,6 +161,20 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
       },
     },
     {
+      status: 'RETEST',
+      title: 'Test lại',
+      icon: <RotateCcw className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
+      theme: {
+        headerBg: 'bg-purple-50/60 dark:bg-purple-950/40',
+        borderTop: 'border-t-purple-500',
+        badgeBg: 'bg-purple-100 dark:bg-purple-950/60',
+        badgeText: 'text-purple-700 dark:text-purple-300',
+        countBg: 'bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300',
+        highlightBorder: 'ring-purple-400 border-purple-400',
+        highlightBg: 'bg-purple-50/60 dark:bg-purple-950/40',
+      },
+    },
+    {
       status: 'PASSED',
       title: 'Passed',
       icon: <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
@@ -161,18 +193,20 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
   // Group test cases by status
   const groupedCases = useMemo(() => {
     const groups: Record<ExecutionStatus, TestCase[]> = {
+      UNREVIEWED: [],
       UNTESTED: [],
       FAILED: [],
       BLOCKED: [],
+      RETEST: [],
       PASSED: [],
     };
 
     testCases.forEach((tc) => {
-      const status = (tc.latestExecution?.status || 'UNTESTED').toUpperCase() as ExecutionStatus;
+      const status = (tc.latestExecution?.status || 'UNREVIEWED').toUpperCase() as ExecutionStatus;
       if (groups[status]) {
         groups[status].push(tc);
       } else {
-        groups['UNTESTED'].push(tc);
+        groups['UNREVIEWED'].push(tc);
       }
     });
 
@@ -342,8 +376,8 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
 
   return (
     <div className="w-full">
-      {/* 4 Kanban Columns with responsive horizontal scrolling */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 overflow-x-auto pb-4">
+      {/* 6 Kanban Columns with responsive horizontal scrolling */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto pb-4">
         {columnsConfig.map((col) => (
           <KanbanColumn
             key={col.status}

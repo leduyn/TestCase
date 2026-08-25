@@ -1,0 +1,3 @@
+-- AlterEnum
+ALTER TYPE "TestExecutionStatus" ADD VALUE IF NOT EXISTS 'UNREVIEWED';
+ALTER TYPE "TestExecutionStatus" ADD VALUE IF NOT EXISTS 'RETEST';

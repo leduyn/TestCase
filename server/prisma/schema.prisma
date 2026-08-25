@@ -28,10 +28,12 @@ enum Priority {
 }
 
 enum TestExecutionStatus {
+  UNREVIEWED
+  UNTESTED
   PASSED
   FAILED
   BLOCKED
-  UNTESTED
+  RETEST
 }
 
 enum PermissionEffect {
@@ -167,7 +169,7 @@ model TestExecution {
   
   server       String?             // DEV, STAGING, UAT, PROD, IP...
   os           String?             // Windows 11, macOS, Android 14, iOS 17...
-  status       TestExecutionStatus @default(UNTESTED)
+  status       TestExecutionStatus @default(UNREVIEWED)
   actualResult String?             @db.Text @map("actual_result")
   evaluation   String?             @db.Text
   notes        String?             @db.Text

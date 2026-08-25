@@ -74,6 +74,9 @@ export class ExcelExporter {
     const COLOR_PASSED = 'C6EFCE'; // Soft Green Passed
     const COLOR_FAILED = 'FFC7CE'; // Soft Red Failed
     const COLOR_BLOCKED = 'FFE699'; // Orange Blocked
+    const COLOR_RETEST = 'E1D5E7'; // Soft Purple Retest
+    const COLOR_UNTESTED = 'D9E1F2'; // Soft Blue Untested
+    const COLOR_UNREVIEWED = 'F2F2F2'; // Light Gray Unreviewed
 
     // Borders
     const thinBorder: Partial<ExcelJS.Borders> = {
@@ -220,19 +223,29 @@ export class ExcelExporter {
            }
          } else if (idx === 9 || idx === 10) { // Server & OS
            cell.alignment = { horizontal: 'center', vertical: 'middle' };
-         } else if (idx === 12) { // Status (Passed / Failed / Blocked / Untested)
-           cell.alignment = { horizontal: 'center', vertical: 'middle' };
-           const s = (val || '').toUpperCase();
-           if (s === 'PASSED') {
-             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_PASSED } };
-             cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '276A3C' } };
-           } else if (s === 'FAILED') {
-             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FAILED } };
-             cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '9C0006' } };
-           } else if (s === 'BLOCKED') {
-             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_BLOCKED } };
-             cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '9C6500' } };
-           }
+          } else if (idx === 12) { // Status
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            const status = this.mapStatusToVietnamese(val);
+            cell.value = status;
+            if (status === 'Đạt') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_PASSED } };
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '276A3C' } };
+            } else if (status === 'Thất bại') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_FAILED } };
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '9C0006' } };
+            } else if (status === 'Chặn') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_BLOCKED } };
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '9C6500' } };
+            } else if (status === 'Test lại') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_RETEST } };
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '5B2C6F' } };
+            } else if (status === 'Chưa test') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_UNTESTED } };
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '1B4F72' } };
+            } else {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_UNREVIEWED } };
+              cell.font = { name: 'Calibri', size: 10, color: { argb: '666666' } };
+            }
          } else if (idx === 14) { // Executed By
            cell.alignment = { horizontal: 'center', vertical: 'middle' };
            // No special styling needed
@@ -247,13 +260,15 @@ export class ExcelExporter {
   }
 
   static mapStatusToVietnamese(status: string): string {
-    const s = (status || 'UNTESTED').toUpperCase();
+    const s = (status || 'UNREVIEWED').toUpperCase();
     switch (s) {
       case 'PASSED': return 'Đạt';
       case 'FAILED': return 'Thất bại';
       case 'BLOCKED': return 'Chặn';
+      case 'RETEST': return 'Test lại';
       case 'UNTESTED': return 'Chưa test';
-      default: return 'Chưa test';
+      case 'UNREVIEWED': return 'Chưa kiểm duyệt';
+      default: return 'Chưa kiểm duyệt';
     }
   }
 
@@ -276,7 +291,9 @@ export class ExcelExporter {
     const COLOR_PASSED = 'C6EFCE'; // Soft Green Passed
     const COLOR_FAILED = 'FFC7CE'; // Soft Red Failed
     const COLOR_BLOCKED = 'FFE699'; // Orange Blocked
-    const COLOR_UNTESTED = 'F2F2F2'; // Light Gray
+    const COLOR_RETEST = 'E1D5E7'; // Soft Purple Retest
+    const COLOR_UNTESTED = 'D9E1F2'; // Soft Blue Untested
+    const COLOR_UNREVIEWED = 'F2F2F2'; // Light Gray Unreviewed
 
     // Borders
     const thinBorder: Partial<ExcelJS.Borders> = {
@@ -448,6 +465,7 @@ export class ExcelExporter {
             // Trạng thái column - center align with color coding
             cell.alignment = { horizontal: 'center', vertical: 'middle' };
             const status = this.mapStatusToVietnamese(val);
+            cell.value = status;
             if (status === 'Đạt') {
               cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_PASSED } };
               cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '276A3C' } };
@@ -457,8 +475,14 @@ export class ExcelExporter {
             } else if (status === 'Chặn') {
               cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_BLOCKED } };
               cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '9C6500' } };
-            } else {
+            } else if (status === 'Test lại') {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_RETEST } };
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '5B2C6F' } };
+            } else if (status === 'Chưa test') {
               cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_UNTESTED } };
+              cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: '1B4F72' } };
+            } else {
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR_UNREVIEWED } };
               cell.font = { name: 'Calibri', size: 10, color: { argb: '666666' } };
             }
           }

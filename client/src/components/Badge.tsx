@@ -1,12 +1,12 @@
 import React from 'react';
-import { CheckCircle2, AlertTriangle, AlertCircle, Clock, Smartphone, Monitor, Globe } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, AlertCircle, Clock, RotateCcw, Eye, Smartphone, Monitor, Globe } from 'lucide-react';
 import type { ExecutionStatus } from '../types';
 
 export const StatusBadge: React.FC<{ status?: ExecutionStatus | string | null; size?: 'sm' | 'md' }> = ({
-  status = 'UNTESTED',
+  status = 'UNREVIEWED',
   size = 'sm',
 }) => {
-  const normalized = (status || 'UNTESTED').toUpperCase();
+  const normalized = (status || 'UNREVIEWED').toUpperCase();
 
   const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs font-semibold' : 'px-3 py-1 text-sm font-semibold';
 
@@ -37,10 +37,28 @@ export const StatusBadge: React.FC<{ status?: ExecutionStatus | string | null; s
     );
   }
 
+  if (normalized === 'RETEST') {
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300 dark:border-purple-800 ${sizeClasses}`}>
+        <RotateCcw className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+        TEST LẠI
+      </span>
+    );
+  }
+
+  if (normalized === 'UNTESTED') {
+    return (
+      <span className={`inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 dark:bg-sky-950/70 dark:text-sky-300 border border-sky-300 dark:border-sky-800 ${sizeClasses}`}>
+        <Clock className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
+        CHƯA TEST
+      </span>
+    );
+  }
+
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 ${sizeClasses}`}>
-      <Clock className="w-3.5 h-3.5" />
-      CHƯA TEST
+    <span className={`inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 ${sizeClasses}`}>
+      <Eye className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+      CHƯA KIỂM DUYỆT
     </span>
   );
 };

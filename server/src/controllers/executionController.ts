@@ -15,8 +15,8 @@ export class ExecutionController {
       }
 
       // Validate status
-      const validStatuses: TestExecutionStatus[] = ['PASSED', 'FAILED', 'BLOCKED', 'UNTESTED'];
-      const executionStatus: TestExecutionStatus = validStatuses.includes(status) ? status : 'UNTESTED';
+      const validStatuses: TestExecutionStatus[] = ['UNREVIEWED', 'UNTESTED', 'PASSED', 'FAILED', 'BLOCKED', 'RETEST'];
+      const executionStatus: TestExecutionStatus = validStatuses.includes(status) ? status : 'UNREVIEWED';
 
       const execution = await prisma.testExecution.create({
         data: {
@@ -69,7 +69,7 @@ export class ExecutionController {
         return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa kết quả của người khác' });
       }
 
-      const validStatuses: TestExecutionStatus[] = ['PASSED', 'FAILED', 'BLOCKED', 'UNTESTED'];
+      const validStatuses: TestExecutionStatus[] = ['UNREVIEWED', 'UNTESTED', 'PASSED', 'FAILED', 'BLOCKED', 'RETEST'];
       const executionStatus: TestExecutionStatus = validStatuses.includes(status) ? status : existing.status;
 
       const updated = await prisma.testExecution.update({

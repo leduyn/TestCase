@@ -125,7 +125,7 @@ export class ImportController {
             data: {
               testCaseId: testCase.id,
               executedById: userId,
-              status: 'UNTESTED',
+              status: 'UNREVIEWED',
             },
           });
 
@@ -240,7 +240,7 @@ export class ImportController {
             data: {
               testCaseId: testCase.id,
               executedById: userId,
-              status: 'UNTESTED',
+              status: 'UNREVIEWED',
             },
           });
 
