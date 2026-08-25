@@ -391,6 +391,7 @@ export class TestCaseController {
           priority: tc.priority,
           orderIndex: tc.orderIndex,
           createdAt: tc.createdAt,
+          updatedAt: tc.updatedAt,
           latestExecution: userExec || null,
           results: filteredExecutions, // Filtered list of executions based on permissions
         };

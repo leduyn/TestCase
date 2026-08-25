@@ -1,15 +1,26 @@
 import { Response } from 'express';
+import path from 'path';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { getStorageConfig, createStorageProvider } from '../services/storageService';
+import { canViewAllExecutionHistory } from '../services/permissionService';
+import { ThumbnailService } from '../services/thumbnailService';
 
 const ALLOWED_MIME_TYPES = [
+  // Image formats
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
   'image/bmp',
   'image/svg+xml',
+  // Video formats
+  'video/mp4',
+  'video/webm',
+  'video/ogg',
+  'video/quicktime',   // .mov
+  'video/x-msvideo',   // .avi
+  'video/x-matroska',  // .mkv
 ];
 
 export class UploadController {
@@ -23,7 +34,7 @@ export class UploadController {
       const files = req.files as Express.Multer.File[];
 
       if (!files || files.length === 0) {
-        return res.status(400).json({ message: 'Vui lòng chọn ít nhất 1 ảnh để upload' });
+        return res.status(400).json({ message: 'Vui lòng chọn ít nhất 1 file ảnh/video để upload' });
       }
 
       // Verify execution exists
@@ -45,7 +56,7 @@ export class UploadController {
       const existingCount = execution.images.length;
       if (existingCount + files.length > maxFiles) {
         return res.status(400).json({
-          message: `Vượt quá giới hạn ảnh. Hiện tại: ${existingCount}/${maxFiles}. Bạn chỉ có thể upload thêm ${maxFiles - existingCount} ảnh.`,
+          message: `Vượt quá giới hạn file. Hiện tại: ${existingCount}/${maxFiles}. Bạn chỉ có thể upload thêm ${maxFiles - existingCount} file.`,
         });
       }
 
@@ -53,7 +64,7 @@ export class UploadController {
       for (const file of files) {
         if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
           return res.status(400).json({
-            message: `File "${file.originalname}" không phải định dạng ảnh hợp lệ. Chỉ chấp nhận: JPEG, PNG, GIF, WebP, BMP, SVG`,
+            message: `File "${file.originalname}" không phải định dạng hợp lệ. Chỉ chấp nhận: Ảnh (JPEG, PNG, GIF, WebP, BMP, SVG) hoặc Video (MP4, WebM, OGG, MOV, AVI, MKV)`,
           });
         }
         if (file.size > maxSizeBytes) {
@@ -70,6 +81,24 @@ export class UploadController {
       for (const file of files) {
         const result = await provider.upload(file.buffer, file.originalname, executionId);
 
+        let thumbnailPath: string | null = null;
+        const isVideo = ThumbnailService.isVideo(file.mimetype, file.originalname);
+
+        if (isVideo) {
+          try {
+            const thumbBuffer = await ThumbnailService.generateThumbnailFromBuffer(file.buffer, file.originalname);
+            if (thumbBuffer) {
+              const ext = path.extname(file.originalname);
+              const baseName = path.basename(file.originalname, ext);
+              const thumbFilename = `${baseName}_thumb.jpg`;
+              const thumbResult = await provider.upload(thumbBuffer, thumbFilename, executionId);
+              thumbnailPath = thumbResult.storagePath;
+            }
+          } catch (thumbErr: any) {
+            console.warn(`[UploadController] Failed to generate thumbnail for ${file.originalname}:`, thumbErr.message);
+          }
+        }
+
         const image = await prisma.testExecutionImage.create({
           data: {
             executionId,
@@ -79,6 +108,7 @@ export class UploadController {
             mimeType: file.mimetype,
             fileSize: file.size,
             publicUrl: result.publicUrl || null,
+            thumbnailPath,
           },
         });
 
@@ -86,7 +116,7 @@ export class UploadController {
       }
 
       return res.status(201).json({
-        message: `Upload ${uploadedImages.length} ảnh thành công`,
+        message: `Upload ${uploadedImages.length} file thành công`,
         images: uploadedImages,
         currentCount: existingCount + uploadedImages.length,
         maxFiles,
@@ -122,6 +152,9 @@ export class UploadController {
 
       try {
         await provider.delete(image.storagePath);
+        if (image.thumbnailPath) {
+          await provider.delete(image.thumbnailPath);
+        }
       } catch (err: any) {
         console.warn(`Warning: Could not delete file from storage (${image.storagePath}):`, err.message);
       }
@@ -184,6 +217,101 @@ export class UploadController {
   }
 
   /**
+   * GET /api/uploads/images/:imageId/thumbnail
+   * View thumbnail of a video or fallback to image
+   */
+  static async getThumbnail(req: AuthRequest, res: Response) {
+    try {
+      const { imageId } = req.params;
+
+      const image = await prisma.testExecutionImage.findUnique({
+        where: { id: imageId },
+      });
+
+      if (!image) {
+        return res.status(404).json({ message: 'Không tìm thấy ảnh' });
+      }
+
+      const storageConfig = await getStorageConfig();
+      const provider = createStorageProvider(storageConfig);
+
+      // If video and has thumbnailPath, stream thumbnail
+      if (image.thumbnailPath) {
+        const result = await provider.getFileStream(image.thumbnailPath);
+        if (result) {
+          res.setHeader('Content-Type', 'image/jpeg');
+          res.setHeader('Content-Disposition', `inline; filename="thumb_${encodeURIComponent(image.filename)}.jpg"`);
+          res.setHeader('Cache-Control', 'public, max-age=604800');
+          return result.stream.pipe(res);
+        }
+      }
+
+      // Fallback: If image (not video), stream original image
+      const isVideo = ThumbnailService.isVideo(image.mimeType, image.filename);
+      if (!isVideo) {
+        const result = await provider.getFileStream(image.storagePath);
+        if (result) {
+          res.setHeader('Content-Type', result.mimeType);
+          res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(image.filename)}"`);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return result.stream.pipe(res);
+        }
+      }
+
+      // If video without thumbnailPath, generate thumbnail on-the-fly and cache to storage
+      if (isVideo) {
+        try {
+          const videoStreamResult = await provider.getFileStream(image.storagePath);
+          if (videoStreamResult) {
+            const chunks: Buffer[] = [];
+            for await (const chunk of videoStreamResult.stream) {
+              chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+            }
+            const videoBuffer = Buffer.concat(chunks);
+            const thumbBuffer = await ThumbnailService.generateThumbnailFromBuffer(videoBuffer, image.filename);
+            if (thumbBuffer) {
+              const ext = path.extname(image.filename);
+              const baseName = path.basename(image.filename, ext);
+              const thumbFilename = `${baseName}_thumb.jpg`;
+              const thumbResult = await provider.upload(thumbBuffer, thumbFilename, image.executionId);
+
+              // Update DB record asynchronously so subsequent requests hit thumbnailPath
+              await prisma.testExecutionImage.update({
+                where: { id: image.id },
+                data: { thumbnailPath: thumbResult.storagePath },
+              }).catch((e) => console.warn('Could not update thumbnailPath in DB:', e));
+
+              res.setHeader('Content-Type', 'image/jpeg');
+              res.setHeader('Content-Disposition', `inline; filename="thumb_${encodeURIComponent(image.filename)}.jpg"`);
+              res.setHeader('Cache-Control', 'public, max-age=604800');
+              return res.send(thumbBuffer);
+            }
+          }
+        } catch (onTheFlyErr: any) {
+          console.warn(`[getThumbnail] On-the-fly thumbnail generation failed for ${image.filename}:`, onTheFlyErr.message);
+        }
+      }
+
+      // Fallback if thumbnail generation failed: stream original file
+      const result = await provider.getFileStream(image.storagePath);
+      if (result) {
+        res.setHeader('Content-Type', result.mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(image.filename)}"`);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return result.stream.pipe(res);
+      }
+
+      return res.status(404).json({ message: 'Không tìm thấy file' });
+    } catch (error: any) {
+      console.error('Get thumbnail error:', error);
+      return res.status(500).json({
+        message: 'Lỗi khi tải thumbnail',
+        error: error.message,
+      });
+    }
+  }
+
+  /**
    * GET /api/uploads/executions/:executionId/images
    * Get all images for an execution
    */
@@ -194,6 +322,22 @@ export class UploadController {
       const images = await prisma.testExecutionImage.findMany({
         where: { executionId },
         orderBy: { uploadedAt: 'asc' },
+        include: {
+          execution: {
+            select: {
+              id: true,
+              executedAt: true,
+              status: true,
+              server: true,
+              os: true,
+              notes: true,
+              actualResult: true,
+              executedBy: {
+                select: { id: true, fullName: true, email: true },
+              },
+            },
+          },
+        },
       });
 
       const storageConfig = await getStorageConfig();
@@ -214,14 +358,22 @@ export class UploadController {
 
   /**
    * GET /api/uploads/testcases/:testCaseId/images
-   * Get all images for a testcase (across all executions)
+   * Get all images for a testcase (across all executions) with execution context
    */
   static async getTestCaseImages(req: AuthRequest, res: Response) {
     try {
       const { testCaseId } = req.params;
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+      const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
+
+      const execWhere: any = { testCaseId };
+      if (!canViewAll && currentUserId) {
+        execWhere.executedById = currentUserId;
+      }
 
       const executions = await prisma.testExecution.findMany({
-        where: { testCaseId },
+        where: execWhere,
         select: { id: true },
       });
 
@@ -230,6 +382,22 @@ export class UploadController {
       const images = await prisma.testExecutionImage.findMany({
         where: { executionId: { in: executionIds } },
         orderBy: { uploadedAt: 'desc' },
+        include: {
+          execution: {
+            select: {
+              id: true,
+              executedAt: true,
+              status: true,
+              server: true,
+              os: true,
+              notes: true,
+              actualResult: true,
+              executedBy: {
+                select: { id: true, fullName: true, email: true },
+              },
+            },
+          },
+        },
       });
 
       const storageConfig = await getStorageConfig();

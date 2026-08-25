@@ -37,7 +37,9 @@ Thumbs.db
 *.sw?
 ~$*
 __pycache__/
-*.pyc
+# Uploads
+uploads/
+server/uploads/
 
 # Local cache
 .vite/

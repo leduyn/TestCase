@@ -24,6 +24,7 @@ import {
   Palette,
   Upload,
   X,
+  Play,
 } from 'lucide-react';
 import type { TestExecutionImage } from '../types';
 import { uploadApi } from '../services/api';
@@ -459,20 +460,28 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
                   </span>
                   <div className="grid grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
                     {availableImages.map((img) => {
-                      const imgUrl = uploadApi.getImageUrl(img.id);
+                      const isVideo = img.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(img.filename);
+                      const thumbUrl = isVideo ? uploadApi.getThumbnailUrl(img.id) : uploadApi.getImageUrl(img.id);
+                      const fullUrl = uploadApi.getImageUrl(img.id);
                       return (
                         <button
                           key={img.id}
                           type="button"
-                          onClick={() => insertImageFromUrl(imgUrl, img.filename)}
+                          onClick={() => insertImageFromUrl(fullUrl, img.filename)}
                           className="group relative aspect-square rounded-md overflow-hidden border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:scale-105 transition-all"
-                          title={`Chèn ảnh: ${img.filename}`}
+                          title={`Chèn: ${img.filename}`}
                         >
                           <img
-                            src={imgUrl}
+                            src={thumbUrl}
                             alt={img.filename}
                             className="w-full h-full object-cover"
+                            loading="lazy"
                           />
+                          {isVideo && (
+                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center pointer-events-none">
+                              <Play className="w-3 h-3 text-white fill-white" />
+                            </div>
+                          )}
                           <div className="absolute inset-0 bg-blue-600/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-[10px]">
                             + Chèn
                           </div>

@@ -16,10 +16,14 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Plus,
+  PlusCircle,
   Edit3,
   Trash2,
   Image as ImageIcon,
   Copy,
+  Play,
+  LayoutGrid,
+  List as ListIcon,
 } from 'lucide-react';
 import { testCaseApi, exportApi, environmentApi, suiteApi, uploadApi } from '../services/api';
 import type { TestSuite, TestCase, TestExecution, TestExecutionImage } from '../types';
@@ -27,6 +31,8 @@ import { StatusBadge, PlatformBadge, PriorityBadge, TestTypeBadge } from '../com
 import { ExecutionDrawer } from '../components/ExecutionDrawer';
 import { TestCaseModal } from '../components/TestCaseModal';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { TestCaseEvidenceModal } from '../components/TestCaseEvidenceModal';
+import { TestCaseKanbanBoard } from '../components/kanban/TestCaseKanbanBoard';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -64,6 +70,17 @@ export const SuiteDetail: React.FC = () => {
   const [selectedServer, setSelectedServer] = useState<string>('ALL');
   const [selectedOs, setSelectedOs] = useState<string>('ALL');
 
+  // View Mode: 'table' | 'kanban'
+  const [viewMode, setViewMode] = useState<'table' | 'kanban'>(() => {
+    const saved = localStorage.getItem('testcase_view_mode');
+    return saved === 'kanban' ? 'kanban' : 'table';
+  });
+
+  const handleViewModeChange = (mode: 'table' | 'kanban') => {
+    setViewMode(mode);
+    localStorage.setItem('testcase_view_mode', mode);
+  };
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -73,6 +90,7 @@ export const SuiteDetail: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [drawerInitialEditing, setDrawerInitialEditing] = useState(false);
   const [drawerInitialExecution, setDrawerInitialExecution] = useState<TestExecution | null>(null);
+  const [drawerIsNewExecution, setDrawerIsNewExecution] = useState(false);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   // Create / Edit / Duplicate TestCase Modal
@@ -99,10 +117,32 @@ export const SuiteDetail: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
+  // Test Case Evidence Gallery Modal State
+  const [evidenceModalTestCase, setEvidenceModalTestCase] = useState<TestCase | null>(null);
+  const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
+  const [evidenceModalInitialUserId, setEvidenceModalInitialUserId] = useState<string | undefined>();
+
   const openEvidenceLightbox = (images: TestExecutionImage[], index: number = 0) => {
     setLightboxImages(images);
     setLightboxIndex(index);
     setIsLightboxOpen(true);
+  };
+
+  // Helper to compute total images and milestones across all executions of a testcase
+  const getTestCaseEvidenceStats = (tc: TestCase) => {
+    const execs = tc.executions || [];
+    let totalImages = 0;
+    let totalMilestones = 0;
+    const testers = new Set<string>();
+    execs.forEach((e) => {
+      if (e.images && e.images.length > 0) {
+        totalImages += e.images.length;
+        totalMilestones += 1;
+        const name = e.executedBy?.fullName || e.executedBy?.email;
+        if (name) testers.add(name);
+      }
+    });
+    return { totalImages, totalMilestones, testers: Array.from(testers) };
   };
 
   const fetchSuiteDetails = async () => {
@@ -152,10 +192,16 @@ export const SuiteDetail: React.FC = () => {
     });
   }, [id, user?.id]);
 
-  const handleOpenDrawer = (tc: TestCase, editMode: boolean = false, initialExec?: TestExecution | null) => {
+  const handleOpenDrawer = (
+    tc: TestCase,
+    editMode: boolean = false,
+    initialExec?: TestExecution | null,
+    isNewExecution: boolean = false
+  ) => {
     setSelectedTestCase(tc);
     setDrawerInitialEditing(editMode);
     setDrawerInitialExecution(initialExec || null);
+    setDrawerIsNewExecution(isNewExecution);
     setIsDrawerOpen(true);
   };
 
@@ -327,11 +373,42 @@ export const SuiteDetail: React.FC = () => {
     PASSED: 3,
   };
 
-  // Apply default sort by status, then filter
+  // Helper to extract the latest update timestamp of a TestCase
+  const getTestCaseUpdateTime = (tc: TestCase): number => {
+    const timestamps: number[] = [];
+    if (tc.latestExecution?.updatedAt) {
+      timestamps.push(new Date(tc.latestExecution.updatedAt).getTime());
+    }
+    if (tc.latestExecution?.executedAt) {
+      timestamps.push(new Date(tc.latestExecution.executedAt).getTime());
+    }
+    if (tc.updatedAt) {
+      timestamps.push(new Date(tc.updatedAt).getTime());
+    }
+    if (tc.createdAt) {
+      timestamps.push(new Date(tc.createdAt).getTime());
+    }
+    return timestamps.length > 0 ? Math.max(...timestamps) : 0;
+  };
+
+  // Apply sort by status, then by latest update time (newest first within the same status)
   const sortedCases = [...testCases].sort((a, b) => {
     const aStatus = (a.latestExecution?.status || 'UNTESTED').toUpperCase();
     const bStatus = (b.latestExecution?.status || 'UNTESTED').toUpperCase();
-    return (statusOrder[aStatus] ?? 4) - (statusOrder[bStatus] ?? 4);
+    const statusDiff = (statusOrder[aStatus] ?? 4) - (statusOrder[bStatus] ?? 4);
+
+    if (statusDiff !== 0) {
+      return statusDiff;
+    }
+
+    // Within same status: prioritize newest update time first
+    const aTime = getTestCaseUpdateTime(a);
+    const bTime = getTestCaseUpdateTime(b);
+    if (bTime !== aTime) {
+      return bTime - aTime;
+    }
+
+    return (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
   });
 
   // Filter logic
@@ -591,57 +668,89 @@ export const SuiteDetail: React.FC = () => {
             />
           </div>
 
-          {/* Quick filter pills */}
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
-              onClick={() => setSelectedStatus('ALL')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'ALL'
-                ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+          {/* Quick filter pills & View Mode Toggle */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setSelectedStatus('ALL')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'ALL'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+              >
+                Tất cả ({total})
+              </button>
+              <button
+                onClick={() => setSelectedStatus('PASSED')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'PASSED'
+                  ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300'
+                  }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Passed ({passed})
+              </button>
+              <button
+                onClick={() => setSelectedStatus('FAILED')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'FAILED'
+                  ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-400'
+                  : 'bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300'
+                  } ${failed > 0 ? 'animate-pulse' : ''}`}
+              >
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Failed ({failed})
+              </button>
+              <button
+                onClick={() => setSelectedStatus('BLOCKED')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'BLOCKED'
+                  ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-400'
+                  : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300'
+                  }`}
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                Blocked ({blocked})
+              </button>
+              <button
+                onClick={() => setSelectedStatus('UNTESTED')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNTESTED'
+                  ? 'bg-slate-700 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
+                  }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Chưa test ({untested})
+              </button>
+            </div>
+
+            {/* View Mode Toggle Button Group */}
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 self-start sm:self-auto shadow-xs">
+              <button
+                type="button"
+                onClick={() => handleViewModeChange('table')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'table'
+                    ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
-            >
-              Tất cả ({total})
-            </button>
-            <button
-              onClick={() => setSelectedStatus('PASSED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'PASSED'
-                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400'
-                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300'
+                title="Chế độ xem Bảng dữ liệu"
+              >
+                <ListIcon className="w-3.5 h-3.5" />
+                <span>Bảng</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleViewModeChange('kanban')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  viewMode === 'kanban'
+                    ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Passed ({passed})
-            </button>
-            <button
-              onClick={() => setSelectedStatus('FAILED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'FAILED'
-                ? 'bg-rose-600 text-white shadow-sm ring-2 ring-rose-400'
-                : 'bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300'
-                } ${failed > 0 ? 'animate-pulse' : ''}`}
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              Failed ({failed})
-            </button>
-            <button
-              onClick={() => setSelectedStatus('BLOCKED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'BLOCKED'
-                ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-400'
-                : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300'
-                }`}
-            >
-              <AlertCircle className="w-3.5 h-3.5" />
-              Blocked ({blocked})
-            </button>
-            <button
-              onClick={() => setSelectedStatus('UNTESTED')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNTESTED'
-                ? 'bg-slate-700 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400'
-                }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              Chưa test ({untested})
-            </button>
+                title="Chế độ xem Kanban Board"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Kanban</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -723,14 +832,36 @@ export const SuiteDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* Test Cases Table */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1240px] text-left border-collapse text-xs align-top">
-            <thead>
-              <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold uppercase tracking-wider">
-                <th className="py-3 px-3 text-center w-[85px]">Mã TC</th>
-                <th className="py-3 px-3 w-[130px]">Chức năng</th>
+      {/* Test Cases View: Kanban Board or Table View */}
+      {viewMode === 'kanban' ? (
+        <TestCaseKanbanBoard
+          testCases={filteredCases}
+          canExecuteTestCase={canExecuteTestCase}
+          canUpdateTestCase={canUpdateTestCase}
+          canDeleteTestCase={canDeleteTestCase}
+          onOpenDrawer={handleOpenDrawer}
+          onEditTestCase={handleOpenEditModal}
+          onDuplicateTestCase={handleOpenDuplicateModal}
+          onDeleteTestCase={handleOpenDeleteModal}
+          onSaveExecution={handleSaveExecution}
+          onOpenEvidenceModal={(tc) => {
+            setEvidenceModalTestCase(tc);
+            setEvidenceModalInitialUserId(undefined);
+            setIsEvidenceModalOpen(true);
+          }}
+          getEvidenceStats={getTestCaseEvidenceStats}
+          defaultServer={configuredServers[0] || 'STAGING'}
+          defaultOs={configuredOsList[0] || 'Windows 11'}
+        />
+      ) : (
+        /* Test Cases Table */
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1240px] text-left border-collapse text-xs align-top">
+              <thead>
+                <tr className="bg-slate-900 text-white border-b border-slate-800 font-bold uppercase tracking-wider">
+                  <th className="py-3 px-3 text-center w-[85px]">Mã TC</th>
+                  <th className="py-3 px-3 w-[130px]">Chức năng</th>
                 <th className="py-3 px-3 text-center w-[90px]">Platform</th>
                 <th className="py-3 px-3 text-center w-[110px]">Server</th>
                 <th className="py-3 px-3 text-center w-[110px]">Hệ điều hành</th>
@@ -740,7 +871,7 @@ export const SuiteDetail: React.FC = () => {
                 <th className="py-3 px-4 w-[240px]">Kết quả mong đợi</th>
                 <th className="py-3 px-3 text-center w-[110px]">Đánh giá</th>
                 <th className="py-3 px-3 text-center w-[60px]">Thực thi</th>
-                <th className="py-3 px-3 text-center w-[130px]">Thao tác</th>
+                <th className="py-3 px-3 text-center w-[180px]">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -798,20 +929,27 @@ export const SuiteDetail: React.FC = () => {
                           </p>
                           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                             <PriorityBadge priority={tc.priority} />
-                            {exec?.images && exec.images.length > 0 && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEvidenceLightbox(exec.images || [], 0);
-                                }}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold border border-blue-200 dark:border-blue-800 transition-colors"
-                                title="Xem danh sách ảnh minh chứng đã tải lên"
-                              >
-                                <ImageIcon className="w-3 h-3 text-blue-600" />
-                                <span>{exec.images.length} ảnh</span>
-                              </button>
-                            )}
+                            {(() => {
+                              const stats = getTestCaseEvidenceStats(tc);
+                              if (stats.totalImages === 0) return null;
+                              const tooltip = `Tổng ${stats.totalImages} ảnh từ ${stats.totalMilestones} mốc kiểm thử (${stats.testers.join(', ') || 'Tester'})`;
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEvidenceModalTestCase(tc);
+                                    setEvidenceModalInitialUserId(undefined);
+                                    setIsEvidenceModalOpen(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold border border-blue-200 dark:border-blue-800 transition-colors shadow-sm"
+                                  title={tooltip}
+                                >
+                                  <ImageIcon className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                  <span>{stats.totalImages} ảnh • {stats.totalMilestones} mốc</span>
+                                </button>
+                              );
+                            })()}
                           </div>
                         </td>
 
@@ -861,20 +999,21 @@ export const SuiteDetail: React.FC = () => {
 
                         {/* Thao tác */}
                         <td className="py-3 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5">
                             {canExecuteTestCase && (
                               <button
-                                onClick={() => handleOpenDrawer(tc, true)}
-                                className="px-2.5 py-1 text-xs font-semibold rounded bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 transition-colors"
-                                title="Thực thi / Ghi nhận kết quả test (Mở chế độ chỉnh sửa)"
+                                onClick={() => handleOpenDrawer(tc, true, null, true)}
+                                className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20 transition-all hover:scale-105 shrink-0"
+                                title="Ghi nhận kết quả kiểm thử mới cho kịch bản này"
                               >
-                                Test
+                                <PlusCircle className="w-3.5 h-3.5" />
+                                {/*<span>Ghi nhận kết quả mới</span>*/}
                               </button>
                             )}
                             {canUpdateTestCase && (
                               <button
                                 onClick={() => handleOpenEditModal(tc)}
-                                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition-colors"
+                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
                                 title="Chỉnh sửa Test Case"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
@@ -973,34 +1112,69 @@ export const SuiteDetail: React.FC = () => {
                                           {/* Evidence Images */}
                                           {ex.images && ex.images.length > 0 && (
                                             <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-                                              <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1 mb-1.5">
-                                                <ImageIcon className="w-3 h-3 text-blue-500" />
-                                                Ảnh minh chứng ({ex.images.length})
-                                              </span>
+                                              <div className="flex items-center justify-between mb-1.5">
+                                                <span className="font-semibold text-slate-700 dark:text-slate-300 text-[11px] flex items-center gap-1">
+                                                  <ImageIcon className="w-3 h-3 text-blue-500" />
+                                                  Ảnh minh chứng ({ex.images.length})
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEvidenceModalTestCase(tc);
+                                                    setEvidenceModalInitialUserId(ex.executedById || undefined);
+                                                    setIsEvidenceModalOpen(true);
+                                                  }}
+                                                  className="text-[10px] font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline"
+                                                >
+                                                  Xem kho ảnh
+                                                </button>
+                                              </div>
                                               <div className="flex items-center gap-1.5 flex-wrap">
-                                                {ex.images.slice(0, 4).map((img: TestExecutionImage, imgIdx: number) => (
-                                                  <button
-                                                    key={img.id}
-                                                    type="button"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      openEvidenceLightbox(ex.images || [], imgIdx);
-                                                    }}
-                                                    className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform"
-                                                    title={img.filename}
-                                                  >
-                                                    <img
-                                                      src={uploadApi.getImageUrl(img.id)}
-                                                      alt={img.filename}
-                                                      className="w-full h-full object-cover"
-                                                    />
-                                                    {imgIdx === 3 && (ex.images?.length || 0) > 4 && (
-                                                      <div className="absolute inset-0 bg-black/60 text-white text-[10px] font-bold flex items-center justify-center">
-                                                        +{(ex.images?.length || 0) - 4}
-                                                      </div>
-                                                    )}
-                                                  </button>
-                                                ))}
+                                                {ex.images.slice(0, 4).map((img: TestExecutionImage, imgIdx: number) => {
+                                                  const enrichedImages = (ex.images || []).map((im) => ({
+                                                    ...im,
+                                                    execution: {
+                                                      id: ex.id,
+                                                      executedAt: ex.executedAt,
+                                                      status: ex.status,
+                                                      server: ex.server,
+                                                      os: ex.os,
+                                                      notes: ex.notes,
+                                                      actualResult: ex.actualResult,
+                                                      executedBy: ex.executedBy,
+                                                    },
+                                                  }));
+                                                  return (
+                                                    <button
+                                                      key={img.id}
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openEvidenceLightbox(enrichedImages, imgIdx);
+                                                      }}
+                                                      className="relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform group"
+                                                      title={img.filename}
+                                                    >
+                                                      <img
+                                                        src={img.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(img.filename) ? uploadApi.getThumbnailUrl(img.id) : uploadApi.getImageUrl(img.id)}
+                                                        alt={img.filename}
+                                                        className="w-full h-full object-cover"
+                                                        loading="lazy"
+                                                      />
+                                                      {(img.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(img.filename)) && (
+                                                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center pointer-events-none">
+                                                          <Play className="w-3 h-3 text-white fill-white" />
+                                                        </div>
+                                                      )}
+                                                      {imgIdx === 3 && (ex.images?.length || 0) > 4 && (
+                                                        <div className="absolute inset-0 bg-black/60 text-white text-[10px] font-bold flex items-center justify-center">
+                                                          +{(ex.images?.length || 0) - 4}
+                                                        </div>
+                                                      )}
+                                                    </button>
+                                                  );
+                                                })}
                                               </div>
                                             </div>
                                           )}
@@ -1130,6 +1304,7 @@ export const SuiteDetail: React.FC = () => {
           </div>
         )}
       </div>
+    )}
 
       {/* Execution Drawer */}
       <ExecutionDrawer
@@ -1137,9 +1312,11 @@ export const SuiteDetail: React.FC = () => {
         isOpen={isDrawerOpen}
         initialEditing={drawerInitialEditing}
         initialExecution={drawerInitialExecution}
+        isNewExecution={drawerIsNewExecution}
         onClose={() => {
           setIsDrawerOpen(false);
           setDrawerInitialExecution(null);
+          setDrawerIsNewExecution(false);
         }}
         onSaved={handleSaveExecution}
         onEditTestCase={handleOpenEditModal}
@@ -1411,6 +1588,22 @@ export const SuiteDetail: React.FC = () => {
         initialIndex={lightboxIndex}
         isOpen={isLightboxOpen}
         onClose={() => setIsLightboxOpen(false)}
+      />
+
+      {/* Test Case Evidence Gallery Modal */}
+      <TestCaseEvidenceModal
+        testCase={evidenceModalTestCase}
+        isOpen={isEvidenceModalOpen}
+        initialUserId={evidenceModalInitialUserId}
+        onClose={() => {
+          setIsEvidenceModalOpen(false);
+          setEvidenceModalTestCase(null);
+        }}
+        onSelectExecution={(exec) => {
+          if (evidenceModalTestCase) {
+            handleOpenDrawer(evidenceModalTestCase, false, exec);
+          }
+        }}
       />
     </div>
   );

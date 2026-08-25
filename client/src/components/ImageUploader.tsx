@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, Trash2, Eye, AlertCircle, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Trash2, Eye, AlertCircle, Loader2, Play, Film } from 'lucide-react';
 import type { TestExecutionImage } from '../types';
 import { uploadApi } from '../services/api';
 import { ImageLightbox } from './ImageLightbox';
@@ -43,18 +43,21 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
     const validFiles: File[] = [];
     const maxSizeBytes = maxFileSizeMB * 1024 * 1024;
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'];
+    const allowedTypes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml',
+      'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska',
+    ];
 
     // Check count limit
     if (images.length + files.length > maxFiles) {
-      setError(`Chỉ được tải tối đa ${maxFiles} ảnh. Hiện có ${images.length} ảnh, bạn chọn ${files.length} ảnh.`);
+      setError(`Chỉ được tải tối đa ${maxFiles} file. Hiện có ${images.length} file, bạn chọn ${files.length} file.`);
       return;
     }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!allowedTypes.includes(file.type)) {
-        setError(`File "${file.name}" không đúng định dạng ảnh (JPEG, PNG, GIF, WebP, BMP, SVG).`);
+        setError(`File "${file.name}" không đúng định dạng. Hỗ trợ: Ảnh (JPEG, PNG, GIF, WebP) hoặc Video (MP4, WebM, MOV, AVI, MKV).`);
         return;
       }
       if (file.size > maxSizeBytes) {
@@ -81,7 +84,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       }
     } catch (err: any) {
       console.error('Upload error:', err);
-      setError(err.response?.data?.message || 'Lỗi khi upload ảnh');
+      setError(err.response?.data?.message || 'Lỗi khi upload file');
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -92,7 +95,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
   const handleDelete = async (imageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Bạn có chắc chắn muốn xóa ảnh này?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa file này?')) return;
 
     setDeletingId(imageId);
     try {
@@ -100,7 +103,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       onImagesChange(images.filter((img) => img.id !== imageId));
     } catch (err: any) {
       console.error('Delete image error:', err);
-      alert(err.response?.data?.message || 'Lỗi khi xóa ảnh');
+      alert(err.response?.data?.message || 'Lỗi khi xóa file');
     } finally {
       setDeletingId(null);
     }
@@ -139,11 +142,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-          <ImageIcon className="w-4 h-4 text-blue-600" />
-          <span>Ảnh chụp màn hình / Minh chứng lỗi (Evidence)</span>
+          <Film className="w-4 h-4 text-blue-600" />
+          <span>Ảnh / Video minh chứng lỗi (Evidence)</span>
         </label>
         <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-          {images.length} / {maxFiles} ảnh (tối đa {maxFileSizeMB}MB/ảnh)
+          {images.length} / {maxFiles} file (tối đa {maxFileSizeMB}MB/file)
         </span>
       </div>
 
@@ -180,7 +183,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*"
+            accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,video/x-matroska"
             className="hidden"
             onChange={(e) => handleFiles(e.target.files)}
             disabled={disabled || uploading}
@@ -188,7 +191,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           {uploading ? (
             <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 py-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Đang tải ảnh lên kho lưu trữ...</span>
+              <span>Đang tải file lên kho lưu trữ...</span>
             </div>
           ) : (
             <>
@@ -197,10 +200,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               </div>
               <div>
                 <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  Kéo thả ảnh vào đây hoặc <span className="text-blue-600 hover:underline">chọn từ máy tính</span>
+                  Kéo thả ảnh/video vào đây hoặc <span className="text-blue-600 hover:underline">chọn từ máy tính</span>
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Hỗ trợ PNG, JPG, GIF, WebP (Tối đa {maxFileSizeMB}MB)
+                  Hỗ trợ PNG, JPG, GIF, WebP, MP4, WebM, MOV (Tối đa {maxFileSizeMB}MB)
                 </p>
               </div>
             </>
@@ -212,8 +215,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       {images.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
           {images.map((img, idx) => {
-            // Always use server proxy for reliable image loading (Google Drive direct links have CORS issues)
-            const url = uploadApi.getImageUrl(img.id);
+            const isVideo = img.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(img.filename);
+            const thumbUrl = isVideo ? uploadApi.getThumbnailUrl(img.id) : uploadApi.getImageUrl(img.id);
             const isDeleting = deletingId === img.id;
 
             return (
@@ -222,12 +225,29 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                 onClick={() => openLightbox(idx)}
                 className="group relative aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shadow-sm hover:shadow-md transition-all cursor-pointer"
               >
-                <img
-                  src={url}
-                  alt={img.filename}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                  loading="lazy"
-                />
+                {isVideo ? (
+                  <>
+                    <img
+                      src={thumbUrl}
+                      alt={img.filename}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      loading="lazy"
+                    />
+                    {/* Play icon overlay for videos */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20 group-hover:bg-black/30 transition-colors">
+                      <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center shadow-lg ring-2 ring-white/40 group-hover:scale-110 transition-transform">
+                        <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <img
+                    src={thumbUrl}
+                    alt={img.filename}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                    loading="lazy"
+                  />
+                )}
 
                 {/* Overlay actions on hover */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
@@ -238,7 +258,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                         onClick={(e) => handleDelete(img.id, e)}
                         disabled={isDeleting}
                         className="p-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-700 text-white shadow transition-all hover:scale-105"
-                        title="Xóa ảnh này"
+                        title="Xóa file này"
                       >
                         {isDeleting ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />

@@ -143,6 +143,14 @@ export class LocalStorageProvider implements StorageProvider {
       '.webp': 'image/webp',
       '.bmp': 'image/bmp',
       '.svg': 'image/svg+xml',
+      // Video formats
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.ogg': 'video/ogg',
+      '.ogv': 'video/ogg',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska',
     };
     const mimeType = mimeMap[ext] || 'application/octet-stream';
     const stream = fs.createReadStream(fullPath);
@@ -246,6 +254,9 @@ export class SmbStorageProvider implements StorageProvider {
     const mimeMap: Record<string, string> = {
       '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
       '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+      '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
+      '.ogv': 'video/ogg', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska',
     };
     return { stream: fs.createReadStream(fullPath), mimeType: mimeMap[ext] || 'application/octet-stream' };
   }
@@ -339,6 +350,9 @@ export class FtpStorageProvider implements StorageProvider {
       const mimeMap: Record<string, string> = {
         '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
         '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+        '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
+        '.ogv': 'video/ogg', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+        '.mkv': 'video/x-matroska',
       };
 
       const stream = fs.createReadStream(tempFile);
@@ -421,6 +435,9 @@ export class GoogleDriveStorageProvider implements StorageProvider {
     const extMimeMap: Record<string, string> = {
       '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
       '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+      '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
+      '.ogv': 'video/ogg', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska',
     };
     const mimeType = extMimeMap[ext.toLowerCase()] || 'application/octet-stream';
 

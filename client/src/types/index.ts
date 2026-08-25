@@ -21,7 +21,22 @@ export interface TestExecutionImage {
   mimeType: string;
   fileSize: number;
   publicUrl?: string | null;
+  thumbnailPath?: string | null;
   uploadedAt: string;
+  execution?: {
+    id: string;
+    executedAt: string;
+    status: ExecutionStatus;
+    server?: string | null;
+    os?: string | null;
+    notes?: string | null;
+    actualResult?: string | null;
+    executedBy?: {
+      id?: string;
+      fullName: string;
+      email: string;
+    } | null;
+  };
 }
 
 export interface TestExecution {
@@ -57,6 +72,7 @@ export interface TestCase {
   priority: string; // Cao, Trung bình, Thấp
   orderIndex: number;
   createdAt: string;
+  updatedAt?: string;
   latestExecution?: TestExecution | null;
   executions?: TestExecution[];
 }

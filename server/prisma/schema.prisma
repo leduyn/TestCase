@@ -190,6 +190,7 @@ model TestExecutionImage {
   mimeType        String        @map("mime_type")
   fileSize        Int           @map("file_size")
   publicUrl       String?       @map("public_url")
+  thumbnailPath   String?       @map("thumbnail_path")
   uploadedAt      DateTime      @default(now()) @map("uploaded_at")
 
   @@map("test_execution_images")

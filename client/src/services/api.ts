@@ -195,6 +195,21 @@ export const executionApi = {
       `/executions/${testCaseId}/execute`,
       data
     ),
+  updateExecution: (
+    executionId: string,
+    data: {
+      server?: string;
+      os?: string;
+      status: string;
+      actualResult?: string;
+      evaluation?: string;
+      notes?: string;
+    }
+  ) =>
+    api.put<{ message: string; execution: TestExecution }>(
+      `/executions/${executionId}`,
+      data
+    ),
   getHistory: (testCaseId: string) =>
     api.get<{ history: TestExecution[] }>(`/executions/${testCaseId}/history`),
 };
@@ -305,6 +320,11 @@ export const uploadApi = {
   getImageUrl: (imageId: string) => {
     const token = localStorage.getItem('auth_token');
     const base = `${API_BASE_URL}/uploads/images/${imageId}/view`;
+    return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  },
+  getThumbnailUrl: (imageId: string) => {
+    const token = localStorage.getItem('auth_token');
+    const base = `${API_BASE_URL}/uploads/images/${imageId}/thumbnail`;
     return token ? `${base}?token=${encodeURIComponent(token)}` : base;
   },
 };

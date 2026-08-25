@@ -43,6 +43,14 @@ router.get(
   UploadController.getImage
 );
 
+// View thumbnail of video or image
+router.get(
+  '/images/:imageId/thumbnail',
+  authenticate,
+  requirePermission('testcase:read'),
+  UploadController.getThumbnail
+);
+
 // Delete an image
 router.delete(
   '/images/:imageId',
