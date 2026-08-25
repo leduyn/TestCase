@@ -486,8 +486,15 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
 
               {/* Actual Result - Rich Text Editor */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Kết quả thực tế <span className="text-rose-500">*</span>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <span>Kết quả thực tế</span>
+                    {dropConfirm.targetStatus !== 'UNTESTED' && dropConfirm.targetStatus !== 'UNREVIEWED' && dropConfirm.targetStatus !== 'BLOCKED' ? (
+                      <span className="text-rose-500 font-bold">*</span>
+                    ) : (
+                      <span className="text-slate-400 font-normal text-[11px]">(Không bắt buộc)</span>
+                    )}
+                  </span>
                 </label>
                 <RichTextEditor
                   value={dropActualResult}
@@ -512,7 +519,13 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
               <button
                 type="button"
                 onClick={handleConfirmDrop}
-                disabled={dropSubmitting || !dropActualResult.trim()}
+                disabled={
+                  dropSubmitting ||
+                  (dropConfirm.targetStatus !== 'UNTESTED' &&
+                    dropConfirm.targetStatus !== 'UNREVIEWED' &&
+                    dropConfirm.targetStatus !== 'BLOCKED' &&
+                    !dropActualResult.trim())
+                }
                 className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 {dropSubmitting ? (

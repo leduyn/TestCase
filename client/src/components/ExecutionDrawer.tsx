@@ -348,8 +348,9 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     e.preventDefault();
     setValidationError(null);
 
-    // Validate: actualResult must not be empty
-    if (isRichTextEmpty(actualResult)) {
+    // Validate: actualResult must not be empty only when required (PASSED, FAILED, RETEST)
+    const isActualResultRequired = status !== 'UNTESTED' && status !== 'UNREVIEWED' && status !== 'BLOCKED';
+    if (isActualResultRequired && isRichTextEmpty(actualResult)) {
       setValidationError('Vui lòng nhập nội dung "Kết quả thực tế" trước khi lưu.');
       return;
     }
@@ -1127,7 +1128,14 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     {/* Actual Result Input with Rich Text Editor */}
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                        <span>Kết quả thực tế (Actual Result)</span>
+                        <span className="flex items-center gap-1">
+                          <span>Kết quả thực tế (Actual Result)</span>
+                          {status !== 'UNTESTED' && status !== 'UNREVIEWED' && status !== 'BLOCKED' ? (
+                            <span className="text-rose-500 font-bold">*</span>
+                          ) : (
+                            <span className="text-slate-400 font-normal text-[11px]">(Không bắt buộc)</span>
+                          )}
+                        </span>
                         <span className="text-[11px] text-blue-600 font-normal">Trình soạn thảo phong phú (Rich Text)</span>
                       </label>
                       <RichTextEditor
