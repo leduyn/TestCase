@@ -69,6 +69,8 @@ export const SuiteDetail: React.FC = () => {
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL' | 'UNREVIEWED' | 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST'
   const [selectedPlatform, setSelectedPlatform] = useState<string>('ALL'); // 'ALL' | 'App' | 'CMS' | 'Web'
   const [selectedPriority, setSelectedPriority] = useState<string>('ALL');
+  const [selectedTestType, setSelectedTestType] = useState<string>('ALL');
+  const [selectedModule, setSelectedModule] = useState<string>('ALL');
   const [selectedServer, setSelectedServer] = useState<string>('ALL');
   const [selectedOs, setSelectedOs] = useState<string>('ALL');
 
@@ -421,6 +423,8 @@ export const SuiteDetail: React.FC = () => {
     const status = (exec?.status || 'UNREVIEWED').toUpperCase();
     const platform = (tc.platform || '').toUpperCase();
     const priority = (tc.priority || '').toLowerCase();
+    const testType = (tc.testType || '').toLowerCase();
+    const module = (tc.module || '');
     const server = (exec?.server || '').toUpperCase();
     const os = (exec?.os || '').toUpperCase();
 
@@ -436,6 +440,12 @@ export const SuiteDetail: React.FC = () => {
 
     // Priority filter
     if (selectedPriority !== 'ALL' && priority !== selectedPriority.toLowerCase()) return false;
+
+    // Test Type filter
+    if (selectedTestType !== 'ALL' && testType !== selectedTestType.toLowerCase()) return false;
+
+    // Module (Chức năng) filter
+    if (selectedModule !== 'ALL' && module !== selectedModule) return false;
 
     // Server filter
     if (selectedServer !== 'ALL' && !server.includes(selectedServer.toUpperCase())) return false;
@@ -465,7 +475,7 @@ export const SuiteDetail: React.FC = () => {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedStatus, selectedPlatform, selectedPriority, selectedServer, selectedOs, pageSize]);
+  }, [searchQuery, selectedStatus, selectedPlatform, selectedPriority, selectedTestType, selectedModule, selectedServer, selectedOs, pageSize]);
 
   // Pagination calculations
   const totalFilteredItems = filteredCases.length;
@@ -521,6 +531,14 @@ export const SuiteDetail: React.FC = () => {
       ...testCases.map((tc) => tc.latestExecution?.os).filter(Boolean),
     ])
   ) as string[];
+
+  // Extract unique test types & modules for filters
+  const availableTestTypes = Array.from(
+    new Set(testCases.map((tc) => tc.testType).filter(Boolean))
+  ) as string[];
+  const availableModules = Array.from(
+    new Set(testCases.map((tc) => tc.module).filter(Boolean))
+  ).sort() as string[];
 
   if (loading && !suite) {
     return (
@@ -785,7 +803,7 @@ export const SuiteDetail: React.FC = () => {
 
       {/* Filter & Search Bar */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
           {/* Search box */}
           <div className="sm:col-span-2 lg:col-span-2 relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -823,6 +841,46 @@ export const SuiteDetail: React.FC = () => {
               <option value="Cao">Ưu tiên Cao</option>
               <option value="Trung bình">Ưu tiên Trung bình</option>
               <option value="Thấp">Ưu tiên Thấp</option>
+            </select>
+          </div>
+
+          {/* Test Type (Loại test) Filter */}
+          <div>
+            <select
+              value={selectedTestType}
+              onChange={(e) => setSelectedTestType(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              <option value="ALL">Tất cả Loại test</option>
+              {availableTestTypes.length > 0 ? (
+                availableTestTypes.map((tt) => (
+                  <option key={tt} value={tt}>
+                    {tt}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="Luồng chuẩn">Luồng chuẩn</option>
+                  <option value="Luồng ngoại lệ">Luồng ngoại lệ</option>
+                  <option value="Giá trị biên">Giá trị biên</option>
+                </>
+              )}
+            </select>
+          </div>
+
+          {/* Module (Chức năng) Filter */}
+          <div>
+            <select
+              value={selectedModule}
+              onChange={(e) => setSelectedModule(e.target.value)}
+              className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              <option value="ALL">Tất cả Chức năng</option>
+              {availableModules.map((mod) => (
+                <option key={mod} value={mod}>
+                  {mod}
+                </option>
+              ))}
             </select>
           </div>
 
