@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Plus, AlertCircle, Sparkles, Copy } from 'lucide-react';
 import type { TestCase } from '../types';
 import { testCaseApi } from '../services/api';
+import { RichTextEditor } from './RichTextEditor';
 
 interface TestCaseModalProps {
   isOpen: boolean;
@@ -285,15 +286,15 @@ export const TestCaseModal: React.FC<TestCaseModalProps> = ({
 
             {/* Row 6: Kết quả mong đợi */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Kết quả mong đợi (Expected Result)
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                <span>Kết quả mong đợi (Expected Result)</span>
+                <span className="text-[11px] text-emerald-600 font-normal">Trình soạn thảo phong phú (Rich Text)</span>
               </label>
-              <textarea
+              <RichTextEditor
                 value={expectedResult}
-                onChange={(e) => setExpectedResult(e.target.value)}
-                placeholder={"- Đăng ký thành công\n- TK xuất hiện trên CMS với trạng thái Chờ duyệt..."}
-                rows={3}
-                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-emerald-900 dark:text-emerald-300 leading-relaxed font-medium"
+                onChange={setExpectedResult}
+                placeholder="- Đăng ký thành công&#10;- TK xuất hiện trên CMS với trạng thái Chờ duyệt..."
+                minHeight="120px"
               />
             </div>
           </div>

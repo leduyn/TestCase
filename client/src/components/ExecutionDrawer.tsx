@@ -21,6 +21,7 @@ import {
   Users,
   Calendar,
   ChevronRight,
+  ChevronLeft,
   Layers,
   Play,
 } from 'lucide-react';
@@ -87,6 +88,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const [allExecutions, setAllExecutions] = useState<TestExecution[]>(testCase.executions || []);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | undefined>();
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
 
   // Form states
   const [server, setServer] = useState('STAGING');
@@ -569,17 +571,38 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
         <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
 
           {/* ==================== PANEL 1: HISTORY TIMELINE (LEFT) ==================== */}
-          <div className="w-full lg:w-72 xl:w-80 border-r border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col shrink-0 overflow-hidden">
+          <div className={`${historyCollapsed ? 'w-12' : 'w-full lg:w-72 xl:w-80'} border-r border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col shrink-0 overflow-hidden transition-all duration-200`}>
+            {historyCollapsed ? (
+              <button
+                type="button"
+                onClick={() => setHistoryCollapsed(false)}
+                className="flex-1 flex items-center justify-center py-4 text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                title="Mở rộng lịch sử thực thi"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            ) : (
+            <>
             {/* Timeline Header & User Selector */}
             <div className="p-4 border-b border-slate-200 dark:border-slate-800 space-y-3 shrink-0 bg-white dark:bg-slate-800/40">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <History className="w-4 h-4 text-blue-600" />
                   Lịch sử thực thi
                 </span>
-                <span className="text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
-                  {userExecutions.length} lần chạy
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                    {userExecutions.length} lần chạy
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setHistoryCollapsed(true)}
+                    className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    title="Thu gọn lịch sử thực thi"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
               {/* User Selection Dropdown */}
@@ -703,6 +726,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                 </div>
               )}
             </div>
+            </>
+            )}
           </div>
 
           {/* ==================== MAIN CONTENT: SPECIFICATION & EXECUTION DETAILS ==================== */}
@@ -750,9 +775,16 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 block mb-1">
                       Kết quả mong đợi (Expected Result):
                     </span>
-                    <div className="text-xs leading-relaxed text-emerald-900 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 whitespace-pre-line font-medium">
-                      {testCase.expectedResult}
-                    </div>
+                    {testCase.expectedResult ? (
+                      <div
+                        className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 bg-emerald-50/80 dark:bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 rich-text-content overflow-auto max-h-60"
+                        dangerouslySetInnerHTML={{ __html: testCase.expectedResult }}
+                      />
+                    ) : (
+                      <p className="text-xs text-slate-400 italic bg-emerald-50/80 dark:bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                        Chưa có kết quả mong đợi.
+                      </p>
+                    )}
                   </div>
                 </div>
 

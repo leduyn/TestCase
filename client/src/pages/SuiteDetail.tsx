@@ -38,6 +38,13 @@ import { TestCaseKanbanBoard } from '../components/kanban/TestCaseKanbanBoard';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 
+// Strip HTML tags to plain text (used for expectedResult preview/tooltip/search since it may now contain rich-text HTML)
+const stripHtml = (html: string): string => {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+};
+
 export const SuiteDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -460,7 +467,7 @@ export const SuiteDetail: React.FC = () => {
       const matchTitle = tc.title.toLowerCase().includes(q);
       const matchModule = tc.module.toLowerCase().includes(q);
       const matchSteps = tc.steps.toLowerCase().includes(q);
-      const matchExpected = tc.expectedResult.toLowerCase().includes(q);
+      const matchExpected = stripHtml(tc.expectedResult).toLowerCase().includes(q);
       const matchActual = (exec?.actualResult || '').toLowerCase().includes(q);
       const matchNotes = (exec?.notes || '').toLowerCase().includes(q);
 
@@ -1055,11 +1062,14 @@ export const SuiteDetail: React.FC = () => {
                         <td className="py-3 px-4">
                           <div
                             className="whitespace-pre-line break-words leading-relaxed text-emerald-900 dark:text-emerald-300 bg-emerald-50/60 dark:bg-emerald-950/30 p-2 rounded-lg border border-emerald-200/70 dark:border-emerald-900/50 font-medium"
-                            title={tc.expectedResult}
+                            title={stripHtml(tc.expectedResult)}
                           >
-                            {tc.expectedResult && tc.expectedResult.length > expectedResultMaxChars
-                              ? tc.expectedResult.substring(0, expectedResultMaxChars) + '...'
-                              : tc.expectedResult}
+                            {(() => {
+                              const plain = stripHtml(tc.expectedResult);
+                              return plain.length > expectedResultMaxChars
+                                ? plain.substring(0, expectedResultMaxChars) + '...'
+                                : plain;
+                            })()}
                           </div>
                         </td>
 
