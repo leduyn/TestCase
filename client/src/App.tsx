@@ -6,10 +6,12 @@ import { Dashboard } from './pages/Dashboard';
 import { Generate } from './pages/Generate';
 import { Import } from './pages/Import';
 import { SuiteDetail } from './pages/SuiteDetail';
+import { TestCaseDetail } from './pages/TestCaseDetail';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Settings } from './pages/Settings';
 import UserManagement from './pages/UserManagement';
+import { TestCaseManagement } from './pages/TestCaseManagement';
 import { DatabaseSetupPage } from './pages/Setup/DatabaseSetupPage';
 import { setupApi } from './services/api';
 import { Loader2 } from 'lucide-react';
@@ -109,6 +111,11 @@ const AppContent: React.FC = () => {
               <ProtectedRoute permission="testsuite:read"><SuiteDetail /></ProtectedRoute>
             )
           } />
+          <Route path="/testcases/:id" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="testsuite:read"><TestCaseDetail /></ProtectedRoute>
+            )
+          } />
           <Route path="/login" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Login />} />
           <Route path="/register" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Register />} />
           <Route path="/settings" element={
@@ -117,9 +124,10 @@ const AppContent: React.FC = () => {
             )
           } />
           <Route path="/user-management" element={
-            isSetupRequired ? <Navigate to="/setup" replace /> : (
-              <ProtectedRoute permission="users:read"><UserManagement /></ProtectedRoute>
-            )
+            <ProtectedRoute permission="users:read"><UserManagement /></ProtectedRoute>
+          } />
+          <Route path="/testcase-management" element={
+            <ProtectedRoute permission="testcase:review"><TestCaseManagement /></ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

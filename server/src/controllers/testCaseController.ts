@@ -3,7 +3,56 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { parseDocument } from '../services/documentParser';
 import { AIService } from '../services/ai/aiService';
-import { canViewAllExecutionHistory, canViewAllUserTestStats, canViewUserTestStats } from '../services/permissionService';
+import { canViewAllExecutionHistory, canViewAllUserTestStats, canViewUserTestStats, canReviewTestCase, hasPermission } from '../services/permissionService';
+
+// Resolve the "latest execution" to display for a test case based on the viewer's permission:
+// - read-all (canViewAll): overall latest execution (most recent across all users)
+// - read-own: the viewer's own latest execution
+function pickLatestExecution(
+  executions: any[],
+  currentUserId?: string | null,
+  canViewAll?: boolean
+): any | null {
+  if (!executions || executions.length === 0) return null;
+  if (canViewAll) return executions[0];
+  if (currentUserId) {
+    const own = executions.find(
+      (e: any) => e.createdById === currentUserId || e.executedById === currentUserId
+    );
+    return own || null;
+  }
+  return executions[0];
+}
+
+// Giống pickLatestExecution nhưng cũng tính người được theo dõi (watchers)
+function pickLatestVisibleExecution(
+  executions: any[],
+  currentUserId?: string | null,
+  canViewAll?: boolean
+): any | null {
+  if (!executions || executions.length === 0) return null;
+  if (canViewAll) return executions[0];
+  if (currentUserId) {
+    const own = executions.find(
+      (e: any) =>
+        e.createdById === currentUserId ||
+        e.executedById === currentUserId ||
+        (Array.isArray(e.watchers) && e.watchers.some((w: any) => w.userId === currentUserId))
+    );
+    return own || null;
+  }
+  return executions[0];
+}
+
+// Điều kiện execution có thể xem bởi user hiện tại (tạo / thực thi / theo dõi)
+function isExecutionVisibleTo(execution: any, currentUserId?: string | null): boolean {
+  if (!currentUserId) return false;
+  return (
+    execution.createdById === currentUserId ||
+    execution.executedById === currentUserId ||
+    (Array.isArray(execution.watchers) && execution.watchers.some((w: any) => w.userId === currentUserId))
+  );
+}
 
 export class TestCaseController {
   static async generate(req: AuthRequest, res: Response) {
@@ -206,18 +255,9 @@ export class TestCaseController {
             },
           });
 
-          // Create initial UNREVIEWED execution
-          const execution = await prisma.testExecution.create({
-            data: {
-              testCaseId: testCase.id,
-              executedById: userId,
-              status: 'UNREVIEWED',
-            },
-          });
-
           return {
             ...testCase,
-            latestExecution: execution,
+            latestExecution: null,
           };
         })
       );
@@ -249,7 +289,8 @@ export class TestCaseController {
       const currentUserId = req.user?.id;
       const currentUserRole = req.user?.role;
       const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
-      
+      const canExecute = await hasPermission(currentUserId || '', currentUserRole || '', 'testcase:execute');
+
       const suites = await prisma.testSuite.findMany({
         orderBy: { createdAt: 'desc' },
         include: {
@@ -257,12 +298,22 @@ export class TestCaseController {
             select: { filename: true, fileType: true, fileSize: true },
           },
           testCases: {
+            where: { reviewStatus: 'REVIEWED' },
             include: {
               executions: {
                 orderBy: { executedAt: 'desc' },
                 include: {
                   executedBy: {
                     select: { id: true, fullName: true, email: true },
+                  },
+                  beforeExecutedBy: {
+                    select: { id: true, fullName: true, email: true },
+                  },
+                  createdBy: {
+                    select: { id: true, fullName: true, email: true },
+                  },
+                  watchers: {
+                    select: { userId: true },
                   },
                   images: {
                     orderBy: { uploadedAt: 'asc' },
@@ -275,25 +326,43 @@ export class TestCaseController {
       });
 
       const formatted = suites.map((suite) => {
-        const testCasesWithExtras = suite.testCases.map((tc) => {
-          // Filter executions based on permissions
-          let filteredExecutions = tc.executions;
-          if (!canViewAll && currentUserId) {
-            filteredExecutions = tc.executions.filter((e) => e.executedById === currentUserId);
-          }
-          
-          const userExec = currentUserId
-            ? filteredExecutions.find((e) => e.executedById === currentUserId)
-            : filteredExecutions[0];
-          return {
-            ...tc,
-            latestExecution: userExec ?? null,
-            results: filteredExecutions, // Filtered list of executions based on permissions
-          };
-        });
+        const allReviewed = suite.testCases;
+        const testCasesWithExtras = allReviewed
+          .map((tc) => {
+            let filteredExecutions = tc.executions;
+            if (!canViewAll && currentUserId) {
+              filteredExecutions = tc.executions.filter((e) => isExecutionVisibleTo(e, currentUserId));
+            }
+
+            const userExec = pickLatestVisibleExecution(tc.executions, currentUserId, canViewAll);
+            return {
+              ...tc,
+              latestExecution: userExec ?? null,
+              results: filteredExecutions,
+            };
+          })
+          .filter((tc) => canViewAll || tc.latestExecution);
+
+        // Test case đã kiểm duyệt nhưng user chưa có execution nào (để "Nhận & bắt đầu")
+        const unreceivedTestCases = canExecute
+          ? allReviewed
+              .filter(
+                (tc) =>
+                  !tc.executions.some(
+                    (e) => e.createdById === currentUserId || e.executedById === currentUserId
+                  )
+              )
+              .map((tc) => ({
+                id: tc.id,
+                testCaseCode: tc.testCaseCode,
+                title: tc.title,
+                module: tc.module,
+                platform: tc.platform,
+                priority: tc.priority,
+              }))
+          : [];
 
         const total = testCasesWithExtras.length;
-        let unreviewed = 0;
         let untested = 0;
         let passed = 0;
         let failed = 0;
@@ -301,13 +370,12 @@ export class TestCaseController {
         let retest = 0;
 
         testCasesWithExtras.forEach((tc) => {
-          const status = tc.latestExecution?.status || 'UNREVIEWED';
+          const status = tc.latestExecution?.status || 'UNTESTED';
           if (status === 'PASSED') passed++;
           else if (status === 'FAILED') failed++;
           else if (status === 'BLOCKED') blocked++;
           else if (status === 'RETEST') retest++;
-          else if (status === 'UNTESTED') untested++;
-          else unreviewed++;
+          else untested++;
         });
 
         return {
@@ -320,9 +388,9 @@ export class TestCaseController {
           createdAt: suite.createdAt,
           updatedAt: suite.updatedAt,
           testCases: testCasesWithExtras,
+          unreceivedTestCases,
           stats: {
             total,
-            unreviewed,
             untested,
             passed,
             failed,
@@ -345,12 +413,14 @@ export class TestCaseController {
       const currentUserId = req.user?.id;
       const currentUserRole = req.user?.role;
       const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
-      
+      const canExecute = await hasPermission(currentUserId || '', currentUserRole || '', 'testcase:execute');
+
       const suite = await prisma.testSuite.findUnique({
         where: { id },
         include: {
           document: true,
           testCases: {
+            where: { reviewStatus: 'REVIEWED' },
             orderBy: { orderIndex: 'asc' },
             include: {
               executions: {
@@ -358,6 +428,15 @@ export class TestCaseController {
                 include: {
                   executedBy: {
                     select: { id: true, fullName: true, email: true },
+                  },
+                  beforeExecutedBy: {
+                    select: { id: true, fullName: true, email: true },
+                  },
+                  createdBy: {
+                    select: { id: true, fullName: true, email: true },
+                  },
+                  watchers: {
+                    include: { user: { select: { id: true, fullName: true, email: true } } },
                   },
                   images: {
                     orderBy: { uploadedAt: 'asc' },
@@ -373,35 +452,57 @@ export class TestCaseController {
         return res.status(404).json({ message: 'Không tìm thấy bộ Test Suite' });
       }
 
-      const testCases = suite.testCases.map((tc) => {
-        // Filter executions based on permissions
-        let filteredExecutions = tc.executions;
-        if (!canViewAll && currentUserId) {
-          filteredExecutions = tc.executions.filter((e) => e.executedById === currentUserId);
-        }
-        
-        const userExec = currentUserId
-          ? filteredExecutions.find((e) => e.executedById === currentUserId)
-          : filteredExecutions[0];
-        return {
-          id: tc.id,
-          testSuiteId: tc.testSuiteId,
-          testCaseCode: tc.testCaseCode,
-          module: tc.module,
-          platform: tc.platform,
-          title: tc.title,
-          testType: tc.testType,
-          preconditions: tc.preconditions,
-          steps: tc.steps,
-          expectedResult: tc.expectedResult,
-          priority: tc.priority,
-          orderIndex: tc.orderIndex,
-          createdAt: tc.createdAt,
-          updatedAt: tc.updatedAt,
-          latestExecution: userExec || null,
-          results: filteredExecutions, // Filtered list of executions based on permissions
-        };
-      });
+      const allReviewed = suite.testCases;
+      const testCases = allReviewed
+        .map((tc) => {
+          let filteredExecutions = tc.executions;
+          if (!canViewAll && currentUserId) {
+            filteredExecutions = tc.executions.filter((e) => isExecutionVisibleTo(e, currentUserId));
+          }
+
+          const userExec = pickLatestVisibleExecution(tc.executions, currentUserId, canViewAll);
+          return {
+            id: tc.id,
+            testSuiteId: tc.testSuiteId,
+            testCaseCode: tc.testCaseCode,
+            module: tc.module,
+            platform: tc.platform,
+            title: tc.title,
+            testType: tc.testType,
+            preconditions: tc.preconditions,
+            steps: tc.steps,
+            expectedResult: tc.expectedResult,
+            priority: tc.priority,
+            orderIndex: tc.orderIndex,
+            reviewStatus: tc.reviewStatus,
+            reviewedById: tc.reviewedById,
+            reviewedAt: tc.reviewedAt,
+            createdAt: tc.createdAt,
+            updatedAt: tc.updatedAt,
+            latestExecution: userExec || null,
+            results: filteredExecutions,
+          };
+        })
+        .filter((tc) => canViewAll || tc.latestExecution);
+
+      // Test case đã kiểm duyệt nhưng user chưa có execution nào (để "Nhận & bắt đầu")
+      const unreceivedTestCases = canExecute
+        ? allReviewed
+            .filter(
+              (tc) =>
+                !tc.executions.some(
+                  (e) => e.createdById === currentUserId || e.executedById === currentUserId
+                )
+            )
+              .map((tc) => ({
+                id: tc.id,
+                testCaseCode: tc.testCaseCode,
+                title: tc.title,
+                module: tc.module,
+                platform: tc.platform,
+                priority: tc.priority,
+              }))
+          : [];
 
       // Calculate stats
       const total = testCases.length;
@@ -429,10 +530,160 @@ export class TestCaseController {
            createdAt: suite.createdAt,
            updatedAt: suite.updatedAt,
          },
-         testCases,
-       });
+          testCases,
+          unreceivedTestCases,
+        });
     } catch (error: any) {
       return res.status(500).json({ message: 'Lỗi tải chi tiết Test Suite', error: error.message });
+    }
+  }
+
+  // Tạo bộ execution UNTESTED cho user hiện tại với các Test Case (REVIEWED) trong suite
+  // mà user chưa test (chưa có execution do chính user tạo hoặc thực thi).
+  // Hỗ trợ lọc theo nhóm chức năng (module) hoặc danh sách testCaseIds cụ thể.
+  static async provisionExecutions(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const currentUserId = req.user?.id;
+      const body = (req.body || {}) as { module?: string; testCaseIds?: string[] };
+      const { module, testCaseIds } = body;
+      if (!currentUserId) {
+        return res.status(401).json({ message: 'Chưa xác thực' });
+      }
+
+      const where: any = { reviewStatus: 'REVIEWED' };
+      if (typeof module === 'string' && module.trim()) {
+        where.module = module.trim();
+      }
+      if (Array.isArray(testCaseIds) && testCaseIds.length > 0) {
+        where.id = { in: testCaseIds };
+      }
+
+      const suite = await prisma.testSuite.findUnique({
+        where: { id },
+        include: {
+          testCases: {
+            where,
+            select: { id: true },
+          },
+        },
+      });
+
+      if (!suite) {
+        return res.status(404).json({ message: 'Không tìm thấy bộ Test Suite' });
+      }
+
+      const caseIds = suite.testCases.map((c) => c.id);
+      if (caseIds.length === 0) {
+        return res.json({ message: 'Không có Test Case nào thỏa mãn để nhận', created: 0, testCaseIds: [] });
+      }
+
+      // Test case user đã có execution (do user tạo hoặc user thực thi)
+      const existing = await prisma.testExecution.findMany({
+        where: {
+          testCaseId: { in: caseIds },
+          OR: [{ createdById: currentUserId }, { executedById: currentUserId }],
+        },
+        select: { testCaseId: true },
+      });
+      const existingIds = new Set(existing.map((e) => e.testCaseId));
+      const missing = caseIds.filter((cid) => !existingIds.has(cid));
+
+      let created = 0;
+      if (missing.length > 0) {
+        await prisma.testExecution.createMany({
+          data: missing.map((cid) => ({
+            testCaseId: cid,
+            status: 'UNTESTED',
+            createdById: currentUserId,
+            executedById: currentUserId,
+          })),
+        });
+        created = missing.length;
+      }
+
+      return res.json({
+        message:
+          created > 0
+            ? `Đã lấy ${created} Test Case để thực hiện`
+            : 'Bạn đã nhận đủ các Test Case này',
+        created,
+        testCaseIds: missing,
+      });
+    } catch (error: any) {
+      console.error('Provision executions error:', error);
+      return res.status(500).json({ message: 'Lỗi khi lấy Test Case', error: error.message });
+    }
+  }
+
+  static async getTestCaseById(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+      const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
+
+      const tc = await prisma.testCase.findUnique({
+        where: { id },
+        include: {
+          executions: {
+            orderBy: { executedAt: 'desc' },
+            include: {
+              executedBy: {
+                select: { id: true, fullName: true, email: true },
+              },
+              beforeExecutedBy: {
+                select: { id: true, fullName: true, email: true },
+              },
+              createdBy: {
+                select: { id: true, fullName: true, email: true },
+              },
+              watchers: {
+                include: { user: { select: { id: true, fullName: true, email: true } } },
+              },
+              images: {
+                orderBy: { uploadedAt: 'asc' },
+              },
+            },
+          },
+        },
+      });
+
+      if (!tc) {
+        return res.status(404).json({ message: 'Không tìm thấy Test Case' });
+      }
+
+      let filteredExecutions = tc.executions;
+      if (!canViewAll && currentUserId) {
+        filteredExecutions = tc.executions.filter((e) => isExecutionVisibleTo(e, currentUserId));
+      }
+
+      const userExec = pickLatestVisibleExecution(tc.executions, currentUserId, canViewAll);
+      const testCase = {
+        id: tc.id,
+        testSuiteId: tc.testSuiteId,
+        testCaseCode: tc.testCaseCode,
+        module: tc.module,
+        platform: tc.platform,
+        title: tc.title,
+        testType: tc.testType,
+        preconditions: tc.preconditions,
+        steps: tc.steps,
+        expectedResult: tc.expectedResult,
+        priority: tc.priority,
+        orderIndex: tc.orderIndex,
+        reviewStatus: tc.reviewStatus,
+        reviewedById: tc.reviewedById,
+        reviewedAt: tc.reviewedAt,
+        createdAt: tc.createdAt,
+        updatedAt: tc.updatedAt,
+        latestExecution: userExec || null,
+        executions: filteredExecutions,
+      };
+
+      return res.json({ testCase });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi tải chi tiết Test Case', error: error.message });
     }
   }
 
@@ -450,9 +701,6 @@ export class TestCaseController {
         expectedResult,
         priority,
       } = req.body;
-      const currentUserId = req.user?.id;
-      const currentUserRole = req.user?.role;
-      const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
 
       if (!testSuiteId || !title || !module) {
         return res.status(400).json({
@@ -480,32 +728,12 @@ export class TestCaseController {
         },
       });
 
-      // Create initial UNREVIEWED execution
-      const initialExec = await prisma.testExecution.create({
-        data: {
-          testCaseId: testCase.id,
-          executedById: req.user?.id || null,
-          status: 'UNREVIEWED',
-        },
-        include: {
-          executedBy: {
-            select: { id: true, fullName: true, email: true },
-          },
-          images: {
-            orderBy: { uploadedAt: 'asc' },
-          },
-        },
-      });
-
-      // Filter executions based on permissions (for consistency)
-      const filteredExecutions = canViewAll || !currentUserId ? [initialExec] : (initialExec.executedById === currentUserId ? [initialExec] : []);
-
       return res.status(201).json({
         message: 'Tạo Test Case mới thành công',
         testCase: {
           ...testCase,
-          latestExecution: filteredExecutions[0] || null,
-          executions: filteredExecutions,
+          latestExecution: null,
+          executions: [],
         },
       });
     } catch (error: any) {
@@ -542,6 +770,12 @@ export class TestCaseController {
               executedBy: {
                 select: { id: true, fullName: true, email: true },
               },
+              beforeExecutedBy: {
+                select: { id: true, fullName: true, email: true },
+              },
+              watchers: {
+                select: { userId: true },
+              },
               images: {
                 orderBy: { uploadedAt: 'asc' },
               },
@@ -553,13 +787,10 @@ export class TestCaseController {
       // Filter executions based on permissions
       let filteredExecutions = updated.executions;
       if (!canViewAll && currentUserId) {
-        filteredExecutions = updated.executions.filter((e) => e.executedById === currentUserId);
+        filteredExecutions = updated.executions.filter((e) => isExecutionVisibleTo(e, currentUserId));
       }
 
-      const userExec = currentUserId
-        ? filteredExecutions.find((e) => e.executedById === currentUserId)
-        : filteredExecutions[0];
-
+      const userExec = pickLatestVisibleExecution(updated.executions, currentUserId, canViewAll);
       return res.json({
         message: 'Cập nhật Test Case thành công',
         testCase: {
@@ -681,9 +912,11 @@ export class TestCaseController {
       // Calculate stats for each user
       const userStats = await Promise.all(
         targetUsers.map(async (user) => {
-          // Get all executions by this user
+          // Get all executions created or executed by this user
           const executions = await prisma.testExecution.findMany({
-            where: { executedById: user.id },
+            where: {
+              OR: [{ executedById: user.id }, { createdById: user.id }],
+            },
             select: {
               testCaseId: true,
               status: true,
@@ -705,7 +938,6 @@ export class TestCaseController {
           let blocked = 0;
           let retest = 0;
           let untested = 0;
-          let unreviewed = 0;
 
           for (const status of latestStatusMap.values()) {
             if (status === 'PASSED') passed++;
@@ -713,7 +945,6 @@ export class TestCaseController {
             else if (status === 'BLOCKED') blocked++;
             else if (status === 'RETEST') retest++;
             else if (status === 'UNTESTED') untested++;
-            else if (status === 'UNREVIEWED') unreviewed++;
           }
 
           const testedCount = passed + failed + blocked + retest;
@@ -729,7 +960,6 @@ export class TestCaseController {
             status: user.status,
             lastLogin: user.lastLogin,
             totalTestCases,
-            unreviewed,
             untested: untested || remainingUntested,
             passed,
             failed,
@@ -750,6 +980,127 @@ export class TestCaseController {
     } catch (error: any) {
       console.error('Error fetching user execution stats:', error);
       return res.status(500).json({ message: 'Lỗi khi lấy thống kê kiểm thử', error: error.message });
+    }
+  }
+
+  static async reviewTestCase(req: AuthRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+
+      const canReview = await canReviewTestCase(currentUserId, currentUserRole);
+      if (!canReview) {
+        return res.status(403).json({ message: 'Bạn không có quyền kiểm duyệt Test Case' });
+      }
+
+      const tc = await prisma.testCase.findUnique({ where: { id } });
+      if (!tc) {
+        return res.status(404).json({ message: 'Không tìm thấy Test Case' });
+      }
+
+      const updated = await prisma.testCase.update({
+        where: { id },
+        data: {
+          reviewStatus: 'REVIEWED',
+          reviewedById: currentUserId || null,
+          reviewedAt: new Date(),
+        },
+      });
+
+      return res.json({
+        message: 'Đã kiểm duyệt Test Case thành công',
+        testCase: {
+          id: updated.id,
+          reviewStatus: updated.reviewStatus,
+          reviewedById: updated.reviewedById,
+          reviewedAt: updated.reviewedAt,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi kiểm duyệt Test Case', error: error.message });
+    }
+  }
+
+  static async listForReview(req: AuthRequest, res: Response) {
+    try {
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+
+      const canReview = await canReviewTestCase(currentUserId, currentUserRole);
+      if (!canReview) {
+        return res.status(403).json({ message: 'Bạn không có quyền kiểm duyệt Test Case' });
+      }
+
+      const cases = await prisma.testCase.findMany({
+        orderBy: [{ testSuiteId: 'asc' }, { orderIndex: 'asc' }],
+        include: {
+          testSuite: {
+            select: { id: true, name: true, moduleName: true },
+          },
+          reviewedBy: {
+            select: { id: true, fullName: true, email: true },
+          },
+          _count: {
+            select: { executions: true },
+          },
+        },
+      });
+
+      const testCases = cases.map((c) => ({
+        id: c.id,
+        testCaseCode: c.testCaseCode,
+        title: c.title,
+        module: c.module,
+        platform: c.platform,
+        testType: c.testType,
+        priority: c.priority,
+        testSuiteId: c.testSuiteId,
+        suiteName: c.testSuite?.name || null,
+        reviewStatus: c.reviewStatus,
+        reviewedById: c.reviewedById,
+        reviewedBy: c.reviewedBy || null,
+        reviewedAt: c.reviewedAt,
+        executionCount: c._count.executions,
+      }));
+
+      return res.json({ testCases });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi tải danh sách kiểm duyệt', error: error.message });
+    }
+  }
+
+  static async bulkReview(req: AuthRequest, res: Response) {
+    try {
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+
+      const canReview = await canReviewTestCase(currentUserId, currentUserRole);
+      if (!canReview) {
+        return res.status(403).json({ message: 'Bạn không có quyền kiểm duyệt Test Case' });
+      }
+
+      const { ids } = req.body as { ids?: string[] };
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Vui lòng chọn ít nhất một Test Case' });
+      }
+
+      const safeIds = ids.slice(0, 1000);
+      const result = await prisma.testCase.updateMany({
+        where: { id: { in: safeIds } },
+        data: {
+          reviewStatus: 'REVIEWED',
+          reviewedById: currentUserId || null,
+          reviewedAt: new Date(),
+        },
+      });
+
+      return res.json({
+        message: `Đã kiểm duyệt ${result.count} Test Case thành công`,
+        updatedCount: result.count,
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Lỗi kiểm duyệt hàng loạt', error: error.message });
     }
   }
 }

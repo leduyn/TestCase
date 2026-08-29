@@ -5,12 +5,17 @@ import type {
   TestCase,
   TestExecution,
   TestExecutionImage,
+  TestExecutionHistory,
+  TestExecutionWatcher,
+  TestCaseReviewStatus,
   StorageConfig,
   AIProviderInfo,
   AIConfig,
   Permission,
   UserPermissionsResponse,
   UserTestStatsResponse,
+  SuiteDetailResponse,
+  ReviewTestCaseItem,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
@@ -139,12 +144,27 @@ export const testCaseApi = {
     }),
   createTestCase: (data: Partial<TestCase> & { testSuiteId: string }) =>
     api.post<{ message: string; testCase: TestCase }>('/testcases', data),
+  reviewTestCase: (id: string) =>
+    api.patch<{
+      message: string;
+      testCase: { id: string; reviewStatus: TestCaseReviewStatus; reviewedById: string | null; reviewedAt: string | null };
+    }>(`/testcases/${id}/review`),
+  listForReview: () => api.get<{ testCases: ReviewTestCaseItem[] }>('/testcases/review'),
+  bulkReview: (ids: string[]) =>
+    api.post<{ message: string; updatedCount: number }>('/testcases/review-bulk', { ids }),
   getSuites: () => api.get<{ suites: TestSuite[] }>('/testcases/suites'),
   getSuiteById: (id: string) =>
-    api.get<{ suite: TestSuite; testCases: TestCase[] }>(`/testcases/suites/${id}`),
+    api.get<SuiteDetailResponse>(`/testcases/suites/${id}`),
+  takeTestCases: (id: string, data?: { module?: string; testCaseIds?: string[] }) =>
+    api.post<{ message: string; created: number; testCaseIds: string[] }>(
+      `/testcases/suites/${id}/provision`,
+      data || {}
+    ),
   updateTestCase: (id: string, data: Partial<TestCase>) =>
     api.put<{ message: string; testCase: TestCase }>(`/testcases/${id}`, data),
   deleteTestCase: (id: string) => api.delete<{ message: string }>(`/testcases/${id}`),
+  getTestCase: (id: string) =>
+    api.get<{ testCase: TestCase }>(`/testcases/${id}`),
   importPreview: (formData: FormData) =>
     api.post<{
       sheetName: string;
@@ -189,6 +209,8 @@ export const executionApi = {
       actualResult?: string;
       evaluation?: string;
       notes?: string;
+      executedById?: string;
+      viewerIds?: string[];
     }
   ) =>
     api.post<{ message: string; execution: TestExecution }>(
@@ -204,6 +226,8 @@ export const executionApi = {
       actualResult?: string;
       evaluation?: string;
       notes?: string;
+      executedById?: string;
+      viewerIds?: string[];
     }
   ) =>
     api.put<{ message: string; execution: TestExecution }>(
@@ -212,6 +236,19 @@ export const executionApi = {
     ),
   getHistory: (testCaseId: string) =>
     api.get<{ history: TestExecution[] }>(`/executions/${testCaseId}/history`),
+  getSnapshots: (executionId: string) =>
+    api.get<{ snapshots: TestExecutionHistory[] }>(
+      `/executions/${executionId}/snapshots`
+    ),
+  getWatcherUsers: () =>
+    api.get<{ users: { id: string; fullName: string; email: string }[] }>(
+      `/executions/watcher-users`
+    ),
+  setWatchers: (executionId: string, userIds: string[]) =>
+    api.patch<{ message: string; watchers: TestExecutionWatcher[] }>(
+      `/executions/${executionId}/watchers`,
+      { userIds }
+    ),
 };
 
 // Export API
@@ -277,13 +314,38 @@ export const permissionApi = {
   getUserPermissions: (id: string) => api.get<UserPermissionsResponse>(`/permissions/users/${id}/permissions`),
   grantUserPermission: (id: string, data: { permissionKey: string; effect: 'ALLOW' | 'DENY'; resourceType?: string; resourceId?: string }) => api.post(`/permissions/users/${id}/permissions`, data),
   revokeUserPermission: (id: string, permissionKey: string, resourceType?: string, resourceId?: string) => api.delete(`/permissions/users/${id}/permissions/${permissionKey}`, { params: { resourceType, resourceId } }),
+  getUsersByPermission: (permissionKey: string) =>
+    api.get<{ users: { id: string; fullName: string; email: string }[] }>(`/permissions/users/by-permission?permission=${encodeURIComponent(permissionKey)}`),
+};
+
+// API phân công xử lý trạng thái thực thi (thay thế quyền execution:set-*)
+export const statusHandlerApi = {
+  // Danh sách user được gán xử lý một trạng thái
+  getHandlers: (status: string) =>
+    api.get<{ status: string; users: { id: string; fullName: string; email: string }[] }>(
+      `/execution-status-handlers/${status}`
+    ),
+  // Các trạng thái mà user hiện tại được gán xử lý
+  getMyStatuses: () =>
+    api.get<{ statuses: string[] }>(`/execution-status-handlers/me/statuses`),
+  // Gán user xử lý một trạng thái
+  assign: (status: string, userId: string) =>
+    api.post<{ message: string; status: string; user: { id: string; fullName: string; email: string } }>(
+      `/execution-status-handlers`,
+      { status, userId }
+    ),
+  // Gỡ user khỏi xử lý một trạng thái
+  remove: (status: string, userId: string) =>
+    api.delete<{ message: string; status: string; userId: string }>(
+      `/execution-status-handlers/${status}/${userId}`
+    ),
 };
 
 // TestSuites API
 export const suiteApi = {
   getSuites: () => api.get<{ suites: TestSuite[] }>('/testcases/suites'),
   getSuiteById: (id: string) =>
-    api.get<{ suite: TestSuite; testCases: TestCase[] }>(`/testcases/suites/${id}`),
+    api.get<SuiteDetailResponse>(`/testcases/suites/${id}`),
   updateTestSuite: (id: string, data: { name: string; moduleName: string; summary?: string; assumptions?: string }) =>
     api.put<{ message: string; testSuite: TestSuite }>(`/testcases/suites/${id}`, data),
   deleteTestSuite: (id: string) => api.delete<{ message: string }>(`/testcases/suites/${id}`),

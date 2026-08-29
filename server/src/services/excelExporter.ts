@@ -76,7 +76,7 @@ export class ExcelExporter {
     const COLOR_BLOCKED = 'FFE699'; // Orange Blocked
     const COLOR_RETEST = 'E1D5E7'; // Soft Purple Retest
     const COLOR_UNTESTED = 'D9E1F2'; // Soft Blue Untested
-    const COLOR_UNREVIEWED = 'F2F2F2'; // Light Gray Unreviewed
+    const COLOR_UNREVIEWED = 'D9E1F2'; // Soft Blue fallback (unknown status)
 
     // Borders
     const thinBorder: Partial<ExcelJS.Borders> = {
@@ -260,15 +260,14 @@ export class ExcelExporter {
   }
 
   static mapStatusToVietnamese(status: string): string {
-    const s = (status || 'UNREVIEWED').toUpperCase();
+    const s = (status || 'UNTESTED').toUpperCase();
     switch (s) {
       case 'PASSED': return 'Đạt';
       case 'FAILED': return 'Thất bại';
       case 'BLOCKED': return 'Chặn';
       case 'RETEST': return 'Test lại';
       case 'UNTESTED': return 'Chưa test';
-      case 'UNREVIEWED': return 'Chưa kiểm duyệt';
-      default: return 'Chưa kiểm duyệt';
+      default: return 'Chưa test';
     }
   }
 
@@ -293,7 +292,7 @@ export class ExcelExporter {
     const COLOR_BLOCKED = 'FFE699'; // Orange Blocked
     const COLOR_RETEST = 'E1D5E7'; // Soft Purple Retest
     const COLOR_UNTESTED = 'D9E1F2'; // Soft Blue Untested
-    const COLOR_UNREVIEWED = 'F2F2F2'; // Light Gray Unreviewed
+    const COLOR_UNREVIEWED = 'D9E1F2'; // Soft Blue fallback (unknown status)
 
     // Borders
     const thinBorder: Partial<ExcelJS.Borders> = {

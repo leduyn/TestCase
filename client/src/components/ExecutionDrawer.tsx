@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   CheckCircle2,
@@ -24,19 +25,31 @@ import {
   ChevronLeft,
   Layers,
   Play,
+  Share2,
+  Link2,
+  Check,
 } from 'lucide-react';
-import type { TestCase, ExecutionStatus, TestExecutionImage, TestExecution } from '../types';
-import { executionApi, environmentApi, uploadApi } from '../services/api';
+import type {
+  TestCase,
+  ExecutionStatus,
+  TestExecutionImage,
+  TestExecution,
+  TestExecutionHistory,
+  TestExecutionWatcher,
+} from '../types';
+import { executionApi, environmentApi, uploadApi, statusHandlerApi } from '../services/api';
 import { PlatformBadge, PriorityBadge, TestTypeBadge, StatusBadge } from './Badge';
-import { RichTextEditor } from './RichTextEditor';
+import { ResultEditor, type ResultEditorHandle } from './ResultEditor';
 import { ImageUploader } from './ImageUploader';
 import { ImageLightbox } from './ImageLightbox';
 import { TestCaseEvidenceModal } from './TestCaseEvidenceModal';
 import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface ExecutionDrawerProps {
   testCase: TestCase | null;
   isOpen: boolean;
+  fullPage?: boolean;
   initialEditing?: boolean;
   initialExecution?: TestExecution | null;
   isNewExecution?: boolean;
@@ -66,9 +79,24 @@ interface UserOption {
   latestStatus?: ExecutionStatus;
 }
 
+const EXECUTION_STATUS_LIST: {
+  value: ExecutionStatus;
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  active: string;
+  idle: string;
+}[] = [
+  { value: 'UNTESTED', label: 'CHƯA TEST', Icon: Clock, active: 'bg-sky-600 text-white border-sky-600 shadow-md ring-2 ring-sky-400 ring-offset-1', idle: 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800' },
+  { value: 'RETEST', label: 'TEST LẠI', Icon: RotateCcw, active: 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-400 ring-offset-1', idle: 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800' },
+  { value: 'PASSED', label: 'PASSED', Icon: CheckCircle2, active: 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400 ring-offset-1', idle: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' },
+  { value: 'FAILED', label: 'FAILED', Icon: AlertTriangle, active: 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20 ring-2 ring-rose-400 ring-offset-1 animate-pulse', idle: 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800' },
+  { value: 'BLOCKED', label: 'BLOCKED', Icon: AlertCircle, active: 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20 ring-2 ring-amber-400 ring-offset-1', idle: 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800' },
+];
+
 export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   testCase,
   isOpen,
+  fullPage = false,
   initialEditing = false,
   initialExecution = null,
   isNewExecution = false,
@@ -79,6 +107,30 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   if (!isOpen || !testCase) return null;
 
   const { user: currentUser } = useAuth();
+  const navigate = useNavigate();
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    const link = `${window.location.origin}/testcases/${testCase.id}`;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = link;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+      } catch {
+        /* ignore */
+      }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const [isEditing, setIsEditing] = useState(initialEditing);
   const [availableServers, setAvailableServers] = useState<string[]>(DEFAULT_SERVERS);
@@ -90,11 +142,18 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | undefined>();
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
 
+  // Danh sách user để chọn người theo dõi + lịch sử thay đổi (snapshots)
+  const [watcherUsers, setWatcherUsers] = useState<{ id: string; fullName: string; email: string }[]>([]);
+  const [snapshots, setSnapshots] = useState<TestExecutionHistory[]>([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [watcherBusy, setWatcherBusy] = useState(false);
+
   // Form states
   const [server, setServer] = useState('STAGING');
   const [os, setOs] = useState('Windows 11');
-  const [status, setStatus] = useState<ExecutionStatus>('UNREVIEWED');
+  const [status, setStatus] = useState<ExecutionStatus>('UNTESTED');
   const [actualResult, setActualResult] = useState('');
+  const resultEditorRef = useRef<ResultEditorHandle>(null);
   const [evaluation, setEvaluation] = useState('');
   const [notes, setNotes] = useState('');
   const [images, setImages] = useState<TestExecutionImage[]>([]);
@@ -102,6 +161,15 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [allowedStatuses, setAllowedStatuses] = useState<Set<string> | null>(null);
+
+  // Next-step handler (overwrites executedById). Only users with execution:set-<status> are eligible.
+  const [eligibleHandlers, setEligibleHandlers] = useState<{ id: string; fullName: string; email: string }[]>([]);
+  const [nextHandlerId, setNextHandlerId] = useState<string>('');
+  const [loadingHandlers, setLoadingHandlers] = useState(false);
+
+  // Confirmation modal shown on Save (assign executor + confirm status transition)
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   // Lightbox for View Mode
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -130,7 +198,43 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     loadEnvironments();
   }, []);
 
-  // Helper to load specific execution data into form / view
+  // Load các trạng thái mà user hiện tại được gán xử lý để giới hạn lựa chọn trạng thái
+  useEffect(() => {
+    const loadPerms = async () => {
+      try {
+        const res = await statusHandlerApi.getMyStatuses();
+        setAllowedStatuses(new Set<string>(res.data.statuses || []));
+      } catch {
+        setAllowedStatuses(null);
+      }
+    };
+    loadPerms();
+  }, []);
+
+  // Khi ở chế độ chỉnh sửa và trạng thái thay đổi, tải danh sách người xử lý hợp lệ
+  // (chỉ những người được gán xử lý trạng thái tương ứng) cho bước tiếp theo.
+  useEffect(() => {
+    if (!isEditing || !status) {
+      setEligibleHandlers([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingHandlers(true);
+    statusHandlerApi
+      .getHandlers(status)
+      .then((res) => {
+        if (!cancelled) setEligibleHandlers(res.data.users || []);
+      })
+      .catch(() => {
+        if (!cancelled) setEligibleHandlers([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHandlers(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status, isEditing]);
   const loadExecutionData = (exec: TestExecution | null) => {
     if (exec) {
       setServer(exec.server || 'STAGING');
@@ -142,6 +246,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setImages(exec.images || []);
       setCurrentExecutionId(exec.id);
       setSelectedExecutionId(exec.id);
+      setNextHandlerId(exec.executedById || currentUser?.id || '');
     } else {
       setServer('STAGING');
       setOs('Windows 11');
@@ -152,14 +257,15 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setImages([]);
       setCurrentExecutionId(undefined);
       setSelectedExecutionId(undefined);
+      setNextHandlerId(currentUser?.id || '');
     }
     setValidationError(null);
     setSaveSuccess(false);
   };
 
-  // Helper to get user key from execution
+  // Helper to get user key from execution (lấy theo người tạo - createdBy)
   const getUserKey = (exec: TestExecution): string => {
-    return exec.executedById || exec.executedBy?.email || exec.executedBy?.fullName || 'ANONYMOUS';
+    return exec.createdById || exec.createdBy?.email || exec.createdBy?.fullName || 'ANONYMOUS';
   };
 
   // Compute distinct users who tested this testcase
@@ -182,8 +288,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       const isCurrent = currentUser?.id && (uKey === currentUser.id);
       const name = isCurrent
         ? `${currentUser?.fullName || currentUser?.email || 'Tôi'} (Bạn)`
-        : (e.executedBy?.fullName || e.executedBy?.email || 'Người dùng');
-      const email = e.executedBy?.email || '';
+        : (e.createdBy?.fullName || e.createdBy?.email || 'Người dùng');
+      const email = e.createdBy?.email || '';
 
       if (!map.has(uKey)) {
         map.set(uKey, {
@@ -305,13 +411,16 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const handleCustomUpload = async (files: File[]) => {
     let execId = currentExecutionId;
     if (!execId && testCase) {
+      const currentActualResult = resultEditorRef.current?.getValue() || '';
       const res = await executionApi.executeTestCase(testCase.id, {
         server,
         os,
         status,
-        actualResult,
+        actualResult: currentActualResult,
         evaluation,
         notes,
+        executedById: nextHandlerId,
+        viewerIds: activeExecution?.watchers?.map((w) => w.userId) || [],
       });
       execId = res.data.execution.id;
       setCurrentExecutionId(execId);
@@ -346,19 +455,33 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     return textContent.trim() === '';
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
 
     // Validate: actualResult must not be empty only when required (PASSED, FAILED, RETEST)
-    const isActualResultRequired = status !== 'UNTESTED' && status !== 'UNREVIEWED' && status !== 'BLOCKED';
-    if (isActualResultRequired && isRichTextEmpty(actualResult)) {
+    const isActualResultRequired = status !== 'UNTESTED' && status !== 'BLOCKED';
+    const currentActualResult = resultEditorRef.current?.getValue() || '';
+    if (isActualResultRequired && isRichTextEmpty(currentActualResult)) {
       setValidationError('Vui lòng nhập nội dung "Kết quả thực tế" trước khi lưu.');
       return;
     }
 
+    // Mở popup xác nhận chuyển trạng thái & giao việc (chọn người thực thi ở đây).
+    // Mặc định người thực thi bước tiếp theo: người thực thi trước đây (before_executed_id)
+    // hoặc người tạo thực thi (created_by_id), nếu không có thì là người dùng hiện tại.
+    setNextHandlerId(previousHandler?.id || currentUser?.id || '');
+
+    setConfirmOpen(true);
+  };
+
+  // Thực hiện lưu sau khi đã xác nhận trong popup
+  const commitSave = async () => {
     setSaving(true);
     setSaveSuccess(false);
+
+    const currentActualResult = resultEditorRef.current?.getValue() || '';
+    setActualResult(currentActualResult);
 
     try {
       let savedExec: TestExecution;
@@ -369,9 +492,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           server,
           os,
           status,
-          actualResult,
+          actualResult: currentActualResult,
           evaluation,
           notes,
+          executedById: nextHandlerId,
+          viewerIds: activeExecution?.watchers?.map((w) => w.userId) || [],
         });
         savedExec = {
           ...res.data.execution,
@@ -383,9 +508,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           server,
           os,
           status,
-          actualResult,
+          actualResult: currentActualResult,
           evaluation,
           notes,
+          executedById: nextHandlerId,
+          viewerIds: activeExecution?.watchers?.map((w) => w.userId) || [],
         });
         savedExec = {
           ...res.data.execution,
@@ -406,6 +533,14 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setSelectedExecutionId(savedExec.id);
       setSaveSuccess(true);
 
+      // Làm mới lịch sử thay đổi (snapshots) của execution vừa lưu
+      try {
+        const snapRes = await executionApi.getSnapshots(savedExec.id);
+        setSnapshots(snapRes.data.snapshots || []);
+      } catch {
+        /* ignore */
+      }
+
       const updated: TestCase = {
         ...testCase,
         executions: updatedExecs,
@@ -413,8 +548,9 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       };
 
       onSaved(updated);
+      setConfirmOpen(false);
       setIsEditing(false);
-      onClose(); // Close drawer and return to test case list
+      if (!fullPage) onClose(); // Close drawer and return to test case list (stay on page in full-page mode)
     } catch (err: any) {
       alert(`Lỗi khi lưu kết quả: ${err.response?.data?.message || err.message}`);
     } finally {
@@ -438,6 +574,136 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     if (!selectedExecutionId) return null;
     return allExecutions.find((e) => e.id === selectedExecutionId) || null;
   }, [allExecutions, selectedExecutionId]);
+
+  // Tải danh sách user để chọn người theo dõi khi mở drawer
+  useEffect(() => {
+    if (!isOpen) return;
+    executionApi
+      .getWatcherUsers()
+      .then((r) => setWatcherUsers(r.data.users || []))
+      .catch(() => setWatcherUsers([]));
+  }, [isOpen]);
+
+  // Tải lịch sử thay đổi (snapshots) của execution đang chọn
+  useEffect(() => {
+    const id = activeExecution?.id;
+    if (!id) {
+      setSnapshots([]);
+      return;
+    }
+    setSnapshotsLoading(true);
+    executionApi
+      .getSnapshots(id)
+      .then((r) => setSnapshots(r.data.snapshots || []))
+      .catch(() => setSnapshots([]))
+      .finally(() => setSnapshotsLoading(false));
+  }, [activeExecution?.id]);
+
+  // Kiểm tra quyền quản lý người theo dõi (creator / executor / admin)
+  const canManageWatchers = useMemo(() => {
+    if (currentUser?.role === 'ADMIN') return true;
+    const id = currentUser?.id;
+    if (!id || !activeExecution) return false;
+    return activeExecution.createdById === id || activeExecution.executedById === id;
+  }, [activeExecution, currentUser]);
+
+  const handleToggleWatcher = async (userId: string, add: boolean) => {
+    if (!activeExecution || watcherBusy) return;
+    const current = activeExecution.watchers?.map((w) => w.userId) || [];
+    const next = add ? [...new Set([...current, userId])] : current.filter((u) => u !== userId);
+    setWatcherBusy(true);
+    try {
+      const res = await executionApi.setWatchers(activeExecution.id, next);
+      setAllExecutions((prev) =>
+        prev.map((e) =>
+          e.id === activeExecution.id
+            ? { ...e, watchers: res.data.watchers as TestExecutionWatcher[] }
+            : e
+        )
+      );
+    } catch (err) {
+      console.error('Lỗi cập nhật người theo dõi', err);
+    } finally {
+      setWatcherBusy(false);
+    }
+  };
+
+  // Người xử lý bước trước (để "giao lại"): ưu tiên beforeExecutedId của execution hiện tại,
+  // nếu không có thì lấy execution liền trước theo thời gian, hoặc execution mới nhất khi tạo mới.
+  const previousHandler = useMemo<{ id?: string; name?: string } | null>(() => {
+    if (activeExecution?.beforeExecutedId) {
+      return {
+        id: activeExecution.beforeExecutedId,
+        name: activeExecution.beforeExecutedBy?.fullName || activeExecution.beforeExecutedBy?.email,
+      };
+    }
+    // Nếu chưa có người thực thi trước, lấy người tạo thực thi làm người thực thi trước
+    if (activeExecution?.createdBy?.id) {
+      return {
+        id: activeExecution.createdBy.id,
+        name: activeExecution.createdBy.fullName || activeExecution.createdBy.email,
+      };
+    }
+    const sorted = [...allExecutions].sort(
+      (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
+    );
+    if (activeExecution) {
+      const idx = sorted.findIndex((e) => e.id === activeExecution.id);
+      if (idx >= 0 && idx + 1 < sorted.length) {
+        const prev = sorted[idx + 1];
+        if (prev.executedById) {
+          return { id: prev.executedById, name: prev.executedBy?.fullName || prev.executedBy?.email };
+        }
+      }
+      return null;
+    }
+    // Tạo mới: người xử lý bước trước là execution mới nhất hiện có
+    const latest = sorted[0];
+    if (latest?.executedById) {
+      return { id: latest.executedById, name: latest.executedBy?.fullName || latest.executedBy?.email };
+    }
+    return null;
+  }, [activeExecution, allExecutions]);
+
+  // Danh sách tùy chọn cho selector: người hợp lệ + người xử lý trước + người tạo thực thi.
+  // Người xử lý trước và người tạo luôn được đưa vào danh sách (dù đã có quyền) để dễ nhận biết.
+  const handlerOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; email: string }>();
+    eligibleHandlers.forEach((u) => {
+      if (u.id) map.set(u.id, { id: u.id, name: u.fullName || u.email, email: u.email });
+    });
+    // Người thực thi trước (ghi đè tên để làm nổi bật)
+    if (previousHandler?.id) {
+      map.set(previousHandler.id, {
+        id: previousHandler.id,
+        name: `${previousHandler.name || 'Người xử lý trước'} (Người thực thi trước)`,
+        email: '',
+      });
+    }
+    // Người tạo thực thi (created_by_id) - luôn đưa vào nếu khác với người thực thi trước
+    const creator = activeExecution?.createdBy;
+    if (creator?.id && creator.id !== previousHandler?.id) {
+      map.set(creator.id, {
+        id: creator.id,
+        name: `${creator.fullName || creator.email} (Người tạo thực thi)`,
+        email: creator.email || '',
+      });
+    }
+    // Đảm bảo người đang được chọn mặc định (người thực thi hiện tại khi sửa) luôn có trong danh sách
+    if (
+      nextHandlerId &&
+      !map.has(nextHandlerId) &&
+      activeExecution?.executedById === nextHandlerId &&
+      activeExecution?.executedBy
+    ) {
+      map.set(nextHandlerId, {
+        id: nextHandlerId,
+        name: activeExecution.executedBy.fullName || activeExecution.executedBy.email,
+        email: activeExecution.executedBy.email || '',
+      });
+    }
+    return Array.from(map.values());
+  }, [eligibleHandlers, previousHandler, nextHandlerId, activeExecution]);
 
   // Total images across all executions of this testcase
   const totalTestCaseImages = useMemo(() => {
@@ -509,7 +775,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const selectedUserObj = userOptions.find((u) => u.id === selectedUserId);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-sm flex justify-end">
+    <div className={fullPage ? 'relative flex-1 min-h-0 w-full' : 'fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-sm flex justify-end'}>
       <div className="w-full bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
         {/* Drawer Header */}
         <div className="px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 shrink-0">
@@ -559,6 +825,33 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
               </button>
             )}
             <button
+              type="button"
+              onClick={handleShare}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+              title="Sao chép link xem chi tiết Test Case"
+            >
+              {copied ? (
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
+              ) : (
+                <Share2 className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span>{copied ? 'Đã sao chép!' : 'Chia sẻ'}</span>
+            </button>
+            {!fullPage && (
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/testcases/${testCase.id}`);
+                  onClose();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                title="Mở trang chi tiết đầy đủ"
+              >
+                <Link2 className="w-3.5 h-3.5 text-blue-600" />
+                <span>Trang đầy đủ</span>
+              </button>
+            )}
+            <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
@@ -592,7 +885,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                 </span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
-                    {userExecutions.length} lần chạy
+                    {snapshots.length} thay đổi
                   </span>
                   <button
                     type="button"
@@ -637,53 +930,92 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                 <PlusCircle className="w-3.5 h-3.5" />
                 <span>Ghi nhận kết quả mới</span>
               </button>
+
+              {/* Người theo dõi */}
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                    <Eye className="w-3 h-3 text-slate-400" />
+                    Người theo dõi ({activeExecution?.watchers?.length || 0})
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(activeExecution?.watchers && activeExecution.watchers.length > 0) ? (
+                    activeExecution.watchers.map((w) => (
+                      <span
+                        key={w.id}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 text-[11px] border border-sky-200 dark:border-sky-800"
+                      >
+                        {w.user.fullName || w.user.email}
+                        {canManageWatchers && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleWatcher(w.userId, false)}
+                            disabled={watcherBusy}
+                            title="Bỏ theo dõi"
+                            className="hover:text-rose-600 disabled:opacity-50"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[11px] text-slate-400">Chưa có ai theo dõi</span>
+                  )}
+                </div>
+                {canManageWatchers && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) handleToggleWatcher(e.target.value, true);
+                    }}
+                    disabled={watcherBusy}
+                    className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-60"
+                  >
+                    <option value="">+ Thêm người theo dõi...</option>
+                    {watcherUsers
+                      .filter((u) => !(activeExecution?.watchers || []).some((w) => w.userId === u.id))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.fullName || u.email}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
             </div>
 
             {/* Timeline Milestones List */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
               <div className="text-[11px] font-bold text-slate-400 dark:text-slate-500 px-1 uppercase tracking-wider flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
-                Mốc thời gian ({selectedUserObj?.name || 'User'})
+                Lịch sử thay đổi
               </div>
 
-              {userExecutions.length > 0 ? (
+              {snapshotsLoading ? (
+                <div className="p-4 text-center text-xs text-slate-400">Đang tải lịch sử thay đổi...</div>
+              ) : snapshots.length > 0 ? (
                 <div className="relative pl-3 space-y-3 before:absolute before:left-[17px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
-                  {userExecutions.map((exec, idx) => {
-                    const isSelected = selectedExecutionId === exec.id && !isEditing;
-                    const isLatest = idx === 0;
+                  {snapshots.map((snap, idx) => {
+                    const isLatest = idx === snapshots.length - 1;
 
                     let statusDotColor = 'bg-slate-400 ring-slate-200';
-                    if (exec.status === 'PASSED') statusDotColor = 'bg-emerald-500 ring-emerald-200 dark:ring-emerald-950';
-                    else if (exec.status === 'FAILED') statusDotColor = 'bg-rose-500 ring-rose-200 dark:ring-rose-950';
-                    else if (exec.status === 'BLOCKED') statusDotColor = 'bg-amber-500 ring-amber-200 dark:ring-amber-950';
-                    else if (exec.status === 'RETEST') statusDotColor = 'bg-purple-500 ring-purple-200 dark:ring-purple-950';
-                    else if (exec.status === 'UNTESTED') statusDotColor = 'bg-sky-500 ring-sky-200 dark:ring-sky-950';
+                    if (snap.status === 'PASSED') statusDotColor = 'bg-emerald-500 ring-emerald-200 dark:ring-emerald-950';
+                    else if (snap.status === 'FAILED') statusDotColor = 'bg-rose-500 ring-rose-200 dark:ring-rose-950';
+                    else if (snap.status === 'BLOCKED') statusDotColor = 'bg-amber-500 ring-amber-200 dark:ring-amber-950';
+                    else if (snap.status === 'RETEST') statusDotColor = 'bg-purple-500 ring-purple-200 dark:ring-purple-950';
+                    else if (snap.status === 'UNTESTED') statusDotColor = 'bg-sky-500 ring-sky-200 dark:ring-sky-950';
 
                     return (
-                      <div key={exec.id} className="relative pl-5">
-                        {/* Timeline Node Dot */}
-                        <div
-                          className={`absolute left-0 top-3 -translate-x-1/2 w-3.5 h-3.5 rounded-full ring-4 transition-all ${statusDotColor} ${isSelected ? 'scale-125 ring-blue-400 shadow-sm' : ''
-                            }`}
-                        />
-
-                        {/* Timeline Card Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            loadExecutionData(exec);
-                            setIsEditing(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-xl border transition-all relative ${isSelected
-                              ? 'bg-blue-50/90 dark:bg-blue-950/60 border-blue-500 shadow-md shadow-blue-500/10 ring-1 ring-blue-400'
-                              : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm'
-                            }`}
-                        >
+                      <div key={snap.id} className="relative pl-5">
+                        <div className={`absolute left-0 top-3 -translate-x-1/2 w-3.5 h-3.5 rounded-full ring-4 ${statusDotColor}`} />
+                        <div className="w-full text-left p-3 rounded-xl border bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700">
                           <div className="flex items-start justify-between gap-1.5 mb-1.5">
                             <span className="text-[11px] font-bold text-slate-900 dark:text-white flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
-                              {exec.executedAt
-                                ? new Date(exec.executedAt).toLocaleString('vi-VN', {
+                              {snap.updatedAt
+                                ? new Date(snap.updatedAt).toLocaleString('vi-VN', {
                                   hour: '2-digit',
                                   minute: '2-digit',
                                   day: '2-digit',
@@ -692,7 +1024,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                                 })
                                 : '—'}
                             </span>
-                            <StatusBadge status={exec.status} size="sm" />
+                            <StatusBadge status={snap.status} size="sm" />
                           </div>
 
                           <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
@@ -702,27 +1034,31 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                               </span>
                             )}
                             <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">
-                              {exec.server || 'Server'}
+                              {snap.server || 'Server'}
                             </span>
                             <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 truncate max-w-[100px]">
-                              {exec.os || 'OS'}
+                              {snap.os || 'OS'}
                             </span>
-                            {exec.images && exec.images.length > 0 && (
-                              <span className="flex items-center gap-0.5 text-blue-600 dark:text-blue-400 font-semibold ml-auto">
-                                <ImageIcon className="w-3 h-3" />
-                                {exec.images.length}
-                              </span>
-                            )}
                           </div>
-                        </button>
+
+                          <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                            Người thực thi: {snap.executedBy?.fullName || snap.executedBy?.email || '—'}
+                          </div>
+                          {snap.beforeExecutedBy && (
+                            <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+                              <RotateCcw className="w-3 h-3 text-amber-500" />
+                              Tiếp nhận từ: {snap.beforeExecutedBy.fullName || snap.beforeExecutedBy.email}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
               ) : (
                 <div className="p-4 text-center rounded-xl bg-white dark:bg-slate-800 border border-dashed border-slate-200 dark:border-slate-700 text-xs text-slate-400 space-y-1">
-                  <p>Chưa có lượt chạy nào của người dùng này.</p>
-                  <p className="text-[11px] text-blue-600">Nhấn <strong>"Ghi nhận kết quả mới"</strong> để thực thi.</p>
+                  <p>Chưa có lịch sử thay đổi.</p>
+                  <p className="text-[11px] text-blue-600">Thực thi hoặc đổi trạng thái để ghi nhận lịch sử.</p>
                 </div>
               )}
             </div>
@@ -1038,77 +1374,23 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         Đánh giá trạng thái (Status) <span className="text-rose-500">*</span>
                       </label>
                       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setStatus('UNREVIEWED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'UNREVIEWED'
-                              ? 'bg-slate-700 text-white border-slate-700 shadow-md ring-2 ring-slate-400 ring-offset-1'
-                              : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700'
-                            }`}
-                        >
-                          <Eye className="w-4 h-4 mb-1" />
-                          CHƯA KIỂM DUYỆT
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStatus('UNTESTED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'UNTESTED'
-                              ? 'bg-sky-600 text-white border-sky-600 shadow-md ring-2 ring-sky-400 ring-offset-1'
-                              : 'bg-sky-50 text-sky-800 border-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800'
-                            }`}
-                        >
-                          <Clock className="w-4 h-4 mb-1" />
-                          CHƯA TEST
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStatus('RETEST')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'RETEST'
-                              ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-400 ring-offset-1'
-                              : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'
-                            }`}
-                        >
-                          <RotateCcw className="w-4 h-4 mb-1" />
-                          TEST LẠI
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStatus('PASSED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'PASSED'
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-500/20 ring-2 ring-emerald-400 ring-offset-1'
-                              : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
-                            }`}
-                        >
-                          <CheckCircle2 className="w-4 h-4 mb-1" />
-                          PASSED
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStatus('FAILED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'FAILED'
-                              ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-500/20 ring-2 ring-rose-400 ring-offset-1 animate-pulse'
-                              : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
-                            }`}
-                        >
-                          <AlertTriangle className="w-4 h-4 mb-1" />
-                          FAILED
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setStatus('BLOCKED')}
-                          className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${status === 'BLOCKED'
-                              ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/20 ring-2 ring-amber-400 ring-offset-1'
-                              : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                            }`}
-                        >
-                          <AlertCircle className="w-4 h-4 mb-1" />
-                          BLOCKED
-                        </button>
+                        {EXECUTION_STATUS_LIST.map(({ value, label, Icon, active, idle }) => {
+                          const isSelected = status === value;
+                          const disabled =
+                            allowedStatuses !== null && !allowedStatuses.has(value) && !isSelected;
+                          return (
+                            <button
+                              key={value}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => setStatus(value)}
+                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${isSelected ? active : idle} ${disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                            >
+                              <Icon className="w-4 h-4 mb-1" />
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -1162,7 +1444,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
                         <span className="flex items-center gap-1">
                           <span>Kết quả thực tế (Actual Result)</span>
-                          {status !== 'UNTESTED' && status !== 'UNREVIEWED' && status !== 'BLOCKED' ? (
+                          {status !== 'UNTESTED' && status !== 'BLOCKED' ? (
                             <span className="text-rose-500 font-bold">*</span>
                           ) : (
                             <span className="text-slate-400 font-normal text-[11px]">(Không bắt buộc)</span>
@@ -1170,12 +1452,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         </span>
                         <span className="text-[11px] text-blue-600 font-normal">Trình soạn thảo phong phú (Rich Text)</span>
                       </label>
-                      <RichTextEditor
-                        value={actualResult}
-                        onChange={(val) => {
-                          setActualResult(val);
-                          if (validationError) setValidationError(null);
-                        }}
+                      <ResultEditor
+                        key={currentExecutionId || 'new'}
+                        ref={resultEditorRef}
+                        initialValue={actualResult}
                         placeholder="Mô tả những gì hệ thống thực tế hiển thị hoặc phản hồi khi bạn thực hiện test..."
                         minHeight="140px"
                         isFailed={status === 'FAILED'}
@@ -1421,6 +1701,106 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           setIsEditing(false);
         }}
       />
+
+      {/* Confirm status transition & assign next-step executor */}
+      {confirmOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
+            onClick={() => !saving && setConfirmOpen(false)}
+          >
+          <div
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-2">
+              <User className="w-5 h-5 text-blue-600" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Xác nhận chuyển trạng thái &amp; giao việc
+              </h3>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {/* Transition summary */}
+              <div className="flex items-center justify-center gap-3">
+                {currentExecutionId && activeExecution?.status ? (
+                  <StatusBadge status={activeExecution.status} size="md" />
+                ) : (
+                  <span className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                    Mới
+                  </span>
+                )}
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+                <StatusBadge status={status} size="md" />
+              </div>
+
+              {/* Executor assignment */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+                  <User className="w-3.5 h-3.5 text-blue-600" />
+                  Người thực thi bước tiếp theo
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={nextHandlerId}
+                    onChange={(e) => setNextHandlerId(e.target.value)}
+                    disabled={loadingHandlers}
+                    className="flex-1 px-2.5 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-60"
+                  >
+                    {handlerOptions.length === 0 && (
+                      <option value="">
+                        {loadingHandlers ? 'Đang tải...' : 'Không có người hợp lệ (mặc định: bạn)'}
+                      </option>
+                    )}
+                    {handlerOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name}
+                        {opt.email ? ` (${opt.email})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {previousHandler?.id && previousHandler.id !== nextHandlerId && (
+                    <button
+                      type="button"
+                      onClick={() => setNextHandlerId(previousHandler.id!)}
+                      className="shrink-0 px-2.5 py-1.5 text-[11px] font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+                      title="Giao lại cho người xử lý ở bước trước"
+                    >
+                      Giao lại cho người trước
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Chỉ những người có quyền xử lý trạng thái <strong>{status}</strong> mới được chọn. Nếu không chọn, mặc định là bạn.
+                </p>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                disabled={saving}
+                className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={commitSave}
+                disabled={saving}
+                className="px-3.5 py-2 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {saving && (
+                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                )}
+                Xác nhận &amp; Lưu
+              </button>
+            </div>
+          </div>
+        </div>,
+          document.body
+        )}
     </div>
   );
 };

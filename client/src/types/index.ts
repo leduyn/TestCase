@@ -10,7 +10,9 @@ export interface User {
   lastLogin?: string;
 }
 
-export type ExecutionStatus = 'UNREVIEWED' | 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST';
+export type ExecutionStatus = 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST';
+
+export type TestCaseReviewStatus = 'UNREVIEWED' | 'REVIEWED';
 
 export interface TestExecutionImage {
   id: string;
@@ -39,6 +41,16 @@ export interface TestExecutionImage {
   };
 }
 
+export interface TestExecutionWatcher {
+  id: string;
+  userId: string;
+  user: {
+    id: string;
+    fullName: string;
+    email: string;
+  };
+}
+
 export interface TestExecution {
   id: string;
   testCaseId: string;
@@ -47,6 +59,19 @@ export interface TestExecution {
     fullName: string;
     email: string;
   } | null;
+  createdById?: string | null;
+  createdBy?: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
+  beforeExecutedId?: string | null;
+  beforeExecutedBy?: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
+  watchers?: TestExecutionWatcher[];
   server?: string | null;
   os?: string | null;
   status: ExecutionStatus;
@@ -56,6 +81,38 @@ export interface TestExecution {
   images?: TestExecutionImage[];
   executedAt: string;
   updatedAt?: string;
+}
+
+export interface TestExecutionHistory {
+  id: string;
+  executionId: string;
+  testCaseId: string;
+  executedById?: string | null;
+  executedBy?: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
+  beforeExecutedId?: string | null;
+  beforeExecutedBy?: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
+  createdById?: string | null;
+  createdBy?: {
+    id: string;
+    fullName: string;
+    email: string;
+  } | null;
+  server?: string | null;
+  os?: string | null;
+  status: ExecutionStatus;
+  actualResult?: string | null;
+  evaluation?: string | null;
+  notes?: string | null;
+  executedAt: string;
+  updatedAt: string;
 }
 
 export interface TestCase {
@@ -71,6 +128,9 @@ export interface TestCase {
   expectedResult: string;
   priority: string; // Cao, Trung bình, Thấp
   orderIndex: number;
+  reviewStatus?: TestCaseReviewStatus;
+  reviewedById?: string | null;
+  reviewedAt?: string | null;
   createdAt: string;
   updatedAt?: string;
   latestExecution?: TestExecution | null;
@@ -79,7 +139,6 @@ export interface TestCase {
 
 export interface TestSuiteStats {
   total: number;
-  unreviewed?: number;
   untested: number;
   passed: number;
   failed: number;
@@ -98,6 +157,38 @@ export interface TestSuite {
   createdAt: string;
   updatedAt?: string;
   stats?: TestSuiteStats;
+}
+
+export interface UnreceivedTestCase {
+  id: string;
+  testCaseCode: string;
+  title: string;
+  module: string;
+  platform: string;
+  priority: string;
+}
+
+export interface SuiteDetailResponse {
+  suite: TestSuite;
+  testCases: TestCase[];
+  unreceivedTestCases: UnreceivedTestCase[];
+}
+
+export interface ReviewTestCaseItem {
+  id: string;
+  testCaseCode: string;
+  title: string;
+  module: string;
+  platform: string;
+  testType: string;
+  priority: string;
+  testSuiteId: string;
+  suiteName: string | null;
+  reviewStatus: TestCaseReviewStatus;
+  reviewedById: string | null;
+  reviewedBy: { id: string; fullName: string; email: string } | null;
+  reviewedAt: string | null;
+  executionCount: number;
 }
 
 export interface AIProviderInfo {
@@ -196,7 +287,6 @@ export interface UserTestStat {
   status?: string;
   lastLogin?: string | null;
   totalTestCases: number;
-  unreviewed?: number;
   untested: number;
   passed: number;
   failed: number;
@@ -227,6 +317,9 @@ export interface StorageConfig {
     password?: string;
     domain: string;
     remotePath: string;
+    osType?: 'windows' | 'linux';
+    port?: number;
+    linuxBackend?: 'smb2' | 'smbclient';
   };
   ftp: {
     host: string;

@@ -1,13 +1,17 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import prisma from '../config/database';
 import { ExcelExporter, ExportTestCaseItem } from '../services/excelExporter';
 import { AuthRequest } from '../middleware/auth';
 import { canViewAllExecutionHistory } from '../services/permissionService';
 
 export class ExportController {
-  static async exportSuiteExcel(req: Request, res: Response) {
+  static async exportSuiteExcel(req: AuthRequest, res: Response) {
     try {
       const { suiteId } = req.params;
+      const userId = req.user?.id;
+      const userRole = req.user?.role;
+
+      const canViewAll = await canViewAllExecutionHistory(userId, userRole);
 
        const suite = await prisma.testSuite.findUnique({
         where: { id: suiteId },
@@ -34,7 +38,10 @@ export class ExportController {
 
        const testCaseItems: ExportTestCaseItem[] = [];
        suite.testCases.forEach((tc) => {
-        tc.executions.forEach((exec) => {
+        const executions = (!canViewAll && userId)
+          ? tc.executions.filter((e) => e.createdById === userId || e.executedById === userId)
+          : tc.executions;
+        executions.forEach((exec) => {
           testCaseItems.push({
             testCaseCode: tc.testCaseCode,
             module: tc.module,
@@ -123,9 +130,9 @@ export class ExportController {
       suite.testCases.forEach((tc) => {
         let executions = tc.executions;
         if (!canViewAll && userId) {
-          executions = tc.executions.filter((e) => e.executedById === userId);
+          executions = tc.executions.filter((e) => e.createdById === userId || e.executedById === userId);
         }
-        
+
         executions.forEach((exec) => {
           if (exec.executedById && exec.executedBy?.fullName) {
             userMap.set(exec.executedById, exec.executedBy.fullName);
@@ -139,7 +146,7 @@ export class ExportController {
       const testCaseItems = suite.testCases.map((tc) => {
         let executions = tc.executions;
         if (!canViewAll && userId) {
-          executions = tc.executions.filter((e) => e.executedById === userId);
+          executions = tc.executions.filter((e) => e.createdById === userId || e.executedById === userId);
         }
 
         // Get latest execution per user for this test case

@@ -3,7 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { userApi } from '../services/api';
 import type { User, Role } from '../types';
 import { PermissionManagement } from '../components/PermissionManagement';
+import StatusHandlerManagement from '../components/StatusHandlerManagement';
 import { usePermissions } from '../hooks/usePermissions';
+import { normalizeSearch } from '../utils/diacritics';
 import {
   UserPlus,
   Search,
@@ -203,9 +205,9 @@ const UserManagement: React.FC = () => {
   }
 
   const filteredUsers = users.filter((u) => {
-    const q = search.toLowerCase();
-    const matchesSearch = u.email.toLowerCase().includes(q) ||
-      (u.fullName && u.fullName.toLowerCase().includes(q));
+    const q = normalizeSearch(search);
+    const matchesSearch = normalizeSearch(u.email).includes(q) ||
+      (u.fullName && normalizeSearch(u.fullName).includes(q));
     const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -634,6 +636,13 @@ const UserManagement: React.FC = () => {
       {currentUser?.role === 'ADMIN' && (
         <div className="mt-6">
           <PermissionManagement canManagePermissions={true} />
+        </div>
+      )}
+
+      {/* Phân công xử lý trạng thái thực thi (chỉ ADMIN) */}
+      {currentUser?.role === 'ADMIN' && (
+        <div className="mt-6">
+          <StatusHandlerManagement />
         </div>
       )}
     </div>

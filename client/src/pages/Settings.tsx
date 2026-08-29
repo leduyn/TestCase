@@ -92,7 +92,7 @@ export const Settings: React.FC = () => {
     maxFilesPerExecution: 10,
     maxFileSizeMB: 10,
     local: { uploadPath: './uploads' },
-    smb: { host: '', share: '', username: '', password: '', domain: '', remotePath: '/testcase-images' },
+    smb: { host: '', share: '', username: '', password: '', domain: '', remotePath: '/testcase-images', osType: 'windows', port: 445, linuxBackend: 'smb2' },
     ftp: { host: '', port: 21, username: '', password: '', remotePath: '/testcase-images', secure: false },
     googleDrive: {
       authType: 'service_account',
@@ -903,7 +903,67 @@ export const Settings: React.FC = () => {
                     className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Hệ điều hành Web Server
+                  </label>
+                  <select
+                    value={storageConfig.smb.osType || 'windows'}
+                    onChange={(e) =>
+                      setStorageConfig({
+                        ...storageConfig,
+                        smb: { ...storageConfig.smb, osType: e.target.value as 'windows' | 'linux' },
+                      })
+                    }
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="windows">Windows</option>
+                    <option value="linux">Linux</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Cổng SMB (Port)
+                  </label>
+                  <input
+                    type="number"
+                    value={storageConfig.smb.port || 445}
+                    onChange={(e) =>
+                      setStorageConfig({
+                        ...storageConfig,
+                        smb: { ...storageConfig.smb, port: parseInt(e.target.value) || 445 },
+                      })
+                    }
+                    placeholder="445"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono"
+                  />
+                </div>
               </div>
+              {storageConfig.smb.osType === 'linux' && (
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Phương thức kết nối Linux
+                  </label>
+                  <select
+                    value={storageConfig.smb.linuxBackend || 'smb2'}
+                    onChange={(e) =>
+                      setStorageConfig({
+                        ...storageConfig,
+                        smb: { ...storageConfig.smb, linuxBackend: e.target.value as 'smb2' | 'smbclient' },
+                      })
+                    }
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="smb2">Node SMB library (@marsaud/smb2)</option>
+                    <option value="smbclient">smbclient (CLI - khuyên dùng cho Samba/NAS)</option>
+                  </select>
+                  <p className="text-[11px] text-indigo-600 dark:text-indigo-300 mt-1">
+                    {storageConfig.smb.linuxBackend === 'smbclient'
+                      ? 'Dùng lệnh smbclient — hỗ trợ Samba/NAS, share có dấu cách, workgroup. Cần cài smbclient trên webserver Linux (apt install smbclient).'
+                      : 'Linux: thư viện Node SMB (cổng 445), không dùng net use. Có thể lỗi với một số Samba yêu cầu SMB signing.'}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

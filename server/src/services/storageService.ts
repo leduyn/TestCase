@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
+import SMB2 from '@marsaud/smb2';
 import prisma from '../config/database';
+import { slugify } from '../utils/slug';
 
 const execAsync = promisify(exec);
 
@@ -28,6 +30,9 @@ export interface StorageConfig {
     password: string;
     domain: string;
     remotePath: string;
+    osType?: 'windows' | 'linux';
+    port?: number;
+    linuxBackend?: 'smb2' | 'smbclient';
   };
   ftp: {
     host: string;
@@ -63,6 +68,9 @@ export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
     password: '',
     domain: '',
     remotePath: '/testcase-images',
+    osType: 'windows',
+    port: 445,
+    linuxBackend: 'smb2',
   },
   ftp: {
     host: '',
@@ -87,7 +95,7 @@ export const DEFAULT_STORAGE_CONFIG: StorageConfig = {
 // ─── Storage Provider Interface ─────────────────────────────────────────────
 
 export interface StorageProvider {
-  upload(file: Buffer, filename: string, executionId: string): Promise<StorageResult>;
+  upload(file: Buffer, filename: string, executionId: string, functionName?: string): Promise<StorageResult>;
   delete(storagePath: string): Promise<void>;
   getFileStream(storagePath: string): Promise<{ stream: Readable; mimeType: string } | null>;
   testConnection(): Promise<{ success: boolean; message: string }>;
@@ -102,8 +110,9 @@ export class LocalStorageProvider implements StorageProvider {
     this.basePath = path.resolve(config.uploadPath);
   }
 
-  async upload(file: Buffer, filename: string, executionId: string): Promise<StorageResult> {
-    const dir = path.join(this.basePath, 'executions', executionId);
+  async upload(file: Buffer, filename: string, executionId: string, functionName?: string): Promise<StorageResult> {
+    const funcFolder = slugify(functionName || '') || 'general';
+    const dir = path.join(this.basePath, 'executions', funcFolder, executionId);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -178,22 +187,40 @@ export class LocalStorageProvider implements StorageProvider {
 export class SmbStorageProvider implements StorageProvider {
   private config: StorageConfig['smb'];
   private uncPath: string;
-  private localTempPath: string;
 
   constructor(config: StorageConfig['smb']) {
     this.config = config;
     this.uncPath = `\\\\${config.host}\\${config.share}`;
-    this.localTempPath = path.resolve('./uploads/_smb_temp');
-    if (!fs.existsSync(this.localTempPath)) {
-      fs.mkdirSync(this.localTempPath, { recursive: true });
-    }
+  }
+
+  private get osType(): 'windows' | 'linux' {
+    return this.config.osType === 'linux' ? 'linux' : 'windows';
+  }
+
+  private normalizeRemotePath(): string {
+    return (this.config.remotePath || '/')
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '');
+  }
+
+  private mimeTypeFor(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+      '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+      '.svg': 'image/svg+xml',
+      '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
+      '.ogv': 'video/ogg', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska',
+    };
+    return mimeMap[ext] || 'application/octet-stream';
   }
 
   private async connectShare(): Promise<void> {
     const { host, share, username, password, domain } = this.config;
     const uncPath = `\\\\${host}\\${share}`;
-    
-    // Build net use command
+
+    // Build net use command (Windows only)
     let cmd = `net use "${uncPath}"`;
     if (password) cmd += ` "${password}"`;
     if (username) {
@@ -212,59 +239,120 @@ export class SmbStorageProvider implements StorageProvider {
     }
   }
 
-  async upload(file: Buffer, filename: string, executionId: string): Promise<StorageResult> {
-    await this.connectShare();
+  private async getLinuxClient(): Promise<SMB2> {
+    return new SMB2({
+      share: `\\\\${this.config.host}\\${this.config.share}`,
+      domain: this.config.domain || '',
+      username: this.config.username,
+      password: this.config.password,
+      port: this.config.port || 445,
+    });
+  }
 
-    const remotePath = this.config.remotePath.replace(/^\//, '').replace(/\//g, '\\');
-    const remoteDir = path.join(this.uncPath, remotePath, executionId);
-    
-    // Create remote directory
-    if (!fs.existsSync(remoteDir)) {
-      fs.mkdirSync(remoteDir, { recursive: true });
+  private async ensureLinuxDir(client: SMB2, dir: string): Promise<void> {
+    const parts = dir.split('/').filter(Boolean);
+    let current = '';
+    for (const part of parts) {
+      current += '/' + part;
+      try {
+        await client.mkdir(current);
+      } catch (err: any) {
+        const exists = await client.exists(current).catch(() => false);
+        if (!exists) throw err;
+      }
     }
+  }
 
+  private safeFolder(functionName?: string): string {
+    const slug = slugify(functionName || '');
+    return slug || 'general';
+  }
+
+  async upload(file: Buffer, filename: string, executionId: string, functionName?: string): Promise<StorageResult> {
     const ext = path.extname(filename);
     const baseName = path.basename(filename, ext);
     const uniqueName = `${baseName}_${Date.now()}${ext}`;
-    const remoteFilePath = path.join(remoteDir, uniqueName);
+    const remoteBase = this.normalizeRemotePath();
+    const funcFolder = this.safeFolder(functionName);
 
+    if (this.osType === 'linux') {
+      const client = await this.getLinuxClient();
+      const dir = `/${remoteBase}/${funcFolder}/${executionId}`;
+      await this.ensureLinuxDir(client, dir);
+      const filePath = `${dir}/${uniqueName}`;
+      await client.writeFile(filePath, file);
+      return {
+        storagePath: `${remoteBase}/${funcFolder}/${executionId}/${uniqueName}`,
+        publicUrl: undefined,
+      };
+    }
+
+    // Windows: net use + UNC path
+    await this.connectShare();
+    const remotePath = remoteBase.replace(/\//g, '\\');
+    const remoteDir = path.join(this.uncPath, remotePath, funcFolder, executionId);
+    if (!fs.existsSync(remoteDir)) {
+      fs.mkdirSync(remoteDir, { recursive: true });
+    }
+    const remoteFilePath = path.join(remoteDir, uniqueName);
     fs.writeFileSync(remoteFilePath, file);
 
-    const storagePath = `${remotePath}\\${executionId}\\${uniqueName}`;
+    const storagePath = `${remotePath}\\${funcFolder}\\${executionId}\\${uniqueName}`;
     return {
-      storagePath,
+      storagePath: storagePath.replace(/\\/g, '/'),
       publicUrl: undefined,
     };
   }
 
   async delete(storagePath: string): Promise<void> {
+    if (this.osType === 'linux') {
+      const client = await this.getLinuxClient();
+      try {
+        await client.unlink(`/${storagePath}`);
+      } catch {
+        // ignore if already removed
+      }
+      return;
+    }
+
     await this.connectShare();
-    const fullPath = path.join(this.uncPath, storagePath);
+    const fullPath = path.join(this.uncPath, storagePath.replace(/\//g, '\\'));
     if (fs.existsSync(fullPath)) {
       fs.unlinkSync(fullPath);
     }
   }
 
   async getFileStream(storagePath: string): Promise<{ stream: Readable; mimeType: string } | null> {
-    await this.connectShare();
-    const fullPath = path.join(this.uncPath, storagePath);
-    if (!fs.existsSync(fullPath)) return null;
+    const mimeType = this.mimeTypeFor(storagePath);
 
-    const ext = path.extname(fullPath).toLowerCase();
-    const mimeMap: Record<string, string> = {
-      '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-      '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
-      '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
-      '.ogv': 'video/ogg', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
-      '.mkv': 'video/x-matroska',
-    };
-    return { stream: fs.createReadStream(fullPath), mimeType: mimeMap[ext] || 'application/octet-stream' };
+    if (this.osType === 'linux') {
+      const client = await this.getLinuxClient();
+      const stream = await client.createReadStream(`/${storagePath}`);
+      return { stream, mimeType };
+    }
+
+    await this.connectShare();
+    const fullPath = path.join(this.uncPath, storagePath.replace(/\//g, '\\'));
+    if (!fs.existsSync(fullPath)) return null;
+    return { stream: fs.createReadStream(fullPath), mimeType };
   }
 
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
+      if (this.osType === 'linux') {
+        const client = await this.getLinuxClient();
+        await client.writeFile('/.smb_test', 'test');
+        try {
+          await client.unlink('/.smb_test');
+        } catch {
+          // ignore cleanup error
+        }
+        return { success: true, message: `Kết nối SMB (Linux) thành công: \\\\${this.config.host}\\${this.config.share}` };
+      }
+
+      // Windows
       await this.connectShare();
-      const remotePath = this.config.remotePath.replace(/^\//, '').replace(/\//g, '\\');
+      const remotePath = this.normalizeRemotePath().replace(/\//g, '\\');
       const testDir = path.join(this.uncPath, remotePath);
       if (!fs.existsSync(testDir)) {
         fs.mkdirSync(testDir, { recursive: true });
@@ -274,7 +362,151 @@ export class SmbStorageProvider implements StorageProvider {
       fs.unlinkSync(testFile);
       return { success: true, message: `Kết nối SMB thành công: ${this.uncPath}` };
     } catch (err: any) {
-      return { success: false, message: `Lỗi kết nối SMB: ${err.message}` };
+      const step = err.messageName ? ` (bước: ${err.messageName})` : '';
+      const ntStatus = err.message && err.message.includes('STATUS_') ? ` [${err.message.match(/STATUS_\w+/)?.[0]}]` : '';
+      return { success: false, message: `Lỗi kết nối SMB: ${err.message}${step}${ntStatus}` };
+    }
+  }
+}
+
+// ─── 2b. SMB Linux via smbclient (robust for Samba NAS) ───────────────────────
+
+const NT_STATUS_TEXT: Record<string, string> = {
+  'STATUS_INVALID_PARAMETER': 'Tham số không hợp lệ (share/path/auth bị sai)',
+  'STATUS_LOGON_FAILURE': 'Sai tài khoản/mật khẩu',
+  'STATUS_ACCESS_DENIED': 'Không có quyền truy cập',
+  'STATUS_BAD_NETWORK_NAME': 'Tên share không tồn tại trên server',
+  'STATUS_NOT_FOUND': 'Không tìm thấy file/thư mục',
+};
+
+export class SmbClientLinuxProvider implements StorageProvider {
+  private config: StorageConfig['smb'];
+  private uncBase: string;
+
+  constructor(config: StorageConfig['smb']) {
+    this.config = config;
+    this.uncBase = `//${config.host}/${config.share}`;
+  }
+
+  private normalizeRemotePath(): string {
+    return (this.config.remotePath || '/')
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '');
+  }
+
+  private safeFolder(functionName?: string): string {
+    const slug = slugify(functionName || '');
+    return slug || 'general';
+  }
+
+  private mimeTypeFor(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+      '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+      '.svg': 'image/svg+xml',
+      '.mp4': 'video/mp4', '.webm': 'video/webm', '.ogg': 'video/ogg',
+      '.ogv': 'video/ogg', '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+      '.mkv': 'video/x-matroska',
+    };
+    return mimeMap[ext] || 'application/octet-stream';
+  }
+
+  private commonArgs(): string[] {
+    const args = [this.uncBase, '-U', this.config.username || ''];
+    if (this.config.domain) args.push('-W', this.config.domain);
+    if (this.config.port) args.push('-p', String(this.config.port));
+    return args;
+  }
+
+  private env(): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    if (this.config.password) env.PASSWD = this.config.password;
+    return env;
+  }
+
+  private run(commands: string, ignoreErrors = false): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const args = [...this.commonArgs(), '-c', commands];
+      const child = spawn('smbclient', args, { env: this.env() });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => (stdout += d.toString()));
+      child.stderr.on('data', (d) => (stderr += d.toString()));
+      child.on('error', (err) => reject(err));
+      child.on('close', (code) => {
+        if (code !== 0 && !ignoreErrors) {
+          reject(new Error(stderr.trim() || `smbclient exited with code ${code}`));
+        } else {
+          resolve(stdout);
+        }
+      });
+    });
+  }
+
+  private async ensureRemoteDir(remoteDirBackslash: string): Promise<void> {
+    const parts = remoteDirBackslash.split('\\').filter(Boolean);
+    let cur = '';
+    for (const part of parts) {
+      cur += (cur ? '\\' : '') + part;
+      await this.run(`mkdir "${cur}"`, true).catch(() => {});
+    }
+  }
+
+  async upload(file: Buffer, filename: string, executionId: string, functionName?: string): Promise<StorageResult> {
+    const ext = path.extname(filename);
+    const baseName = path.basename(filename, ext);
+    const uniqueName = `${baseName}_${Date.now()}${ext}`;
+    const remoteBase = this.normalizeRemotePath();
+    const funcFolder = this.safeFolder(functionName);
+
+    const localTemp = path.resolve('./uploads/_smbclient_temp');
+    if (!fs.existsSync(localTemp)) fs.mkdirSync(localTemp, { recursive: true });
+    const localFile = path.join(localTemp, uniqueName);
+    fs.writeFileSync(localFile, file);
+
+    const remoteDir = `${remoteBase}\\${funcFolder}\\${executionId}`;
+    try {
+      await this.ensureRemoteDir(remoteDir);
+      const remoteFile = `${remoteDir}\\${uniqueName}`;
+      await this.run(`put "${localFile}" "${remoteFile}"`);
+    } finally {
+      try { fs.unlinkSync(localFile); } catch {}
+    }
+
+    return {
+      storagePath: `${remoteBase}/${funcFolder}/${executionId}/${uniqueName}`,
+      publicUrl: undefined,
+    };
+  }
+
+  async delete(storagePath: string): Promise<void> {
+    const remote = storagePath.replace(/\//g, '\\');
+    await this.run(`del "${remote}"`, true).catch(() => {});
+  }
+
+  async getFileStream(storagePath: string): Promise<{ stream: Readable; mimeType: string } | null> {
+    const mimeType = this.mimeTypeFor(storagePath);
+    const remote = storagePath.replace(/\//g, '\\');
+    const args = [...this.commonArgs(), '-c', `get "${remote}" -`];
+    const child = spawn('smbclient', args, { env: this.env() });
+    child.on('error', () => {});
+    return { stream: child.stdout, mimeType };
+  }
+
+  async testConnection(): Promise<{ success: boolean; message: string }> {
+    try {
+      await this.run('pwd');
+      return {
+        success: true,
+        message: `Kết nối SMB (smbclient) thành công: ${this.uncBase}`,
+      };
+    } catch (err: any) {
+      const m = err.message || String(err);
+      const code = m.match(/STATUS_\w+/)?.[0];
+      const hint = code && NT_STATUS_TEXT[code] ? ` — ${NT_STATUS_TEXT[code]}` : '';
+      const missing = m.includes('ENOENT') ? ' — không tìm thấy lệnh smbclient (hãy cài: apt install smbclient)' : '';
+      return { success: false, message: `Lỗi kết nối SMB (smbclient): ${m}${hint}${missing}` };
     }
   }
 }
@@ -303,10 +535,11 @@ export class FtpStorageProvider implements StorageProvider {
     return client;
   }
 
-  async upload(file: Buffer, filename: string, executionId: string): Promise<StorageResult> {
+  async upload(file: Buffer, filename: string, executionId: string, functionName?: string): Promise<StorageResult> {
     const client = await this.getClient();
     try {
-      const remotePath = `${this.config.remotePath}/${executionId}`;
+      const funcFolder = slugify(functionName || '') || 'general';
+      const remotePath = `${this.config.remotePath}/${funcFolder}/${executionId}`;
       await client.ensureDir(remotePath);
 
       const ext = path.extname(filename);
@@ -410,18 +643,42 @@ export class GoogleDriveStorageProvider implements StorageProvider {
     return google.drive({ version: 'v3', auth });
   }
 
-  async upload(file: Buffer, filename: string, executionId: string): Promise<StorageResult> {
+  private async findOrCreateFolder(name: string, parentId: string): Promise<string> {
+    const drive = await this.getDrive();
+    const escaped = name.replace(/'/g, "\\'");
+    const list = await drive.files.list({
+      q: `'${parentId}' in parents and name = '${escaped}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: 'files(id, name)',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    if (list.data.files && list.data.files.length > 0) {
+      return list.data.files[0].id!;
+    }
+    const created = await drive.files.create({
+      requestBody: {
+        name,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentId],
+      },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+    return created.data.id!;
+  }
+
+  async upload(file: Buffer, filename: string, executionId: string, functionName?: string): Promise<StorageResult> {
     const drive = await this.getDrive();
 
-    // Find or create subfolder for this execution
-    let folderId = this.config.folderId.trim();
+    // Find or create function-name folder, then execution subfolder inside it
+    const funcFolderId = await this.findOrCreateFolder(functionName || 'general', this.config.folderId.trim());
 
     // Create execution subfolder
     const folderMeta = await drive.files.create({
       requestBody: {
         name: executionId,
         mimeType: 'application/vnd.google-apps.folder',
-        parents: [folderId],
+        parents: [funcFolderId],
       },
       fields: 'id',
       supportsAllDrives: true,
@@ -554,6 +811,9 @@ export function createStorageProvider(config: StorageConfig): StorageProvider {
     case 'local':
       return new LocalStorageProvider(config.local);
     case 'smb':
+      if (config.smb.osType === 'linux' && config.smb.linuxBackend === 'smbclient') {
+        return new SmbClientLinuxProvider(config.smb);
+      }
       return new SmbStorageProvider(config.smb);
     case 'ftp':
       return new FtpStorageProvider(config.ftp);

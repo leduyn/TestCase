@@ -68,6 +68,10 @@ export const PERMISSIONS = [
   { key: 'execution:read-own', name: 'Xem lịch sử test cá nhân', category: 'TESTCASE', description: 'Xem lịch sử thực thi do chính mình thực hiện' },
   { key: 'execution:read-all', name: 'Xem lịch sử test toàn đội', category: 'TESTCASE', description: 'Xem lịch sử thực thi của tất cả thành viên trong team' },
 
+  // EXECUTION HANDLING BY STATUS (phân quyền xử lý trạng thái thực thi giờ đây
+  // được quản lý trực tiếp qua bảng execution_status_handlers, không dùng role/permission)
+  { key: 'testcase:review', name: 'Kiểm duyệt Test Case', category: 'TESTCASE', description: 'Chuyển Test Case từ Chưa kiểm duyệt sang Đã kiểm duyệt' },
+
   // DASHBOARD / STATS
   { key: 'dashboard:read', name: 'Xem Dashboard', category: 'DASHBOARD', description: 'Truy cập trang tổng quan Dashboard' },
   { key: 'dashboard:user-stats:read', name: 'Xem thống kê test cá nhân', category: 'DASHBOARD', description: 'Xem biểu đồ và thống kê kết quả test cá nhân' },
@@ -110,6 +114,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'testcase:generate',
     'testcase:export',
     'execution:read-own',
+    'execution:read-all',
+    'testcase:review',
     'dashboard:read',
     'dashboard:user-stats:read',
     'testsuite:create',
@@ -137,10 +143,14 @@ export async function ensureDefaultPermissions(): Promise<void> {
       });
     }
 
-    // 2. Ensure role-permission mappings
+    // 2. Đồng bộ và làm sạch quyền theo vai trò.
+    // Vừa thêm các quyền được định nghĩa trong ROLE_PERMISSIONS, vừa XÓA các
+    // role-permission cũ không còn nằm trong danh sách (tránh tồn đọng quyền thừa).
     for (const role of ['ADMIN', 'TESTER', 'VIEWER'] as const) {
-      const keys = ROLE_PERMISSIONS[role] || [];
-      for (const permKey of keys) {
+      const allowedKeys = new Set(ROLE_PERMISSIONS[role] || []);
+
+      // 2a. Upsert các quyền hợp lệ
+      for (const permKey of allowedKeys) {
         const perm = await prisma.permission.findUnique({ where: { key: permKey } });
         if (!perm) continue;
         await prisma.rolePermission.upsert({
@@ -156,6 +166,21 @@ export async function ensureDefaultPermissions(): Promise<void> {
             permissionId: perm.id,
           },
         });
+      }
+
+      // 2b. Xóa các role-permission không còn nằm trong danh sách allowedKeys
+      const current = await prisma.rolePermission.findMany({
+        where: { role },
+        include: { permission: true },
+      });
+      const staleIds = current
+        .filter((rp) => !allowedKeys.has(rp.permission.key))
+        .map((rp) => rp.id);
+      if (staleIds.length > 0) {
+        await prisma.rolePermission.deleteMany({ where: { id: { in: staleIds } } });
+        console.log(
+          `🛡️ [Auto-Seed] Đã gỡ ${staleIds.length} quyền thừa khỏi vai trò ${role}.`
+        );
       }
     }
     console.log(`🛡️ [Auto-Seed] Đã đồng bộ ${PERMISSIONS.length} permissions & role-permissions.`);

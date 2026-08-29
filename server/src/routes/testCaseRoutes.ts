@@ -20,6 +20,11 @@ router.post('/import/json', authenticate, requirePermission('testcase:import'), 
 router.get('/stats/user-executions', authenticate, TestCaseController.getUserExecutionStats);
 router.get('/suites', authenticate, requirePermission('testsuite:read'), TestCaseController.getSuites);
 router.get('/suites/:id', authenticate, requirePermission('testsuite:read'), TestCaseController.getSuiteById);
+router.post('/suites/:id/provision', authenticate, requirePermission('testcase:execute'), TestCaseController.provisionExecutions);
+router.get('/review', authenticate, TestCaseController.listForReview);
+router.post('/review-bulk', authenticate, TestCaseController.bulkReview);
+router.get('/:id', authenticate, requirePermission('testsuite:read'), TestCaseController.getTestCaseById);
+router.patch('/:id/review', authenticate, TestCaseController.reviewTestCase);
 router.put('/:id', authenticate, requirePermission('testcase:update'), TestCaseController.updateTestCase);
 router.delete('/:id', authenticate, requirePermission('testcase:delete'), TestCaseController.deleteTestCase);
 

@@ -9,6 +9,7 @@ import {
   getUserPermissions,
   grantUserPermission,
   revokeUserPermission,
+  getUsersWithPermission,
 } from '../services/permissionService';
 
 export class PermissionController {
@@ -92,7 +93,7 @@ export class PermissionController {
       if (!req.user) {
         return res.status(401).json({ message: 'Chưa đăng nhập' });
       }
-      
+
       // ADMIN has all permissions
       if (req.user.role === 'ADMIN') {
         const allPermissions = await getAllPermissions();
@@ -149,6 +150,21 @@ export class PermissionController {
     } catch (error: any) {
       console.error('Revoke user permission error:', error);
       return res.status(500).json({ message: 'Lỗi thu hồi quyền', error: error.message });
+    }
+  }
+
+  static async getUsersByPermission(req: AuthRequest, res: Response) {
+    try {
+      const permissionKey = req.query.permission as string;
+      if (!permissionKey) {
+        return res.status(400).json({ message: 'Thiếu tham số permission' });
+      }
+
+      const users = await getUsersWithPermission(permissionKey);
+      return res.json({ users });
+    } catch (error: any) {
+      console.error('Get users by permission error:', error);
+      return res.status(500).json({ message: 'Lỗi lấy danh sách người dùng theo quyền', error: error.message });
     }
   }
 }

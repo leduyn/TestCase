@@ -222,6 +222,40 @@ export async function checkPermission(userId: string, role: string, permissionKe
   return hasPermission(userId, role, permissionKey);
 }
 
+export async function getUsersWithPermission(
+  permissionKey: string
+): Promise<{ id: string; fullName: string; email: string }[]> {
+  const permission = await prisma.permission.findUnique({ where: { key: permissionKey } });
+  if (!permission) return [];
+
+  const rolePerms = await prisma.rolePermission.findMany({
+    where: { permissionId: permission.id },
+    select: { role: true },
+  });
+  const rolesWithPerm = rolePerms.map((r) => r.role);
+
+  const users = await prisma.user.findMany({
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        { role: 'ADMIN' },
+        { role: { in: rolesWithPerm } },
+        { userPermissions: { some: { permissionId: permission.id, effect: 'ALLOW' } } },
+      ],
+    },
+    select: { id: true, fullName: true, email: true },
+  });
+
+  // Loại bỏ người dùng bị từ chối (DENY) quyền này một cách tường minh
+  const denies = await prisma.userPermission.findMany({
+    where: { permissionId: permission.id, effect: 'DENY' },
+    select: { userId: true },
+  });
+  const denySet = new Set(denies.map((d) => d.userId));
+
+  return users.filter((u) => !denySet.has(u.id));
+}
+
 export async function canViewAllExecutionHistory(userId: string | undefined, role: string | undefined): Promise<boolean> {
   if (!userId || !role) return false;
   if (role === 'ADMIN') return true;
@@ -232,6 +266,12 @@ export async function canViewOwnExecutionHistory(userId: string | undefined, rol
   if (!userId || !role) return false;
   if (role === 'ADMIN') return true;
   return hasPermission(userId, role, 'execution:read-own');
+}
+
+export async function canReviewTestCase(userId: string | undefined, role: string | undefined): Promise<boolean> {
+  if (!userId || !role) return false;
+  if (role === 'ADMIN') return true;
+  return hasPermission(userId, role, 'testcase:review');
 }
 
 export async function canViewAllUserTestStats(userId: string | undefined, role: string | undefined): Promise<boolean> {

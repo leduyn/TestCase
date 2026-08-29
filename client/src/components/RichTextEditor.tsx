@@ -57,6 +57,9 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const [showImageMenu, setShowImageMenu] = useState(false);
   const [customImageUrl, setCustomImageUrl] = useState('');
   const isUpdatingRef = useRef(false);
+  const resizeTimerRef = useRef<number | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   // Sync value from props to editor contentEditable
   useEffect(() => {
@@ -67,6 +70,34 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       editorRef.current.innerHTML = value || '';
     }
   }, [value]);
+
+  // Persist native CSS image resizes (the browser updates the wrapper's inline style
+  // without firing input events, so we watch for style changes on .rte-img-wrap).
+  useEffect(() => {
+    if (isHtmlMode || !editorRef.current) return;
+    const target = editorRef.current;
+    const observer = new MutationObserver((mutations) => {
+      const touched = mutations.some(
+        (m) => (m.target as HTMLElement)?.classList?.contains('rte-img-wrap')
+      );
+      if (!touched) return;
+      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = window.setTimeout(() => {
+        if (!editorRef.current) return;
+        isUpdatingRef.current = true;
+        onChangeRef.current(editorRef.current.innerHTML);
+        window.setTimeout(() => {
+          isUpdatingRef.current = false;
+        }, 50);
+      }, 150);
+    });
+    observer.observe(target, {
+      attributes: true,
+      attributeFilter: ['style'],
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, [isHtmlMode]);
 
   const handleInput = () => {
     if (!editorRef.current) return;
@@ -100,9 +131,18 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
     }
   };
 
+  const escAttr = (s: string) =>
+    String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
   const insertImageFromUrl = (url: string, alt: string = 'Evidence') => {
     if (!url) return;
-    const imgHtml = `<p><img src="${url}" alt="${alt}" style="max-width: 100%; border-radius: 8px; margin: 8px 0; border: 1px solid #e2e8f0; display: inline-block;" /></p><p></p>`;
+    const safeUrl = escAttr(url);
+    const safeAlt = escAttr(alt || 'Evidence');
+    const imgHtml = `<p><span class="rte-img-wrap" contenteditable="false" style="width:320px; max-width:100%;"><img src="${safeUrl}" alt="${safeAlt}" style="width:100%; height:auto; display:block; border-radius:8px; border:1px solid #e2e8f0; margin:0;" /></span></p><p></p>`;
     insertHtmlAtCursor(imgHtml);
     setShowImageMenu(false);
     setCustomImageUrl('');
@@ -643,7 +683,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             onPaste={handlePaste}
             style={{ minHeight }}
             data-placeholder={placeholder}
-            className="rich-text-content w-full flex-1 p-3.5 text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 focus:outline-none rounded-b-xl overflow-y-auto leading-relaxed"
+            className="rich-text-content rte-editing w-full flex-1 p-3.5 text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900 focus:outline-none rounded-b-xl overflow-y-auto leading-relaxed"
           />
         )}
       </div>

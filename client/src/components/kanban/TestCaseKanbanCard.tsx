@@ -10,13 +10,13 @@ import {
   AlertCircle,
   Clock,
   User,
+  ArrowLeft,
   Server,
   Monitor,
   Image as ImageIcon,
   ChevronRight,
   Sparkles,
   RotateCcw,
-  Eye,
 } from 'lucide-react';
 import type { TestCase, TestExecution, ExecutionStatus } from '../../types';
 import { PlatformBadge, PriorityBadge, TestTypeBadge } from '../Badge';
@@ -63,7 +63,7 @@ export const TestCaseKanbanCard: React.FC<TestCaseKanbanCardProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const exec = testCase.latestExecution;
-  const currentStatus: ExecutionStatus = (exec?.status || 'UNREVIEWED').toUpperCase() as ExecutionStatus;
+  const currentStatus: ExecutionStatus = (exec?.status || 'UNTESTED').toUpperCase() as ExecutionStatus;
   const isFailed = currentStatus === 'FAILED';
 
   // Close menu when clicking outside
@@ -99,6 +99,7 @@ export const TestCaseKanbanCard: React.FC<TestCaseKanbanCardProps> = ({
   };
 
   const testerName = exec?.executedBy?.fullName || exec?.executedBy?.email;
+  const beforeName = exec?.beforeExecutedBy?.fullName || exec?.beforeExecutedBy?.email;
   const updateTime = exec?.executedAt
     ? new Date(exec.executedAt).toLocaleDateString('vi-VN', {
         day: '2-digit',
@@ -177,17 +178,6 @@ export const TestCaseKanbanCard: React.FC<TestCaseKanbanCardProps> = ({
 
                     {isStatusSubmenuOpen && (
                       <div className="pl-6 py-1 bg-slate-50 dark:bg-slate-900/50 border-y border-slate-100 dark:border-slate-700/60 space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsMenuOpen(false);
-                            onQuickStatusChange(testCase, 'UNREVIEWED');
-                          }}
-                          className="w-full px-2 py-1 text-left flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:underline"
-                        >
-                          <Eye className="w-3 h-3" />
-                          <span>Chưa kiểm duyệt</span>
-                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -340,16 +330,24 @@ export const TestCaseKanbanCard: React.FC<TestCaseKanbanCardProps> = ({
           </div>
         )}
 
-        {/* Footer: Tester name & Update Time */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-[10px] text-slate-400">
-          <div className="flex items-center gap-1 truncate max-w-[130px]" title={testerName || 'Chưa test'}>
-            <User className="w-3 h-3 shrink-0 text-slate-400" />
-            <span className="truncate">{testerName || 'Chưa test'}</span>
+        {/* Footer: Tester name, previous handler & Update Time */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/60 flex flex-col gap-1 text-[10px] text-slate-400">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 truncate max-w-[150px]" title={testerName || 'Chưa test'}>
+              <User className="w-3 h-3 shrink-0 text-slate-400" />
+              <span className="truncate">{testerName || 'Chưa test'}</span>
+            </div>
+            {updateTime && (
+              <div className="flex items-center gap-1 shrink-0 font-mono text-slate-400" title={`Cập nhật: ${updateTime}`}>
+                <Clock className="w-2.5 h-2.5" />
+                <span>{updateTime}</span>
+              </div>
+            )}
           </div>
-          {updateTime && (
-            <div className="flex items-center gap-1 shrink-0 font-mono text-slate-400" title={`Cập nhật: ${updateTime}`}>
-              <Clock className="w-2.5 h-2.5" />
-              <span>{updateTime}</span>
+          {beforeName && (
+            <div className="flex items-center gap-1 truncate max-w-full" title={`Tiếp nhận từ: ${beforeName}`}>
+              <ArrowLeft className="w-3 h-3 shrink-0 text-amber-500" />
+              <span className="truncate">Tiếp nhận từ: {beforeName}</span>
             </div>
           )}
         </div>
