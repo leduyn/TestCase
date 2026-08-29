@@ -28,12 +28,16 @@ enum Priority {
 }
 
 enum TestExecutionStatus {
-  UNREVIEWED
   UNTESTED
   PASSED
   FAILED
   BLOCKED
   RETEST
+}
+
+enum TestCaseReviewStatus {
+  UNREVIEWED
+  REVIEWED
 }
 
 enum PermissionEffect {
@@ -100,9 +104,17 @@ model User {
 
   documents             Document[]
   executions            TestExecution[]
+  beforeExecutions      TestExecution[] @relation("BeforeExecution")
+  createdExecutions     TestExecution[] @relation("CreatedExecution")
+  reviewedTestCases     TestCase[] @relation("ReviewedBy")
   aiConfigs             AiConfig[]
   userPermissions       UserPermission[]
   grantedRolePermissions RolePermission[] @relation("GrantedRolePermissions")
+  watchedExecutions      TestExecutionWatcher[]
+  historyExecutions      TestExecutionHistory[] @relation("HistoryExecutedBy")
+  historyBeforeExecutions TestExecutionHistory[] @relation("HistoryBeforeExecutedBy")
+  historyCreatedExecutions TestExecutionHistory[] @relation("HistoryCreatedBy")
+  statusHandlers         ExecutionStatusHandler[]
 
   @@map("users")
 }
@@ -152,6 +164,10 @@ model TestCase {
   expectedResult String          @db.Text @map("expected_result")
   priority       String          @default("Cao") // Cao, Trung bình, Thấp
   orderIndex     Int             @default(0) @map("order_index")
+  reviewStatus   TestCaseReviewStatus @default(UNREVIEWED) @map("review_status")
+  reviewedById   String?         @map("reviewed_by_id")
+  reviewedBy     User?           @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?       @map("reviewed_at")
   createdAt      DateTime        @default(now()) @map("created_at")
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
@@ -166,10 +182,16 @@ model TestExecution {
   testCase     TestCase            @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
   executedById String?             @map("executed_by_id")
   executedBy   User?               @relation(fields: [executedById], references: [id], onDelete: SetNull)
-  
+
+  beforeExecutedId String?         @map("before_executed_id")
+  beforeExecutedBy User?               @relation("BeforeExecution", fields: [beforeExecutedId], references: [id], onDelete: SetNull)
+
+  createdById  String?            @map("created_by_id")
+  createdBy    User?              @relation("CreatedExecution", fields: [createdById], references: [id], onDelete: SetNull)
+
   server       String?             // DEV, STAGING, UAT, PROD, IP...
   os           String?             // Windows 11, macOS, Android 14, iOS 17...
-  status       TestExecutionStatus @default(UNREVIEWED)
+  status       TestExecutionStatus @default(UNTESTED)
   actualResult String?             @db.Text @map("actual_result")
   evaluation   String?             @db.Text
   notes        String?             @db.Text
@@ -178,8 +200,59 @@ model TestExecution {
   updatedAt    DateTime            @updatedAt @map("updated_at")
 
   images       TestExecutionImage[]
+  watchers      TestExecutionWatcher[]
+  history       TestExecutionHistory[]
 
   @@map("test_executions")
+}
+
+model TestExecutionWatcher {
+  id           String        @id @default(uuid())
+  executionId  String        @map("execution_id")
+  execution    TestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  userId       String        @map("user_id")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  @@unique([executionId, userId])
+  @@map("test_execution_watchers")
+}
+
+model TestExecutionHistory {
+  id               String              @id @default(uuid())
+  executionId      String              @map("execution_id")
+  execution        TestExecution       @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  testCaseId       String              @map("test_case_id")
+  executedById     String?             @map("executed_by_id")
+  executedBy       User?               @relation("HistoryExecutedBy", fields: [executedById], references: [id], onDelete: SetNull)
+  beforeExecutedId String?             @map("before_executed_id")
+  beforeExecutedBy User?               @relation("HistoryBeforeExecutedBy", fields: [beforeExecutedId], references: [id], onDelete: SetNull)
+  createdById      String?             @map("created_by_id")
+  createdBy        User?               @relation("HistoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  server           String?
+  os               String?
+  status           TestExecutionStatus @default(UNTESTED)
+  actualResult     String?             @db.Text @map("actual_result")
+  evaluation       String?             @db.Text
+  notes            String?             @db.Text
+  executedAt       DateTime            @map("executed_at")
+  updatedAt        DateTime            @map("updated_at")
+
+  @@map("test_execution_histories")
+}
+
+// Danh sách người dùng được gán xử lý từng trạng thái thực thi.
+// Chỉ user có mặt trong danh sách của một trạng thái mới được chuyển execution
+// sang trạng thái đó và được hiển thị để giao việc cho trạng thái đích.
+model ExecutionStatusHandler {
+  id        String   @id @default(uuid())
+  status    String   @map("status") // UNTESTED | RETEST | PASSED | FAILED | BLOCKED
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([status, userId])
+  @@map("execution_status_handlers")
 }
 
 model TestExecutionImage {

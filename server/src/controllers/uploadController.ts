@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware/auth';
 import { getStorageConfig, createStorageProvider } from '../services/storageService';
 import { canViewAllExecutionHistory } from '../services/permissionService';
 import { ThumbnailService } from '../services/thumbnailService';
+import { slugify } from '../utils/slug';
 
 const ALLOWED_MIME_TYPES = [
   // Image formats
@@ -40,7 +41,7 @@ export class UploadController {
       // Verify execution exists
       const execution = await prisma.testExecution.findUnique({
         where: { id: executionId },
-        include: { images: true },
+        include: { images: true, testCase: true },
       });
 
       if (!execution) {
@@ -76,10 +77,11 @@ export class UploadController {
 
       // Upload files via storage provider
       const provider = createStorageProvider(storageConfig);
+      const funcFolder = slugify(execution.testCase?.module || 'general');
       const uploadedImages = [];
 
       for (const file of files) {
-        const result = await provider.upload(file.buffer, file.originalname, executionId);
+        const result = await provider.upload(file.buffer, file.originalname, executionId, funcFolder);
 
         let thumbnailPath: string | null = null;
         const isVideo = ThumbnailService.isVideo(file.mimetype, file.originalname);
@@ -91,7 +93,7 @@ export class UploadController {
               const ext = path.extname(file.originalname);
               const baseName = path.basename(file.originalname, ext);
               const thumbFilename = `${baseName}_thumb.jpg`;
-              const thumbResult = await provider.upload(thumbBuffer, thumbFilename, executionId);
+               const thumbResult = await provider.upload(thumbBuffer, thumbFilename, executionId, funcFolder);
               thumbnailPath = thumbResult.storagePath;
             }
           } catch (thumbErr: any) {
@@ -273,7 +275,12 @@ export class UploadController {
               const ext = path.extname(image.filename);
               const baseName = path.basename(image.filename, ext);
               const thumbFilename = `${baseName}_thumb.jpg`;
-              const thumbResult = await provider.upload(thumbBuffer, thumbFilename, image.executionId);
+              const exec = await prisma.testExecution.findUnique({
+                where: { id: image.executionId },
+                include: { testCase: true },
+              });
+              const thumbFolder = slugify(exec?.testCase?.module || 'general');
+              const thumbResult = await provider.upload(thumbBuffer, thumbFilename, image.executionId, thumbFolder);
 
               // Update DB record asynchronously so subsequent requests hit thumbnailPath
               await prisma.testExecutionImage.update({

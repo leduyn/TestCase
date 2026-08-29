@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -20,15 +20,15 @@ import {
   Edit3,
   Trash2,
   Image as ImageIcon,
+  Inbox,
   Copy,
   Play,
   LayoutGrid,
   List as ListIcon,
   RotateCcw,
-  Eye,
 } from 'lucide-react';
 import { testCaseApi, exportApi, environmentApi, suiteApi, uploadApi } from '../services/api';
-import type { TestSuite, TestCase, TestExecution, TestExecutionImage } from '../types';
+import type { TestSuite, TestCase, TestExecution, TestExecutionImage, UnreceivedTestCase } from '../types';
 import { StatusBadge, PlatformBadge, PriorityBadge, TestTypeBadge } from '../components/Badge';
 import { ExecutionDrawer } from '../components/ExecutionDrawer';
 import { TestCaseModal } from '../components/TestCaseModal';
@@ -37,6 +37,7 @@ import { TestCaseEvidenceModal } from '../components/TestCaseEvidenceModal';
 import { TestCaseKanbanBoard } from '../components/kanban/TestCaseKanbanBoard';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
+import { normalizeSearch } from '../utils/diacritics';
 
 // Strip HTML tags to plain text (used for expectedResult preview/tooltip/search since it may now contain rich-text HTML)
 const stripHtml = (html: string): string => {
@@ -68,12 +69,14 @@ export const SuiteDetail: React.FC = () => {
   const [suite, setSuite] = useState<TestSuite | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState(true);
+  const [taking, setTaking] = useState(false);
   const [configuredServers, setConfiguredServers] = useState<string[]>([]);
   const [configuredOsList, setConfiguredOsList] = useState<string[]>([]);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL' | 'UNREVIEWED' | 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST'
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL' | 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST'
+  const [unreceivedTestCases, setUnreceivedTestCases] = useState<UnreceivedTestCase[]>([]);
   const [selectedPlatform, setSelectedPlatform] = useState<string>('ALL'); // 'ALL' | 'App' | 'CMS' | 'Web'
   const [selectedPriority, setSelectedPriority] = useState<string>('ALL');
   const [selectedTestType, setSelectedTestType] = useState<string>('ALL');
@@ -162,16 +165,17 @@ export const SuiteDetail: React.FC = () => {
     try {
       const res = await testCaseApi.getSuiteById(id);
       setSuite(res.data.suite);
-      // Map executions and ensure latestExecution is set to the logged-in user's latest execution
+      setUnreceivedTestCases(res.data.unreceivedTestCases || []);
+      // Server already computes latestExecution based on permission:
+      // - read-all: overall team's latest execution
+      // - read-own: the logged-in user's latest execution
+      // Keep executions list (already permission-filtered by server via tc.results) for the expanded per-user row.
       const cases = (res.data.testCases || []).map((tc: any) => {
         const allExecs = tc.executions || tc.results || [];
-        const userExec = user?.id
-          ? allExecs.find((e: any) => e.executedById === user.id || e.executedBy?.id === user.id)
-          : tc.latestExecution || allExecs[0];
         return {
           ...tc,
           executions: allExecs,
-          latestExecution: userExec || null,
+          latestExecution: tc.latestExecution || null,
         };
       });
       setTestCases(cases);
@@ -179,6 +183,22 @@ export const SuiteDetail: React.FC = () => {
       console.error('Error loading suite detail:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // "Lấy testcase": tạo execution UNTESTED cho user với các case REVIEWED chưa test
+  // (chưa có execution có test_case_id + created_by_id = user). Idempotent.
+  const handleTakeTestCases = async () => {
+    if (!id || taking) return;
+    setTaking(true);
+    try {
+      await testCaseApi.takeTestCases(id);
+      await fetchSuiteDetails();
+    } catch (err: any) {
+      console.error('Error taking test cases:', err);
+      alert(err?.response?.data?.message || 'Lỗi khi lấy Test Case');
+    } finally {
+      setTaking(false);
     }
   };
 
@@ -216,13 +236,51 @@ export const SuiteDetail: React.FC = () => {
     setIsDrawerOpen(true);
   };
 
+  // Nhận & bắt đầu theo nhóm chức năng: tạo execution UNTESTED cho tất cả test case
+  // (REVIEWED, chưa được user nhận) thuộc cùng một module.
+  const handleReceiveModule = async (moduleName: string) => {
+    if (!id || taking) return;
+    setTaking(true);
+    try {
+      await testCaseApi.takeTestCases(id, { module: moduleName });
+      await fetchSuiteDetails();
+    } catch (err: any) {
+      console.error('Lỗi nhận test case theo nhóm:', err);
+      alert(err?.response?.data?.message || 'Lỗi khi lấy Test Case theo nhóm');
+    } finally {
+      setTaking(false);
+    }
+  };
+
+  // Gom nhóm test case chưa nhận theo chức năng (module)
+  const groupedUnreceived = useMemo(() => {
+    const map = new Map<string, UnreceivedTestCase[]>();
+    for (const tc of unreceivedTestCases) {
+      const key = tc.module?.trim() || 'Chưa phân loại';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(tc);
+    }
+    return Array.from(map.entries()).map(([module, items]) => ({ module, items }));
+  }, [unreceivedTestCases]);
+
+  // Mặc định các nhóm chức năng ở trạng thái thu gọn, bấm để xổ ra
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroup = (module: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(module)) next.delete(module);
+      else next.add(module);
+      return next;
+    });
+  };
+
   const getLatestExecutionsByUser = (executions?: TestExecution[]) => {
     if (!executions || executions.length === 0) return [];
     const seenUserKeys = new Set<string>();
     const result: TestExecution[] = [];
 
     for (const ex of executions) {
-      const userKey = ex.executedById || ex.executedBy?.email || ex.executedBy?.fullName || 'ANONYMOUS';
+      const userKey = ex.createdById || ex.createdBy?.email || ex.createdBy?.fullName || 'ANONYMOUS';
       if (!seenUserKeys.has(userKey)) {
         seenUserKeys.add(userKey);
         result.push(ex);
@@ -376,14 +434,13 @@ export const SuiteDetail: React.FC = () => {
     });
   };
 
-  // Status sort order: UNREVIEWED → UNTESTED → FAILED → BLOCKED → RETEST → PASSED
+  // Status sort order: UNTESTED → FAILED → BLOCKED → RETEST → PASSED
   const statusOrder: Record<string, number> = {
-    UNREVIEWED: 0,
-    UNTESTED: 1,
-    FAILED: 2,
-    BLOCKED: 3,
-    RETEST: 4,
-    PASSED: 5,
+    UNTESTED: 0,
+    FAILED: 1,
+    BLOCKED: 2,
+    RETEST: 3,
+    PASSED: 4,
   };
 
   // Helper to extract the latest update timestamp of a TestCase
@@ -406,8 +463,8 @@ export const SuiteDetail: React.FC = () => {
 
   // Apply sort by status, then by latest update time (newest first within the same status)
   const sortedCases = [...testCases].sort((a, b) => {
-    const aStatus = (a.latestExecution?.status || 'UNREVIEWED').toUpperCase();
-    const bStatus = (b.latestExecution?.status || 'UNREVIEWED').toUpperCase();
+    const aStatus = (a.latestExecution?.status || 'UNTESTED').toUpperCase();
+    const bStatus = (b.latestExecution?.status || 'UNTESTED').toUpperCase();
     const statusDiff = (statusOrder[aStatus] ?? 6) - (statusOrder[bStatus] ?? 6);
 
     if (statusDiff !== 0) {
@@ -427,7 +484,7 @@ export const SuiteDetail: React.FC = () => {
   // Filter logic
   const filteredCases = sortedCases.filter((tc) => {
     const exec = tc.latestExecution;
-    const status = (exec?.status || 'UNREVIEWED').toUpperCase();
+    const status = (exec?.status || 'UNTESTED').toUpperCase();
     const platform = (tc.platform || '').toUpperCase();
     const priority = (tc.priority || '').toLowerCase();
     const testType = (tc.testType || '').toLowerCase();
@@ -460,16 +517,16 @@ export const SuiteDetail: React.FC = () => {
     // OS filter
     if (selectedOs !== 'ALL' && !os.includes(selectedOs.toUpperCase())) return false;
 
-    // Search query
+    // Search query (không dấu)
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchCode = tc.testCaseCode.toLowerCase().includes(q);
-      const matchTitle = tc.title.toLowerCase().includes(q);
-      const matchModule = tc.module.toLowerCase().includes(q);
-      const matchSteps = tc.steps.toLowerCase().includes(q);
-      const matchExpected = stripHtml(tc.expectedResult).toLowerCase().includes(q);
-      const matchActual = (exec?.actualResult || '').toLowerCase().includes(q);
-      const matchNotes = (exec?.notes || '').toLowerCase().includes(q);
+      const q = normalizeSearch(searchQuery);
+      const matchCode = normalizeSearch(tc.testCaseCode).includes(q);
+      const matchTitle = normalizeSearch(tc.title).includes(q);
+      const matchModule = normalizeSearch(tc.module).includes(q);
+      const matchSteps = normalizeSearch(tc.steps).includes(q);
+      const matchExpected = normalizeSearch(stripHtml(tc.expectedResult)).includes(q);
+      const matchActual = normalizeSearch(exec?.actualResult || '').includes(q);
+      const matchNotes = normalizeSearch(exec?.notes || '').includes(q);
 
       if (!matchCode && !matchTitle && !matchModule && !matchSteps && !matchExpected && !matchActual && !matchNotes) {
         return false;
@@ -507,7 +564,6 @@ export const SuiteDetail: React.FC = () => {
 
   // Calculate live stats
   const total = testCases.length;
-  let unreviewed = 0;
   let untested = 0;
   let passed = 0;
   let failed = 0;
@@ -515,13 +571,12 @@ export const SuiteDetail: React.FC = () => {
   let retest = 0;
 
   testCases.forEach((tc) => {
-    const s = tc.latestExecution?.status || 'UNREVIEWED';
+    const s = tc.latestExecution?.status || 'UNTESTED';
     if (s === 'PASSED') passed++;
     else if (s === 'FAILED') failed++;
     else if (s === 'BLOCKED') blocked++;
     else if (s === 'RETEST') retest++;
     else if (s === 'UNTESTED') untested++;
-    else unreviewed++;
   });
   const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
 
@@ -617,6 +672,21 @@ export const SuiteDetail: React.FC = () => {
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+          {canExecuteTestCase && (
+            <button
+              onClick={handleTakeTestCases}
+              disabled={taking}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Tạo các Test Case (REVIEWED) mà bạn chưa test vào danh sách của bạn"
+            >
+              {taking ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Inbox className="w-4 h-4" />
+              )}
+              Lấy testcase{unreceivedTestCases.length > 0 ? ` (${unreceivedTestCases.length})` : ''}
+            </button>
+          )}
           {canExport && (
             <>
               <a
@@ -712,16 +782,6 @@ export const SuiteDetail: React.FC = () => {
                   }`}
               >
                 Tất cả ({total})
-              </button>
-              <button
-                onClick={() => setSelectedStatus('UNREVIEWED')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedStatus === 'UNREVIEWED'
-                  ? 'bg-slate-700 text-white shadow-sm ring-2 ring-slate-400'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
-                  }`}
-              >
-                <Eye className="w-3.5 h-3.5" />
-                Chưa kiểm duyệt ({unreviewed})
               </button>
               <button
                 onClick={() => setSelectedStatus('UNTESTED')}
@@ -925,6 +985,71 @@ export const SuiteDetail: React.FC = () => {
         </div>
       </div>
 
+      {/* Test case chưa nhận: Đã kiểm duyệt nhưng user chưa có execution nào, gom theo chức năng */}
+      {canExecuteTestCase && unreceivedTestCases.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3">
+          <div className="flex items-center gap-2">
+            <Inbox className="w-4 h-4 text-slate-500" />
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+              Test case chưa nhận ({unreceivedTestCases.length})
+            </h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {groupedUnreceived.map(({ module, items }) => {
+              const isOpen = expandedGroups.has(module);
+              return (
+                <div
+                  key={module}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
+                >
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(module)}
+                      className="flex items-center gap-2 min-w-0 text-left"
+                    >
+                      {isOpen ? (
+                        <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
+                          {module}
+                        </p>
+                        <p className="text-[11px] text-slate-400">{items.length} test case chưa nhận</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleReceiveModule(module)}
+                      disabled={taking}
+                      className="shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Nhận &amp; bắt đầu
+                    </button>
+                  </div>
+                  {isOpen && (
+                    <ul className="divide-y divide-slate-100 dark:divide-slate-800 px-3">
+                      {items.map((tc) => (
+                        <li key={tc.id} className="py-1.5 flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                            {tc.testCaseCode}
+                          </span>
+                          <span className="text-sm text-slate-700 dark:text-slate-200 truncate">
+                            {tc.title}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Test Cases View: Kanban Board or Table View */}
       {viewMode === 'kanban' ? (
         <TestCaseKanbanBoard
@@ -992,7 +1117,14 @@ export const SuiteDetail: React.FC = () => {
                       >
                         {/* Mã TC */}
                         <td className="py-3 px-3 text-center font-mono font-bold text-blue-700 dark:text-blue-400">
-                          {tc.testCaseCode}
+                          <div className="flex flex-col items-center gap-1">
+                            <span>{tc.testCaseCode}</span>
+                            {tc.reviewStatus === 'UNREVIEWED' && (
+                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                Chưa duyệt
+                              </span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Chức năng */}

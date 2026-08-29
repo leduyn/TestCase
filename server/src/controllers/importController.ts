@@ -117,19 +117,11 @@ export class ImportController {
               steps: tc.steps,
               expectedResult: tc.expectedResult,
               priority: tc.priority,
-              orderIndex: idx + 1,
+                orderIndex: idx + 1,
             },
           });
 
-          const execution = await prisma.testExecution.create({
-            data: {
-              testCaseId: testCase.id,
-              executedById: userId,
-              status: 'UNREVIEWED',
-            },
-          });
-
-          return { ...testCase, latestExecution: execution };
+          return { ...testCase, latestExecution: null };
         })
       );
 
@@ -232,19 +224,11 @@ export class ImportController {
               steps: tc.steps,
               expectedResult: tc.expectedResult,
               priority: tc.priority,
-              orderIndex: idx + 1,
+                orderIndex: idx + 1,
             },
           });
 
-          const execution = await prisma.testExecution.create({
-            data: {
-              testCaseId: testCase.id,
-              executedById: userId,
-              status: 'UNREVIEWED',
-            },
-          });
-
-          return { ...testCase, latestExecution: execution };
+          return { ...testCase, latestExecution: null };
         })
       );
 

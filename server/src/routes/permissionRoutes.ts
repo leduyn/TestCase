@@ -21,4 +21,7 @@ router.get('/users/:id/permissions', PermissionController.getUserPermissions);
 router.post('/users/:id/permissions', PermissionController.grantUserPermission);
 router.delete('/users/:id/permissions/:permissionKey', PermissionController.revokeUserPermission);
 
+// Users eligible to handle a given permission (e.g. execution:set-<STATUS>)
+router.get('/users/by-permission', PermissionController.getUsersByPermission);
+
 export default router;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, LayoutDashboard, Settings, LogIn, LogOut, User as UserIcon, FileSpreadsheet, Users } from 'lucide-react';
+import { Sparkles, LayoutDashboard, Settings, LogIn, LogOut, User as UserIcon, FileSpreadsheet, Users, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -16,6 +16,7 @@ export const Navbar: React.FC = () => {
   const canAccessImport = hasPermission('testcase:import');
   const canAccessSettings = hasPermission('settings:ai:read') || hasPermission('settings:prompt:read') || hasPermission('settings:env:read');
   const canAccessUserManagement = hasPermission('users:read');
+  const canAccessReview = hasPermission('testcase:review');
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md">
@@ -98,6 +99,19 @@ export const Navbar: React.FC = () => {
             >
               <Users className="w-4 h-4" />
               Quản lý người dùng
+            </Link>
+          )}
+          {canAccessReview && (
+            <Link
+              to="/testcase-management"
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isActive('/testcase-management')
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Kiểm duyệt TC
             </Link>
           )}
         </nav>

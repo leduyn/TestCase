@@ -20,12 +20,12 @@ import {
   Shield,
   UserCheck,
   RotateCcw,
-  Eye,
 } from 'lucide-react';
 import { testCaseApi, exportApi } from '../services/api';
 import type { TestSuite, UserTestStat } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
+import { normalizeSearch } from '../utils/diacritics';
 
 export const Dashboard: React.FC = () => {
   const { user: currentUser } = useAuth();
@@ -87,7 +87,6 @@ export const Dashboard: React.FC = () => {
   // Aggregated stats
   const totalSuites = suites.length;
   const totalCases = suites.reduce((acc, s) => acc + (s.stats?.total || 0), 0);
-  const totalUnreviewed = suites.reduce((acc, s) => acc + (s.stats?.unreviewed || 0), 0);
   const totalUntested = suites.reduce((acc, s) => acc + (s.stats?.untested || 0), 0);
   const totalPassed = suites.reduce((acc, s) => acc + (s.stats?.passed || 0), 0);
   const totalFailed = suites.reduce((acc, s) => acc + (s.stats?.failed || 0), 0);
@@ -152,21 +151,6 @@ export const Dashboard: React.FC = () => {
           </div>
           <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center">
             <Layers className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              Chưa kiểm duyệt
-            </p>
-            <p className="text-xl font-black text-slate-700 dark:text-slate-300 mt-1">
-              {totalUnreviewed}
-            </p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Chờ Lead duyệt</p>
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 flex items-center justify-center">
-            <Eye className="w-5 h-5" />
           </div>
         </div>
 
@@ -361,11 +345,11 @@ export const Dashboard: React.FC = () => {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {userStats
                   .filter((u) => {
-                    const q = userSearch.toLowerCase().trim();
+                    const q = normalizeSearch(userSearch);
                     const matchesSearch =
                       !q ||
-                      u.fullName.toLowerCase().includes(q) ||
-                      u.email.toLowerCase().includes(q);
+                      normalizeSearch(u.fullName).includes(q) ||
+                      normalizeSearch(u.email).includes(q);
                     const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
                     return matchesSearch && matchesRole;
                   })

@@ -83,6 +83,36 @@ body {
   margin: 0.5rem 0;
 }
 
+/* Resizable image wrapper inside the rich text editor */
+.rte-img-wrap {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0.5rem 0;
+  vertical-align: top;
+}
+
+.rte-img-wrap img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  margin: 0;
+}
+
+/* Only allow resizing while editing (not in read-only render) */
+.rte-editing .rte-img-wrap {
+  resize: horizontal;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px dashed transparent;
+}
+
+.rte-editing .rte-img-wrap:hover {
+  border-color: #94a3b8;
+}
+
+
 /* History card actual result: max 4 lines, hide images */
 .history-actual-result {
   display: -webkit-box;

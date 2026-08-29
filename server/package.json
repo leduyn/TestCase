@@ -4,17 +4,18 @@
   "description": "Backend service for AI Test Case Generator and Management System",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "node --openssl-legacy-provider node_modules/ts-node-dev/lib/bin.js --respawn --transpile-only src/index.ts",
     "build": "npx tsc",
-    "start": "node dist/index.js",
-    "seed": "ts-node-dev --transpile-only src/seed.ts",
-    "seed:prod": "node dist/seed.js",
+    "start": "node --openssl-legacy-provider dist/index.js",
+    "seed": "node --openssl-legacy-provider node_modules/ts-node-dev/lib/bin.js --transpile-only src/seed.ts",
+    "seed:prod": "node --openssl-legacy-provider dist/seed.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@marsaud/smb2": "^0.18.0",
     "@prisma/client": "^5.19.1",
     "basic-ftp": "^5.0.5",
     "bcryptjs": "^2.4.3",

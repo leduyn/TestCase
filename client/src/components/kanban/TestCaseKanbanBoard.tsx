@@ -4,17 +4,12 @@ import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
-  X,
-  ArrowRight,
-  Server,
-  Monitor,
   RotateCcw,
-  Eye,
 } from 'lucide-react';
 import type { TestCase, TestExecution, ExecutionStatus } from '../../types';
 import { KanbanColumn } from './KanbanColumn';
-import { RichTextEditor } from '../RichTextEditor';
-import { executionApi, environmentApi } from '../../services/api';
+import { DropConfirmModal } from './DropConfirmModal';
+import { executionApi, environmentApi, statusHandlerApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 interface TestCaseKanbanBoardProps {
@@ -54,8 +49,7 @@ interface ColumnConfig {
 }
 
 // Status display info
-const STATUS_INFO: Record<ExecutionStatus, { label: string; color: string; bgColor: string; borderColor: string }> = {
-  UNREVIEWED: { label: 'Chưa kiểm duyệt', color: 'text-slate-700 dark:text-slate-200', bgColor: 'bg-slate-100 dark:bg-slate-700', borderColor: 'border-slate-300' },
+export const STATUS_INFO: Record<ExecutionStatus, { label: string; color: string; bgColor: string; borderColor: string }> = {
   UNTESTED: { label: 'Chưa test', color: 'text-sky-700 dark:text-sky-300', bgColor: 'bg-sky-50 dark:bg-sky-950/60', borderColor: 'border-sky-300' },
   FAILED: { label: 'Failed', color: 'text-rose-700 dark:text-rose-300', bgColor: 'bg-rose-50 dark:bg-rose-950/60', borderColor: 'border-rose-300' },
   BLOCKED: { label: 'Blocked', color: 'text-amber-700 dark:text-amber-300', bgColor: 'bg-amber-50 dark:bg-amber-950/60', borderColor: 'border-amber-300' },
@@ -86,10 +80,13 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
     targetStatus: ExecutionStatus;
     fromStatus: ExecutionStatus;
   } | null>(null);
-  const [dropActualResult, setDropActualResult] = useState('');
   const [dropSubmitting, setDropSubmitting] = useState(false);
   const [dropServer, setDropServer] = useState(defaultServer);
   const [dropOs, setDropOs] = useState(defaultOs);
+  // Người xử lý bước tiếp theo (ghi đè executedById) – chỉ user có execution:set-<status>
+  const [dropHandlerId, setDropHandlerId] = useState('');
+  const [dropEligibleHandlers, setDropEligibleHandlers] = useState<{ id: string; fullName: string; email: string }[]>([]);
+  const [dropLoadingHandlers, setDropLoadingHandlers] = useState(false);
   const [availableServers, setAvailableServers] = useState<string[]>(['DEV', 'STAGING', 'UAT', 'PRODUCTION']);
   const [availableOsList, setAvailableOsList] = useState<string[]>([
     'Windows 11',
@@ -104,20 +101,6 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
   ]);
 
   const columnsConfig: ColumnConfig[] = [
-    {
-      status: 'UNREVIEWED',
-      title: 'Chưa kiểm duyệt',
-      icon: <Eye className="w-4 h-4 text-slate-500" />,
-      theme: {
-        headerBg: 'bg-slate-50/90 dark:bg-slate-900/80',
-        borderTop: 'border-t-slate-400',
-        badgeBg: 'bg-slate-100 dark:bg-slate-800',
-        badgeText: 'text-slate-600 dark:text-slate-300',
-        countBg: 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200',
-        highlightBorder: 'ring-slate-400 border-slate-400',
-        highlightBg: 'bg-slate-100/60 dark:bg-slate-800/60',
-      },
-    },
     {
       status: 'UNTESTED',
       title: 'Chưa test',
@@ -190,10 +173,13 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
     },
   ];
 
+  // Mặc định cột "Chưa test" chỉ hiển thị các test case do người dùng hiện tại tạo/thực thi
+  // (ẩn test case của người khác hoặc chưa được sinh execution cho người dùng).
+  const [showAllUntested, setShowAllUntested] = useState(false);
+
   // Group test cases by status
   const groupedCases = useMemo(() => {
     const groups: Record<ExecutionStatus, TestCase[]> = {
-      UNREVIEWED: [],
       UNTESTED: [],
       FAILED: [],
       BLOCKED: [],
@@ -202,16 +188,24 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
     };
 
     testCases.forEach((tc) => {
-      const status = (tc.latestExecution?.status || 'UNREVIEWED').toUpperCase() as ExecutionStatus;
+      const status = (tc.latestExecution?.status || 'UNTESTED').toUpperCase() as ExecutionStatus;
       if (groups[status]) {
         groups[status].push(tc);
       } else {
-        groups['UNREVIEWED'].push(tc);
+        groups['UNTESTED'].push(tc);
       }
     });
 
+    // Lọc cột Chưa test: mặc định chỉ hiển thị test case của người dùng hiện tại
+    if (!showAllUntested && user?.id) {
+      groups['UNTESTED'] = groups['UNTESTED'].filter((tc) => {
+        const ex = tc.latestExecution;
+        return ex?.createdById === user.id || ex?.executedById === user.id;
+      });
+    }
+
     return groups;
-  }, [testCases]);
+  }, [testCases, showAllUntested, user?.id]);
 
   // Load environment settings (servers & OS list)
   useEffect(() => {
@@ -300,19 +294,37 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
     setDropServer(prevExecution?.server || defaultServer);
     setDropOs(prevExecution?.os || defaultOs);
 
+    // Tải danh sách người xử lý hợp lệ cho bước tiếp theo (được gán xử lý targetStatus)
+    setDropLoadingHandlers(true);
+    statusHandlerApi
+      .getHandlers(targetStatus)
+      .then((res) => setDropEligibleHandlers(res.data.users || []))
+      .catch(() => setDropEligibleHandlers([]))
+      .finally(() => setDropLoadingHandlers(false));
+    // Mặc định người thực thi bước tiếp theo: người thực thi trước đây (before_executed_id)
+    // hoặc người tạo thực thi (created_by_id), nếu không có thì là người đang kéo thả.
+    const defaultHandlerId =
+      prevExecution?.beforeExecutedBy?.id || prevExecution?.createdBy?.id || user?.id || '';
+    setDropHandlerId(defaultHandlerId);
+
     // Open confirmation popup
     setDropConfirm({ testCase: tc, targetStatus, fromStatus: currentStatus });
-    setDropActualResult('');
   };
 
   // Confirm the drop: submit actual result and change status
-  const handleConfirmDrop = async () => {
+  const handleConfirmDrop = async (values: {
+    actualResult: string;
+    handlerId: string;
+    server: string;
+    os: string;
+    viewerIds: string[];
+  }) => {
     if (!dropConfirm) return;
 
     const { testCase: tc, targetStatus } = dropConfirm;
     const prevExecution = tc.latestExecution;
-    const serverToUse = dropServer || prevExecution?.server || defaultServer;
-    const osToUse = dropOs || prevExecution?.os || defaultOs;
+    const serverToUse = values.server || prevExecution?.server || defaultServer;
+    const osToUse = values.os || prevExecution?.os || defaultOs;
 
     setDropSubmitting(true);
 
@@ -320,15 +332,15 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
     const optimisticExecution: TestExecution = {
       id: prevExecution?.id || `temp-${Date.now()}`,
       testCaseId: tc.id,
-      executedById: user?.id,
+      executedAt: prevExecution?.executedAt || new Date().toISOString(),
+      executedById: values.handlerId || user?.id || null,
       executedBy: user ? { fullName: user.fullName, email: user.email } : null,
       server: serverToUse,
       os: osToUse,
       status: targetStatus,
-      actualResult: dropActualResult || prevExecution?.actualResult || null,
+      actualResult: values.actualResult || prevExecution?.actualResult || null,
       evaluation: prevExecution?.evaluation || null,
-      notes: prevExecution?.notes || null,
-      executedAt: new Date().toISOString(),
+      notes: prevExecution?.notes || undefined,
     };
 
     onSaveExecution({
@@ -342,8 +354,10 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
         status: targetStatus,
         server: serverToUse,
         os: osToUse,
-        actualResult: dropActualResult || prevExecution?.actualResult || undefined,
+        actualResult: values.actualResult || prevExecution?.actualResult || undefined,
         notes: prevExecution?.notes || undefined,
+        executedById: values.handlerId || undefined,
+        viewerIds: values.viewerIds,
       });
 
       onSaveExecution({
@@ -361,23 +375,38 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
     } finally {
       setDropSubmitting(false);
       setDropConfirm(null);
-      setDropActualResult('');
       setDropServer(defaultServer);
       setDropOs(defaultOs);
+      setDropHandlerId('');
+      setDropEligibleHandlers([]);
     }
   };
 
   const handleCancelDrop = () => {
     setDropConfirm(null);
-    setDropActualResult('');
     setDropServer(defaultServer);
     setDropOs(defaultOs);
+    setDropHandlerId('');
+    setDropEligibleHandlers([]);
   };
 
   return (
     <div className="w-full">
-      {/* 6 Kanban Columns with responsive horizontal scrolling */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto pb-4">
+      {/* Bộ lọc cột Chưa test */}
+      <div className="flex items-center justify-end mb-3">
+        <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showAllUntested}
+            onChange={(e) => setShowAllUntested(e.target.checked)}
+            className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
+          />
+          Hiện cả test case chưa test của người khác
+        </label>
+      </div>
+
+      {/* 5 Kanban Columns with responsive horizontal scrolling */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 overflow-x-auto pb-4">
         {columnsConfig.map((col) => (
           <KanbanColumn
             key={col.status}
@@ -403,146 +432,24 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
 
       {/* Drag & Drop Confirmation Modal */}
       {dropConfirm && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={handleCancelDrop}>
-          <div
-            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Xác nhận chuyển trạng thái
-              </h3>
-              <button
-                type="button"
-                onClick={handleCancelDrop}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="px-6 py-5 space-y-4">
-              {/* TC info */}
-              <div className="bg-slate-50 dark:bg-slate-800/70 rounded-xl p-3.5 border border-slate-200/80 dark:border-slate-700/80">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Kịch bản kiểm thử:</p>
-                <p className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
-                  <span className="font-mono text-blue-600 dark:text-blue-400 mr-1.5">{dropConfirm.testCase.testCaseCode}</span>
-                  {dropConfirm.testCase.title}
-                </p>
-              </div>
-
-              {/* Status transition visualization */}
-              <div className="flex items-center justify-center gap-3 py-2">
-                <div className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${STATUS_INFO[dropConfirm.fromStatus].bgColor} ${STATUS_INFO[dropConfirm.fromStatus].color} ${STATUS_INFO[dropConfirm.fromStatus].borderColor}`}>
-                  {STATUS_INFO[dropConfirm.fromStatus].label}
-                </div>
-                <ArrowRight className="w-5 h-5 text-slate-400 shrink-0" />
-                <div className={`px-3 py-1.5 rounded-lg text-xs font-bold border ring-2 ring-offset-1 ${STATUS_INFO[dropConfirm.targetStatus].bgColor} ${STATUS_INFO[dropConfirm.targetStatus].color} ${STATUS_INFO[dropConfirm.targetStatus].borderColor}`}>
-                  {STATUS_INFO[dropConfirm.targetStatus].label}
-                </div>
-              </div>
-
-              {/* Server / Environment & OS */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
-                    <Server className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    Môi trường
-                  </label>
-                  <select
-                    value={dropServer}
-                    onChange={(e) => setDropServer(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
-                  >
-                    {dropServer && !availableServers.includes(dropServer) && (
-                      <option value={dropServer}>{dropServer}</option>
-                    )}
-                    {availableServers.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
-                    <Monitor className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                    Hệ điều hành
-                  </label>
-                  <select
-                    value={dropOs}
-                    onChange={(e) => setDropOs(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
-                  >
-                    {dropOs && !availableOsList.includes(dropOs) && (
-                      <option value={dropOs}>{dropOs}</option>
-                    )}
-                    {availableOsList.map((o) => (
-                      <option key={o} value={o}>{o}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Actual Result - Rich Text Editor */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <span>Kết quả thực tế</span>
-                    {dropConfirm.targetStatus !== 'UNTESTED' && dropConfirm.targetStatus !== 'UNREVIEWED' && dropConfirm.targetStatus !== 'BLOCKED' ? (
-                      <span className="text-rose-500 font-bold">*</span>
-                    ) : (
-                      <span className="text-slate-400 font-normal text-[11px]">(Không bắt buộc)</span>
-                    )}
-                  </span>
-                </label>
-                <RichTextEditor
-                  value={dropActualResult}
-                  onChange={setDropActualResult}
-                  placeholder="Nhập kết quả thực tế khi kiểm thử kịch bản này..."
-                  minHeight="140px"
-                  isFailed={dropConfirm.targetStatus === 'FAILED'}
-                />
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
-              <button
-                type="button"
-                onClick={handleCancelDrop}
-                disabled={dropSubmitting}
-                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDrop}
-                disabled={
-                  dropSubmitting ||
-                  (dropConfirm.targetStatus !== 'UNTESTED' &&
-                    dropConfirm.targetStatus !== 'UNREVIEWED' &&
-                    dropConfirm.targetStatus !== 'BLOCKED' &&
-                    !dropActualResult.trim())
-                }
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
-              >
-                {dropSubmitting ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Đang lưu...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Xác nhận chuyển trạng thái</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DropConfirmModal
+          confirm={dropConfirm}
+          prevExecution={dropConfirm.testCase.latestExecution}
+          eligibleHandlers={dropEligibleHandlers}
+          loadingHandlers={dropLoadingHandlers}
+          currentUser={user}
+          server={dropServer}
+          onServerChange={setDropServer}
+          os={dropOs}
+          onOsChange={setDropOs}
+          handlerId={dropHandlerId}
+          onHandlerChange={setDropHandlerId}
+          availableServers={availableServers}
+          availableOsList={availableOsList}
+          submitting={dropSubmitting}
+          onConfirm={handleConfirmDrop}
+          onCancel={handleCancelDrop}
+        />
       )}
     </div>
   );
