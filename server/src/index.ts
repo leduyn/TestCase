@@ -23,6 +23,7 @@ import { checkDatabaseConnection } from './config/database';
 import { dbCheckMiddleware } from './controllers/setupController';
 
 import { ensureDefaultAdmin } from './services/adminSeed';
+import { CronService } from './services/cronService';
 
 dotenv.config();
 
@@ -101,6 +102,8 @@ app.listen(PORT, async () => {
     console.log(`✅ Database connected successfully.`);
     // Tự động kiểm tra và tạo tài khoản Admin mặc định
     await ensureDefaultAdmin();
+    // Khởi chạy Cron Jobs kiểm tra nhiệm vụ quá hạn
+    CronService.init();
   } else {
     console.log(`⚠️  Database not connected: ${dbCheck.message}`);
     console.log(`📋 Setup available at: http://localhost:${PORT}/api/setup/status`);
