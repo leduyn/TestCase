@@ -13,6 +13,12 @@ import settingRoutes from './routes/settingRoutes';
 import permissionRoutes from './routes/permissionRoutes';
 import statusHandlerRoutes from './routes/statusHandlerRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import processRoutes from './routes/processRoutes';
+import taskRoutes from './routes/taskRoutes';
+import standaloneTodoRoutes from './routes/standaloneTodoRoutes';
+import standaloneCommentRoutes from './routes/standaloneCommentRoutes';
+import workflowUploadRoutes from './routes/workflowUploadRoutes';
+import workflowReportRoutes from './routes/workflowReportRoutes';
 import { checkDatabaseConnection } from './config/database';
 import { dbCheckMiddleware } from './controllers/setupController';
 
@@ -38,7 +44,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
-    message: 'AI Test Case Generator API is running',
+    message: 'AI Test Case Generator & Workflow API is running',
     timestamp: new Date().toISOString(),
   });
 });
@@ -60,6 +66,16 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/execution-status-handlers', statusHandlerRoutes);
 app.use('/api/uploads', uploadRoutes);
+
+// Workflow Management Routes
+app.use('/api/processes', processRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/todos', standaloneTodoRoutes);
+app.use('/api/comments', standaloneCommentRoutes);
+app.use('/api/workflow/upload', workflowUploadRoutes);
+app.use('/api/upload', workflowUploadRoutes);
+app.use('/api/reports', workflowReportRoutes);
+app.use('/api/workflow/reports', workflowReportRoutes);
 
 // Static uploads serving
 app.use('/uploads', express.static(path.resolve('./uploads')));
