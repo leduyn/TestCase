@@ -13,6 +13,24 @@ enum Role {
   ADMIN
   TESTER
   VIEWER
+  MANAGER
+  USER
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum TaskHistoryChangeType {
+  CREATED
+  UPDATED
+  STEP_CHANGED
+  COMPLETED
+  CANCELLED
 }
 
 enum UserStatus {
@@ -99,6 +117,14 @@ model User {
   lastLogin         DateTime?         @map("last_login")
   failedLoginAttempts Int             @default(0) @map("failed_login_attempts")
   passwordExpiry    DateTime?         @map("password_expiry")
+  
+  createdById       String?           @map("created_by")
+  createdBy         User?             @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers      User[]            @relation("UserCreatedBy")
+  updatedById       String?           @map("updated_by")
+  updatedBy         User?             @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedUsers      User[]            @relation("UserUpdatedBy")
+
   createdAt         DateTime          @default(now()) @map("created_at")
   updatedAt         DateTime          @updatedAt @map("updated_at")
 
@@ -115,6 +141,24 @@ model User {
   historyBeforeExecutions TestExecutionHistory[] @relation("HistoryBeforeExecutedBy")
   historyCreatedExecutions TestExecutionHistory[] @relation("HistoryCreatedBy")
   statusHandlers         ExecutionStatusHandler[]
+
+  managedProcesses      Process[]         @relation("ManagedProcesses")
+  createdProcesses      Process[]         @relation("CreatedProcesses")
+  updatedProcesses      Process[]         @relation("UpdatedProcesses")
+  deletedProcesses      Process[]         @relation("DeletedProcesses")
+  createdProcessSteps   ProcessStep[]     @relation("CreatedProcessSteps")
+  updatedProcessSteps   ProcessStep[]     @relation("UpdatedProcessSteps")
+  createdTasks          Task[]            @relation("CreatedTasks")
+  updatedTasks          Task[]            @relation("UpdatedTasks")
+  previousExecutorTasks Task[]            @relation("TaskPreviousExecutor")
+  executedTodos         Todo[]            @relation("TodoExecutor")
+  createdTodos          Todo[]            @relation("CreatedTodos")
+  updatedTodos          Todo[]            @relation("UpdatedTodos")
+  taskComments          TaskComment[]     @relation("TaskCommentUser")
+  createdTaskComments   TaskComment[]     @relation("CreatedTaskComments")
+  updatedTaskComments   TaskComment[]     @relation("UpdatedTaskComments")
+  changedTaskHistories  TaskHistory[]     @relation("TaskHistoryChangedBy")
+  createdTaskHistories  TaskHistory[]     @relation("CreatedTaskHistories")
 
   @@map("users")
 }
@@ -294,5 +338,144 @@ model SystemSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_settings")
+}
+
+model Process {
+  id          String        @id @default(uuid())
+  name        String
+  description String?       @db.Text
+  managerId   String        @map("manager_id")
+  manager     User          @relation("ManagedProcesses", fields: [managerId], references: [id], onDelete: Restrict)
+  watcherIds  Json?         @default("[]") @map("watcher_ids")
+
+  createdById String?       @map("created_by")
+  createdBy   User?         @relation("CreatedProcesses", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedById String?       @map("updated_by")
+  updatedBy   User?         @relation("UpdatedProcesses", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  deletedAt   DateTime?     @map("deleted_at")
+  deletedById String?       @map("deleted_by")
+  deletedBy   User?         @relation("DeletedProcesses", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  steps       ProcessStep[]
+  tasks       Task[]
+
+  @@map("processes")
+}
+
+model ProcessStep {
+  id             String    @id @default(uuid())
+  processId      String    @map("process_id")
+  process        Process   @relation(fields: [processId], references: [id], onDelete: Cascade)
+  name           String
+  executorIds    Json?     @default("[]") @map("executor_ids")
+  timeLimitHours Int       @default(24) @map("time_limit_hours")
+  order          Int       @map("order")
+  instructions   String?   @db.Text @map("instructions")
+
+  createdById    String?   @map("created_by")
+  createdBy      User?     @relation("CreatedProcessSteps", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedById    String?   @map("updated_by")
+  updatedBy      User?     @relation("UpdatedProcessSteps", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  tasks          Task[]
+
+  @@map("process_steps")
+}
+
+model Task {
+  id                 String        @id @default(uuid())
+  processId          String        @map("process_id")
+  process            Process       @relation(fields: [processId], references: [id], onDelete: Cascade)
+  name               String
+  content            String?       @db.Text @map("content")
+  customFields       Json?         @map("custom_fields")
+  currentStepId      String?       @map("current_step_id")
+  currentStep        ProcessStep?  @relation(fields: [currentStepId], references: [id], onDelete: SetNull)
+  executorIds        Json?         @default("[]") @map("executor_ids")
+  watcherIds         Json?         @default("[]") @map("watcher_ids")
+  previousExecutorId String?       @map("previous_executor_id")
+  previousExecutor   User?         @relation("TaskPreviousExecutor", fields: [previousExecutorId], references: [id], onDelete: SetNull)
+  startedAt          DateTime      @default(now()) @map("started_at")
+  deadline           DateTime      @map("deadline")
+  completedAt        DateTime?     @map("completed_at")
+  status             TaskStatus    @default(IN_PROGRESS) @map("status")
+  fileUploads        Json?         @default("[]") @map("file_uploads")
+
+  createdById        String?       @map("created_by")
+  createdBy          User?         @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedById        String?       @map("updated_by")
+  updatedBy          User?         @relation("UpdatedTasks", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  todos              Todo[]
+  comments           TaskComment[]
+  histories          TaskHistory[]
+
+  @@map("tasks")
+}
+
+model Todo {
+  id          String    @id @default(uuid())
+  taskId      String    @map("task_id")
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  description String    @db.Text
+  executorId  String?   @map("executor_id")
+  executor    User?     @relation("TodoExecutor", fields: [executorId], references: [id], onDelete: SetNull)
+  deadline    DateTime? @map("deadline")
+  watcherIds  Json?     @default("[]") @map("watcher_ids")
+  files       Json?     @default("[]") @map("files")
+  isCompleted Boolean   @default(false) @map("is_completed")
+  completedAt DateTime? @map("completed_at")
+
+  createdById String?   @map("created_by")
+  createdBy   User?     @relation("CreatedTodos", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedById String?   @map("updated_by")
+  updatedBy   User?     @relation("UpdatedTodos", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("todos")
+}
+
+model TaskComment {
+  id          String   @id @default(uuid())
+  taskId      String   @map("task_id")
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId      String   @map("user_id")
+  user        User     @relation("TaskCommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  content     String   @db.Text
+  files       Json?    @default("[]") @map("files")
+
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedTaskComments", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedTaskComments", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("task_comments")
+}
+
+model TaskHistory {
+  id                String                @id @default(uuid())
+  taskId            String                @map("task_id")
+  task              Task                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  version           Int                   @default(1) @map("version")
+  changedById       String?               @map("changed_by")
+  changedBy         User?                 @relation("TaskHistoryChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  changeType        TaskHistoryChangeType @map("change_type")
+  changeDescription String?               @db.Text @map("change_description")
+  snapshot          Json                  @map("snapshot")
+
+  createdById       String?               @map("created_by")
+  createdBy         User?                 @relation("CreatedTaskHistories", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime              @default(now()) @map("created_at")
+
+  @@map("task_histories")
 }
 
