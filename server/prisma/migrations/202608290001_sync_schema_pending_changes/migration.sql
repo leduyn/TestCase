@@ -6,7 +6,6 @@ BEGIN;
 CREATE TYPE "TestExecutionStatus_new" AS ENUM ('UNTESTED', 'PASSED', 'FAILED', 'BLOCKED', 'RETEST');
 ALTER TABLE "test_executions" ALTER COLUMN "status" DROP DEFAULT;
 ALTER TABLE "test_executions" ALTER COLUMN "status" TYPE "TestExecutionStatus_new" USING ("status"::text::"TestExecutionStatus_new");
-ALTER TABLE "test_execution_histories" ALTER COLUMN "status" TYPE "TestExecutionStatus_new" USING ("status"::text::"TestExecutionStatus_new");
 ALTER TYPE "TestExecutionStatus" RENAME TO "TestExecutionStatus_old";
 ALTER TYPE "TestExecutionStatus_new" RENAME TO "TestExecutionStatus";
 DROP TYPE "TestExecutionStatus_old";
@@ -20,8 +19,7 @@ ADD COLUMN     "reviewed_by_id" TEXT;
 
 -- AlterTable
 ALTER TABLE "test_executions" ADD COLUMN     "before_executed_id" TEXT,
-ADD COLUMN     "created_by_id" TEXT,
-ALTER COLUMN "status" SET DEFAULT 'UNTESTED';
+ADD COLUMN     "created_by_id" TEXT;
 
 -- CreateTable
 CREATE TABLE "test_execution_watchers" (
