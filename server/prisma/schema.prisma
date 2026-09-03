@@ -285,6 +285,7 @@ model TestExecutionHistory {
   actualResult     String?             @db.Text @map("actual_result")
   evaluation       String?             @db.Text
   notes            String?             @db.Text
+  images           Json?               @default("[]") @map("images")
   executedAt       DateTime            @map("executed_at")
   updatedAt        DateTime            @map("updated_at")
 

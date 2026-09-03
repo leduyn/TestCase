@@ -136,21 +136,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     }
   };
 
-  const handleDeleteExisting = async (imageId: string, e: React.MouseEvent) => {
+  const handleDeleteExisting = (imageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Bạn có chắc chắn muốn xóa file này?')) return;
-
-    setDeletingId(imageId);
-    try {
-      await uploadApi.deleteImage(imageId);
-      if (onImagesChange) {
-        onImagesChange(images.filter((img) => img.id !== imageId));
-      }
-    } catch (err: any) {
-      console.error('Delete image error:', err);
-      alert(err.response?.data?.message || 'Lỗi khi xóa file');
-    } finally {
-      setDeletingId(null);
+    if (onImagesChange) {
+      onImagesChange(images.filter((img) => img.id !== imageId));
     }
   };
 
