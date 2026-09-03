@@ -13,10 +13,18 @@ import settingRoutes from './routes/settingRoutes';
 import permissionRoutes from './routes/permissionRoutes';
 import statusHandlerRoutes from './routes/statusHandlerRoutes';
 import uploadRoutes from './routes/uploadRoutes';
+import processRoutes from './routes/processRoutes';
+import taskRoutes from './routes/taskRoutes';
+import customFieldRoutes from './routes/customFieldRoutes';
+import standaloneTodoRoutes from './routes/standaloneTodoRoutes';
+import standaloneCommentRoutes from './routes/standaloneCommentRoutes';
+import workflowUploadRoutes from './routes/workflowUploadRoutes';
+import workflowReportRoutes from './routes/workflowReportRoutes';
 import { checkDatabaseConnection } from './config/database';
 import { dbCheckMiddleware } from './controllers/setupController';
 
 import { ensureDefaultAdmin } from './services/adminSeed';
+import { CronService } from './services/cronService';
 
 dotenv.config();
 
@@ -38,7 +46,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
-    message: 'AI Test Case Generator API is running',
+    message: 'AI Test Case Generator & Workflow API is running',
     timestamp: new Date().toISOString(),
   });
 });
@@ -60,6 +68,17 @@ app.use('/api/settings', settingRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/execution-status-handlers', statusHandlerRoutes);
 app.use('/api/uploads', uploadRoutes);
+
+// Workflow Management Routes
+app.use('/api/processes', processRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/custom-fields', customFieldRoutes);
+app.use('/api/todos', standaloneTodoRoutes);
+app.use('/api/comments', standaloneCommentRoutes);
+app.use('/api/workflow/upload', workflowUploadRoutes);
+app.use('/api/upload', workflowUploadRoutes);
+app.use('/api/reports', workflowReportRoutes);
+app.use('/api/workflow/reports', workflowReportRoutes);
 
 // Static uploads serving
 app.use('/uploads', express.static(path.resolve('./uploads')));
@@ -85,6 +104,8 @@ app.listen(PORT, async () => {
     console.log(`✅ Database connected successfully.`);
     // Tự động kiểm tra và tạo tài khoản Admin mặc định
     await ensureDefaultAdmin();
+    // Khởi chạy Cron Jobs kiểm tra nhiệm vụ quá hạn
+    CronService.init();
   } else {
     console.log(`⚠️  Database not connected: ${dbCheck.message}`);
     console.log(`📋 Setup available at: http://localhost:${PORT}/api/setup/status`);

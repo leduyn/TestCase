@@ -101,10 +101,33 @@ export const PERMISSIONS = [
   { key: 'users:status', name: 'Khóa/Mở khóa tài khoản', category: 'USERS', description: 'Thay đổi trạng thái kích hoạt tài khoản' },
   { key: 'permissions:read', name: 'Xem ma trận phân quyền', category: 'USERS', description: 'Xem danh sách và cấu hình phân quyền theo vai trò' },
   { key: 'permissions:update', name: 'Cập nhật phân quyền', category: 'USERS', description: 'Chỉnh sửa quyền hạn cho các vai trò (Roles)' },
+
+  // WORKFLOW & PROCESS & TASK
+  { key: 'workflow:process:read', name: 'Xem Quy trình', category: 'WORKFLOW', description: 'Xem danh sách và chi tiết các quy trình nghiệp vụ' },
+  { key: 'workflow:process:write', name: 'Quản lý Quy trình', category: 'WORKFLOW', description: 'Tạo mới, chỉnh sửa, xóa quy trình và các bước thực thi' },
+  { key: 'workflow:task:read', name: 'Xem Nhiệm vụ', category: 'WORKFLOW', description: 'Xem danh sách và chi tiết nhiệm vụ quy trình' },
+  { key: 'workflow:task:write', name: 'Quản lý Nhiệm vụ', category: 'WORKFLOW', description: 'Tạo mới, cập nhật, chuyển bước, hoàn thành, hủy nhiệm vụ' },
+  { key: 'workflow:report:read', name: 'Xem Báo cáo Workflow', category: 'WORKFLOW', description: 'Xem biểu đồ và thống kê hiệu suất quy trình & nhiệm vụ' },
 ];
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   ADMIN: PERMISSIONS.map((p) => p.key),
+  MANAGER: [
+    'workflow:process:read',
+    'workflow:process:write',
+    'workflow:task:read',
+    'workflow:task:write',
+    'workflow:report:read',
+    'dashboard:read',
+    'dashboard:user-stats:read',
+    'dashboard:user-stats:read-all',
+    'testcase:read',
+    'testcase:execute',
+    'testcase:review',
+    'testcase:export',
+    'testsuite:read',
+    'users:read',
+  ],
   TESTER: [
     'testcase:create',
     'testcase:read',
@@ -121,6 +144,16 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'testsuite:create',
     'testsuite:read',
     'testsuite:update',
+    'workflow:process:read',
+    'workflow:task:read',
+    'workflow:task:write',
+    'workflow:report:read',
+  ],
+  USER: [
+    'workflow:process:read',
+    'workflow:task:read',
+    'workflow:task:write',
+    'dashboard:read',
   ],
   VIEWER: [
     'testcase:read',
@@ -129,6 +162,8 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'dashboard:read',
     'dashboard:user-stats:read',
     'testsuite:read',
+    'workflow:process:read',
+    'workflow:task:read',
   ],
 };
 
@@ -146,7 +181,7 @@ export async function ensureDefaultPermissions(): Promise<void> {
     // 2. Đồng bộ và làm sạch quyền theo vai trò.
     // Vừa thêm các quyền được định nghĩa trong ROLE_PERMISSIONS, vừa XÓA các
     // role-permission cũ không còn nằm trong danh sách (tránh tồn đọng quyền thừa).
-    for (const role of ['ADMIN', 'TESTER', 'VIEWER'] as const) {
+    for (const role of ['ADMIN', 'MANAGER', 'TESTER', 'USER', 'VIEWER'] as const) {
       const allowedKeys = new Set(ROLE_PERMISSIONS[role] || []);
 
       // 2a. Upsert các quyền hợp lệ
