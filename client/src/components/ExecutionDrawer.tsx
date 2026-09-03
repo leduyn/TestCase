@@ -157,11 +157,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const [evaluation, setEvaluation] = useState('');
   const [notes, setNotes] = useState('');
   const [images, setImages] = useState<TestExecutionImage[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [currentExecutionId, setCurrentExecutionId] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [allowedStatuses, setAllowedStatuses] = useState<Set<string> | null>(null);
 
   // Next-step handler (overwrites executedById). Only users with execution:set-<status> are eligible.
   const [eligibleHandlers, setEligibleHandlers] = useState<{ id: string; fullName: string; email: string }[]>([]);
@@ -198,18 +198,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     loadEnvironments();
   }, []);
 
-  // Load các trạng thái mà user hiện tại được gán xử lý để giới hạn lựa chọn trạng thái
-  useEffect(() => {
-    const loadPerms = async () => {
-      try {
-        const res = await statusHandlerApi.getMyStatuses();
-        setAllowedStatuses(new Set<string>(res.data.statuses || []));
-      } catch {
-        setAllowedStatuses(null);
-      }
-    };
-    loadPerms();
-  }, []);
+  // (Không còn chặn chọn trạng thái trên Frontend — Backend sẽ kiểm tra quyền khi lưu)
 
   // Khi ở chế độ chỉnh sửa và trạng thái thay đổi, tải danh sách người xử lý hợp lệ
   // (chỉ những người được gán xử lý trạng thái tương ứng) cho bước tiếp theo.
@@ -244,6 +233,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setEvaluation(exec.evaluation || '');
       setNotes(exec.notes || '');
       setImages(exec.images || []);
+      setPendingFiles([]);
       setCurrentExecutionId(exec.id);
       setSelectedExecutionId(exec.id);
       setNextHandlerId(exec.executedById || currentUser?.id || '');
@@ -255,6 +245,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setEvaluation('');
       setNotes('');
       setImages([]);
+      setPendingFiles([]);
       setCurrentExecutionId(undefined);
       setSelectedExecutionId(undefined);
       setNextHandlerId(currentUser?.id || '');
@@ -407,45 +398,6 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     setIsEditing(true);
   };
 
-  // Handle uploading images with auto-creation of execution if not created yet
-  const handleCustomUpload = async (files: File[]) => {
-    let execId = currentExecutionId;
-    if (!execId && testCase) {
-      const currentActualResult = resultEditorRef.current?.getValue() || '';
-      const res = await executionApi.executeTestCase(testCase.id, {
-        server,
-        os,
-        status,
-        actualResult: currentActualResult,
-        evaluation,
-        notes,
-        executedById: nextHandlerId,
-        viewerIds: activeExecution?.watchers?.map((w) => w.userId) || [],
-      });
-      execId = res.data.execution.id;
-      setCurrentExecutionId(execId);
-      setSelectedExecutionId(execId);
-
-      const newExec = res.data.execution;
-      const updatedExecs = [newExec, ...allExecutions.filter((e) => e.id !== newExec.id)];
-      updatedExecs.sort((a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime());
-      setAllExecutions(updatedExecs);
-
-      const updated: TestCase = {
-        ...testCase,
-        executions: updatedExecs,
-        latestExecution: updatedExecs[0] || newExec,
-      };
-      onSaved(updated);
-    }
-
-    if (execId) {
-      const res = await uploadApi.uploadImages(execId, files);
-      return res.data.images;
-    }
-    return [];
-  };
-
   // Helper to check if rich text content is actually empty
   const isRichTextEmpty = (html: string): boolean => {
     if (!html || html.trim() === '') return true;
@@ -518,6 +470,25 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           ...res.data.execution,
           images: res.data.execution.images || images,
         };
+      }
+
+      // Tải lên các file minh chứng đang chờ lưu (pendingFiles) nếu có
+      if (pendingFiles.length > 0 && savedExec?.id) {
+        try {
+          const uploadRes = await uploadApi.uploadImages(savedExec.id, pendingFiles);
+          if (uploadRes.data.images && uploadRes.data.images.length > 0) {
+            const mergedImages = [...(savedExec.images || []), ...uploadRes.data.images];
+            savedExec = {
+              ...savedExec,
+              images: mergedImages,
+            };
+            setImages(mergedImages);
+          }
+        } catch (uploadErr: any) {
+          console.error('Lỗi khi tải ảnh đính kèm:', uploadErr);
+          alert(`Đã lưu kết quả nhưng gặp lỗi khi tải file đính kèm: ${uploadErr.response?.data?.message || uploadErr.message}`);
+        }
+        setPendingFiles([]);
       }
 
       let updatedExecs: TestExecution[];
@@ -770,7 +741,9 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     return activeExecution.executedById === currentUser?.id;
   }, [activeExecution, currentUser]);
 
-  const canEditCurrentExecution = isOwnExecution;
+  // Admin hoặc người thực thi ở trạng thái hiện tại mới được ghi nhận / điều chỉnh kết quả
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const canEditCurrentExecution = isAdmin || isOwnExecution;
 
   const selectedUserObj = userOptions.find((u) => u.id === selectedUserId);
 
@@ -1131,7 +1104,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     <ImageUploader
                       executionId={currentExecutionId}
                       images={images}
-                      onUploadCustom={handleCustomUpload}
+                      pendingFiles={pendingFiles}
+                      onPendingFilesChange={setPendingFiles}
                       onImagesChange={(newImages) => {
                         setImages(newImages);
                         if (currentExecutionId) {
@@ -1376,8 +1350,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
                         {EXECUTION_STATUS_LIST.map(({ value, label, Icon, active, idle }) => {
                           const isSelected = status === value;
-                          const disabled =
-                            allowedStatuses !== null && !allowedStatuses.has(value) && !isSelected;
+                          const disabled = false; // Frontend không chặn chọn trạng thái — Backend kiểm tra quyền khi lưu
                           return (
                             <button
                               key={value}

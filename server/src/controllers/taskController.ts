@@ -131,9 +131,16 @@ export class TaskController {
     try {
       const { id } = req.params;
       const userId = req.user!.id;
-      const { executorIds } = req.body;
+      const { targetStepId, executorIds, customExecutors, deadline, changeDescription, customFields } =
+        req.body;
 
-      const updated = await TaskService.transitionStep(id, userId, executorIds);
+      const updated = await TaskService.transitionStep(id, userId, {
+        targetStepId,
+        customExecutors: executorIds || customExecutors,
+        deadline,
+        changeDescription,
+        customFields,
+      });
 
       return res.json({
         message:

@@ -15,6 +15,7 @@ import statusHandlerRoutes from './routes/statusHandlerRoutes';
 import uploadRoutes from './routes/uploadRoutes';
 import processRoutes from './routes/processRoutes';
 import taskRoutes from './routes/taskRoutes';
+import customFieldRoutes from './routes/customFieldRoutes';
 import standaloneTodoRoutes from './routes/standaloneTodoRoutes';
 import standaloneCommentRoutes from './routes/standaloneCommentRoutes';
 import workflowUploadRoutes from './routes/workflowUploadRoutes';
@@ -71,6 +72,7 @@ app.use('/api/uploads', uploadRoutes);
 // Workflow Management Routes
 app.use('/api/processes', processRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/custom-fields', customFieldRoutes);
 app.use('/api/todos', standaloneTodoRoutes);
 app.use('/api/comments', standaloneCommentRoutes);
 app.use('/api/workflow/upload', workflowUploadRoutes);

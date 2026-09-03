@@ -2,7 +2,7 @@ import type { User } from './index';
 
 export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE' | 'CANCELLED';
 
-export type TaskHistoryChangeType = 'CREATED' | 'UPDATED' | 'STEP_CHANGED' | 'COMPLETED' | 'CANCELLED';
+export type TaskHistoryChangeType = 'CREATED' | 'UPDATED' | 'STEP_CHANGED' | 'FIELD_UPDATED' | 'COMPLETED' | 'CANCELLED';
 
 export interface ProcessStep {
   id: string;
@@ -151,4 +151,110 @@ export interface TaskByExecutorReportItem {
 
 export interface OverdueTaskReportItem extends Task {
   overdueHours: number;
+}
+
+// ─── Custom Fields Types ───────────────────────────────────────────────────
+
+export type CustomFieldType =
+  | 'text'
+  | 'textarea'
+  | 'richtext'
+  | 'number'
+  | 'date'
+  | 'datetime'
+  | 'select'
+  | 'multiselect'
+  | 'radio'
+  | 'checkbox'
+  | 'toggle'
+  | 'file'
+  | 'multifile'
+  | 'user'
+  | 'multiuser'
+  | 'email'
+  | 'phone'
+  | 'url'
+  | 'rating'
+  | 'slider'
+  | 'color'
+  | 'formula';
+
+export interface CustomFieldDefinition {
+  id: string;
+  processId: string;
+  stepId?: string | null;
+  fieldKey: string;
+  fieldLabel: string;
+  fieldType: CustomFieldType | string;
+  fieldConfig: Record<string, any>;
+  isRequired: boolean;
+  defaultValue?: any;
+  placeholder?: string | null;
+  helpText?: string | null;
+  order: number;
+  isVisible: boolean;
+  visibilityCondition?: {
+    field: string;
+    operator: string;
+    value: any;
+  } | null;
+  validationRules?: {
+    min_length?: number;
+    max_length?: number;
+    pattern?: string;
+    pattern_message?: string;
+    [key: string]: any;
+  } | null;
+  step?: {
+    id: string;
+    name: string;
+    order: number;
+  } | null;
+  createdBy?: User | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TaskCustomFieldValue {
+  id: string;
+  taskId: string;
+  fieldDefinitionId: string;
+  fieldDefinition?: CustomFieldDefinition;
+  value: any;
+  stepId?: string | null;
+  filledById?: string | null;
+  filledBy?: User | null;
+  filledAt: string;
+  updatedById?: string | null;
+  updatedBy?: User | null;
+  updatedAt: string;
+}
+
+export interface TaskCustomFieldItem {
+  definition: CustomFieldDefinition;
+  value: any;
+  savedValue: any;
+  filledBy?: User | null;
+  filledAt?: string | null;
+  updatedBy?: User | null;
+  updatedAt?: string | null;
+  stepId?: string | null;
+  isCurrentStep: boolean;
+  isVisible: boolean;
+}
+
+export interface TaskCustomFieldsResponse {
+  taskId: string;
+  taskName: string;
+  processId: string;
+  currentStepId?: string | null;
+  fields: TaskCustomFieldItem[];
+  valuesByKey: Record<string, any>;
+}
+
+export interface SupportedFieldTypeMeta {
+  type: string;
+  label: string;
+  category: 'text' | 'number' | 'date' | 'choice' | 'file' | 'user' | 'format' | 'advanced';
+  icon: string;
 }

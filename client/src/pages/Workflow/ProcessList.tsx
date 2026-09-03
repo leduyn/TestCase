@@ -13,6 +13,7 @@ import {
   ArrowRight,
   Loader2,
   User as UserIcon,
+  Zap,
 } from 'lucide-react';
 
 export const ProcessList: React.FC = () => {
@@ -21,6 +22,7 @@ export const ProcessList: React.FC = () => {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<'info' | 'custom_fields'>('info');
   const [selectedProcess, setSelectedProcess] = useState<Process | null>(null);
 
   const fetchProcesses = async () => {
@@ -47,11 +49,13 @@ export const ProcessList: React.FC = () => {
 
   const handleCreate = () => {
     setSelectedProcess(null);
+    setModalTab('info');
     setIsModalOpen(true);
   };
 
-  const handleEdit = (proc: Process) => {
+  const handleEdit = (proc: Process, tab: 'info' | 'custom_fields' = 'info') => {
     setSelectedProcess(proc);
+    setModalTab(tab);
     setIsModalOpen(true);
   };
 
@@ -83,13 +87,13 @@ export const ProcessList: React.FC = () => {
             Danh sách Quy trình nghiệp vụ
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Định nghĩa các mẫu quy trình và các bước tuần tự để giao nhiệm vụ
+            Định nghĩa các mẫu quy trình, các bước tuần tự và các trường dữ liệu tùy chỉnh cho nhiệm vụ
           </p>
         </div>
 
         <button
           onClick={handleCreate}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 transition-all"
+          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-500/20 transition-all"
         >
           <Plus className="w-4 h-4" />
           Tạo quy trình mới
@@ -104,7 +108,7 @@ export const ProcessList: React.FC = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Tìm kiếm theo tên quy trình, mô tả..."
-            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
         </form>
@@ -117,7 +121,7 @@ export const ProcessList: React.FC = () => {
       {/* Process Cards Grid */}
       {loading ? (
         <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
           <p className="text-sm text-slate-500">Đang tải danh sách quy trình...</p>
         </div>
       ) : processes.length === 0 ? (
@@ -131,7 +135,7 @@ export const ProcessList: React.FC = () => {
           </p>
           <button
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md transition-all"
           >
             <Plus className="w-4 h-4" /> Tạo quy trình ngay
           </button>
@@ -150,7 +154,14 @@ export const ProcessList: React.FC = () => {
                   </h3>
                   <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
                     <button
-                      onClick={() => handleEdit(proc)}
+                      onClick={() => handleEdit(proc, 'custom_fields')}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                      title="Quản lý trường tùy chỉnh (Custom Fields)"
+                    >
+                      <Zap className="w-4 h-4 text-amber-500" />
+                    </button>
+                    <button
+                      onClick={() => handleEdit(proc, 'info')}
                       className="p-1.5 text-slate-400 hover:text-blue-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                       title="Chỉnh sửa quy trình"
                     >
@@ -206,12 +217,21 @@ export const ProcessList: React.FC = () => {
                     Quản lý: {proc.manager?.fullName || proc.createdBy?.fullName || 'Hệ thống'}
                   </span>
                 </div>
-                <Link
-                  to={`/workflow/tasks?processId=${proc.id}`}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline shrink-0 ml-2"
-                >
-                  Nhiệm vụ ({proc._count?.tasks || 0}) <ArrowRight className="w-3 h-3" />
-                </Link>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(proc, 'custom_fields')}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    <Zap className="w-3 h-3 text-amber-500" /> Custom Fields
+                  </button>
+                  <Link
+                    to={`/workflow/tasks?processId=${proc.id}`}
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline shrink-0"
+                  >
+                    Nhiệm vụ ({proc._count?.tasks || 0}) <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
               </div>
             </div>
           ))}
@@ -224,6 +244,7 @@ export const ProcessList: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchProcesses}
         process={selectedProcess}
+        initialTab={modalTab}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { TaskController } from '../controllers/taskController';
+import { TaskCustomFieldController } from '../controllers/taskCustomFieldController';
 import { authenticate } from '../middleware/auth';
 import todoRoutes from './todoRoutes';
 import commentRoutes from './commentRoutes';
@@ -17,6 +18,13 @@ router.post('/', TaskController.createTask);
 router.get('/', TaskController.getTasks);
 router.get('/:id', TaskController.getTaskById);
 router.put('/:id', TaskController.updateTask);
+
+// Task Custom Fields
+router.get('/:taskId/custom-fields', TaskCustomFieldController.getTaskCustomFields);
+router.put('/:taskId/custom-fields', TaskCustomFieldController.saveTaskCustomFields);
+router.post('/:taskId/custom-fields', TaskCustomFieldController.saveTaskCustomFields);
+router.post('/:taskId/custom-fields/validate', TaskCustomFieldController.validateTaskCustomFields);
+router.get('/:taskId/custom-fields/history', TaskCustomFieldController.getTaskCustomFieldHistory);
 
 // Task Transitions & Statuses
 router.post('/:id/transition', TaskController.transitionStep);

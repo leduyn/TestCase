@@ -1,5 +1,6 @@
 import prisma from '../config/database';
-import { TaskStatus, TaskHistoryChangeType } from '@prisma/client';
+import { TaskStatus, TaskHistoryChangeType, Prisma } from '@prisma/client';
+import { TaskCustomFieldService } from './taskCustomFieldService';
 
 export interface CreateTaskDto {
   processId: string;
@@ -40,6 +41,12 @@ export class TaskService {
         comments: {
           include: {
             user: { select: { id: true, fullName: true, email: true } },
+          },
+        },
+        customFieldValues: {
+          include: {
+            fieldDefinition: true,
+            filledBy: { select: { id: true, fullName: true, email: true } },
           },
         },
       },
@@ -110,6 +117,29 @@ export class TaskService {
           currentStep: true,
         },
       });
+
+      // Tạo các bản ghi TaskCustomFieldValue nếu có customFields
+      if (customFields && typeof customFields === 'object') {
+        const definitions = await tx.customFieldDefinition.findMany({
+          where: { processId },
+        });
+        for (const def of definitions) {
+          const val = customFields[def.fieldKey];
+          if (val !== undefined && val !== null) {
+            await tx.taskCustomFieldValue.create({
+              data: {
+                taskId: task.id,
+                fieldDefinitionId: def.id,
+                value: val,
+                stepId: def.stepId || firstStep.id,
+                filledById: userId,
+                filledAt: new Date(),
+                updatedById: userId,
+              },
+            });
+          }
+        }
+      }
 
       // Tạo Snapshot version 1
       const snapshot = await this.createSnapshot(tx, task.id);
@@ -259,6 +289,14 @@ export class TaskService {
             },
           },
         },
+        customFieldValues: {
+          include: {
+            fieldDefinition: true,
+            filledBy: {
+              select: { id: true, fullName: true, email: true },
+            },
+          },
+        },
       },
     });
 
@@ -284,6 +322,40 @@ export class TaskService {
     const nextVersion = latestVersion + 1;
 
     return await prisma.$transaction(async (tx) => {
+      // Đồng bộ TaskCustomFieldValue nếu có cập nhật customFields
+      if (data.customFields && typeof data.customFields === 'object') {
+        const definitions = await tx.customFieldDefinition.findMany({
+          where: { processId: existing.processId },
+        });
+        for (const def of definitions) {
+          const val = data.customFields[def.fieldKey];
+          if (val !== undefined) {
+            await tx.taskCustomFieldValue.upsert({
+              where: {
+                taskId_fieldDefinitionId: {
+                  taskId: id,
+                  fieldDefinitionId: def.id,
+                },
+              },
+              create: {
+                taskId: id,
+                fieldDefinitionId: def.id,
+                value: val !== null ? val : Prisma.DbNull,
+                stepId: def.stepId || existing.currentStepId,
+                filledById: userId,
+                filledAt: new Date(),
+                updatedById: userId,
+              },
+              update: {
+                value: val !== null ? val : Prisma.DbNull,
+                stepId: def.stepId || existing.currentStepId,
+                updatedById: userId,
+              },
+            });
+          }
+        }
+      }
+
       const updated = await tx.task.update({
         where: { id },
         data: {
@@ -322,9 +394,19 @@ export class TaskService {
   }
 
   /**
-   * Chuyển bước (Transition to next step)
+   * Chuyển bước (Transition to next step or any specified target step)
    */
-  static async transitionStep(id: string, userId: string, customExecutors?: string[]) {
+  static async transitionStep(
+    id: string,
+    userId: string,
+    options?: {
+      targetStepId?: string;
+      customExecutors?: string[];
+      deadline?: Date | string;
+      changeDescription?: string;
+      customFields?: any;
+    } | string[]
+  ) {
     const task = await prisma.task.findUnique({
       where: { id },
       include: {
@@ -346,21 +428,114 @@ export class TaskService {
       throw new Error('Nhiệm vụ đã kết thúc, không thể chuyển bước');
     }
 
+    // Xử lý options hỗ trợ cả định dạng cũ (string[]) lẫn DTO mới
+    const targetStepId = Array.isArray(options) ? undefined : options?.targetStepId;
+    const customExecutors = Array.isArray(options) ? options : options?.customExecutors;
+    const customDeadline = Array.isArray(options) ? undefined : options?.deadline;
+    const customDescription = Array.isArray(options) ? undefined : options?.changeDescription;
+    const customFields = Array.isArray(options) ? undefined : options?.customFields;
+
     const steps = task.process.steps;
-    const currentOrder = task.currentStep ? task.currentStep.order : 0;
-    const nextStep = steps.find((s) => s.order > currentOrder);
+    let nextStep: any = null;
+
+    if (targetStepId) {
+      nextStep = steps.find((s) => s.id === targetStepId);
+      if (!nextStep) {
+        throw new Error('Bước đích không tồn tại trong quy trình này');
+      }
+    } else {
+      const currentOrder = task.currentStep ? task.currentStep.order : 0;
+      nextStep = steps.find((s) => s.order > currentOrder);
+    }
 
     const latestVersion = task.histories[0]?.version || 1;
     const nextVersion = latestVersion + 1;
 
     return await prisma.$transaction(async (tx) => {
-      // Nếu không còn bước nào tiếp theo -> Hoàn thành nhiệm vụ
-      if (!nextStep) {
+      // 0. Kiểm tra và validate các custom fields bắt buộc ở bước hiện tại (và global)
+      const allDefinitions = await tx.customFieldDefinition.findMany({
+        where: { processId: task.processId, isVisible: true },
+      });
+      const defIdToKey = new Map(allDefinitions.map((d) => [d.id, d.fieldKey]));
+
+      const existingValues = await tx.taskCustomFieldValue.findMany({
+        where: { taskId: id },
+      });
+
+      const currentValuesMap: Record<string, any> = {};
+      for (const ev of existingValues) {
+        const key = defIdToKey.get(ev.fieldDefinitionId);
+        if (key) {
+          currentValuesMap[key] = ev.value;
+        }
+      }
+
+      if (customFields && typeof customFields === 'object') {
+        Object.assign(currentValuesMap, customFields);
+      }
+
+      // Lọc các fields áp dụng cho bước hiện tại hoặc toàn bộ quy trình
+      const currentStepDefinitions = allDefinitions.filter(
+        (d) => d.stepId === null || d.stepId === task.currentStepId
+      );
+
+      for (const def of currentStepDefinitions) {
+        const isVisible = TaskCustomFieldService.evaluateVisibility(def.visibilityCondition, currentValuesMap);
+        if (!isVisible) continue;
+
+        const val = currentValuesMap[def.fieldKey];
+        const isValueEmpty =
+          val === null ||
+          val === undefined ||
+          val === '' ||
+          (Array.isArray(val) && val.length === 0);
+
+        if (def.isRequired && isValueEmpty) {
+          throw new Error(
+            `Không thể chuyển bước: Trường '${def.fieldLabel}' là bắt buộc nhưng chưa được nhập dữ liệu.`
+          );
+        }
+      }
+
+      // 1. Lưu custom fields nếu có truyền vào
+      if (customFields && typeof customFields === 'object') {
+        for (const def of allDefinitions) {
+          const val = customFields[def.fieldKey];
+          if (val !== undefined) {
+            await tx.taskCustomFieldValue.upsert({
+              where: {
+                taskId_fieldDefinitionId: {
+                  taskId: id,
+                  fieldDefinitionId: def.id,
+                },
+              },
+              create: {
+                taskId: id,
+                fieldDefinitionId: def.id,
+                value: val !== null ? val : Prisma.DbNull,
+                stepId: def.stepId || task.currentStepId,
+                filledById: userId,
+                filledAt: new Date(),
+                updatedById: userId,
+              },
+              update: {
+                value: val !== null ? val : Prisma.DbNull,
+                stepId: def.stepId || task.currentStepId,
+                updatedById: userId,
+              },
+            });
+          }
+        }
+      }
+
+      // 2. Nếu không có targetStepId và không còn bước nào tiếp theo -> Hoàn thành nhiệm vụ
+      if (!nextStep && !targetStepId) {
         const completedTask = await tx.task.update({
           where: { id },
           data: {
             status: TaskStatus.COMPLETED,
             completedAt: new Date(),
+            ...(customFields && { customFields }),
             updatedById: userId,
           },
           include: {
@@ -377,7 +552,7 @@ export class TaskService {
             version: nextVersion,
             changedById: userId,
             changeType: TaskHistoryChangeType.COMPLETED,
-            changeDescription: 'Hoàn thành nhiệm vụ (đã qua tất cả các bước)',
+            changeDescription: customDescription || 'Hoàn thành nhiệm vụ (đã qua tất cả các bước)',
             snapshot,
             createdById: userId,
           },
@@ -386,16 +561,16 @@ export class TaskService {
         return completedTask;
       }
 
-      // Có bước tiếp theo -> Cập nhật sang bước mới
+      // 3. Cập nhật sang bước đích (nextStep)
       const previousExecutorId = (task.executorIds as string[])?.[0] || userId;
       const nextExecutors =
         customExecutors && customExecutors.length > 0
           ? customExecutors
           : (nextStep.executorIds as string[]) || [];
 
-      const newDeadline = new Date(
-        Date.now() + (nextStep.timeLimitHours || 24) * 3600 * 1000
-      );
+      const effectiveDeadline = customDeadline
+        ? new Date(customDeadline)
+        : new Date(Date.now() + (nextStep.timeLimitHours || 24) * 3600 * 1000);
 
       const updatedTask = await tx.task.update({
         where: { id },
@@ -403,9 +578,10 @@ export class TaskService {
           currentStepId: nextStep.id,
           executorIds: nextExecutors,
           previousExecutorId,
-          deadline: newDeadline,
+          deadline: effectiveDeadline,
           startedAt: new Date(),
           status: TaskStatus.IN_PROGRESS,
+          ...(customFields && { customFields }),
           updatedById: userId,
         },
         include: {
@@ -416,13 +592,17 @@ export class TaskService {
 
       const snapshot = await this.createSnapshot(tx, id);
 
+      const changeDesc =
+        customDescription ||
+        `Chuyển bước sang: "${nextStep.name}" (Bước ${nextStep.order})`;
+
       await tx.taskHistory.create({
         data: {
           taskId: id,
           version: nextVersion,
           changedById: userId,
           changeType: TaskHistoryChangeType.STEP_CHANGED,
-          changeDescription: `Chuyển bước sang: "${nextStep.name}" (Bước ${nextStep.order})`,
+          changeDescription: changeDesc,
           snapshot,
           createdById: userId,
         },

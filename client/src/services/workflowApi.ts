@@ -10,6 +10,9 @@ import type {
   TaskByProcessReportItem,
   TaskByExecutorReportItem,
   OverdueTaskReportItem,
+  CustomFieldDefinition,
+  TaskCustomFieldsResponse,
+  SupportedFieldTypeMeta,
 } from '../types/workflow';
 
 // ─── Process API ────────────────────────────────────────────────────────────
@@ -120,8 +123,16 @@ export const taskApi = {
     }
   ) => api.put<{ message: string; task: Task }>(`/tasks/${id}`, data),
 
-  transitionStep: (id: string, data?: { executorIds?: string[] }) =>
-    api.post<{ message: string; task: Task }>(`/tasks/${id}/transition`, data || {}),
+  transitionStep: (
+    id: string,
+    data?: {
+      targetStepId?: string;
+      executorIds?: string[];
+      deadline?: string;
+      changeDescription?: string;
+      customFields?: Record<string, any>;
+    }
+  ) => api.post<{ message: string; task: Task }>(`/tasks/${id}/transition`, data || {}),
 
   completeTask: (id: string, description?: string) =>
     api.post<{ message: string; task: Task }>(`/tasks/${id}/complete`, { description }),
@@ -210,4 +221,111 @@ export const workflowReportApi = {
   getTasksByProcess: () => api.get<TaskByProcessReportItem[]>('/reports/tasks-by-process'),
   getTasksByExecutor: () => api.get<TaskByExecutorReportItem[]>('/reports/tasks-by-executor'),
   getOverdueTasks: () => api.get<OverdueTaskReportItem[]>('/reports/overdue-tasks'),
+};
+
+// ─── Custom Fields Management API ──────────────────────────────────────────
+
+export const customFieldApi = {
+  getSupportedTypes: () => api.get<SupportedFieldTypeMeta[]>('/custom-fields/types'),
+
+  getCustomFieldsByProcess: (processId: string, stepId?: string) =>
+    api.get<CustomFieldDefinition[]>(`/processes/${processId}/custom-fields`, {
+      params: { stepId },
+    }),
+
+  getCustomFieldById: (id: string) => api.get<CustomFieldDefinition>(`/custom-fields/${id}`),
+
+  createCustomField: (
+    processId: string,
+    data: {
+      stepId?: string | null;
+      fieldKey: string;
+      fieldLabel: string;
+      fieldType: string;
+      fieldConfig?: Record<string, any>;
+      isRequired?: boolean;
+      defaultValue?: any;
+      placeholder?: string | null;
+      helpText?: string | null;
+      order?: number;
+      isVisible?: boolean;
+      visibilityCondition?: any;
+      validationRules?: any;
+    }
+  ) =>
+    api.post<{ message: string; field: CustomFieldDefinition }>(
+      `/processes/${processId}/custom-fields`,
+      data
+    ),
+
+  updateCustomField: (
+    id: string,
+    data: {
+      stepId?: string | null;
+      fieldLabel?: string;
+      fieldConfig?: Record<string, any>;
+      isRequired?: boolean;
+      defaultValue?: any;
+      placeholder?: string | null;
+      helpText?: string | null;
+      order?: number;
+      isVisible?: boolean;
+      visibilityCondition?: any;
+      validationRules?: any;
+    }
+  ) =>
+    api.put<{ message: string; field: CustomFieldDefinition }>(`/custom-fields/${id}`, data),
+
+  deleteCustomField: (id: string) =>
+    api.delete<{ message: string }>(`/custom-fields/${id}`),
+
+  reorderCustomFields: (processId: string, fieldOrders: Array<{ id: string; order: number }>) =>
+    api.post<{ message: string }>(`/processes/${processId}/custom-fields/reorder`, { fieldOrders }),
+
+  duplicateCustomField: (id: string) =>
+    api.post<{ message: string; field: CustomFieldDefinition }>(`/custom-fields/${id}/duplicate`),
+
+  validateConfig: (fieldType: string, fieldConfig: any) =>
+    api.post<{ isValid: boolean; error?: string }>('/custom-fields/validate-config', {
+      fieldType,
+      fieldConfig,
+    }),
+};
+
+// ─── Task Custom Fields API ────────────────────────────────────────────────
+
+export const taskCustomFieldApi = {
+  getTaskCustomFields: (taskId: string, stepId?: string) =>
+    api.get<TaskCustomFieldsResponse>(`/tasks/${taskId}/custom-fields`, {
+      params: { stepId },
+    }),
+
+  saveTaskCustomFields: (
+    taskId: string,
+    data: {
+      fields?: Array<{ fieldDefinitionId?: string; fieldKey?: string; value: any; stepId?: string }>;
+      values?: Record<string, any>;
+    }
+  ) =>
+    api.put<{ message: string; success: boolean; values: Record<string, any> }>(
+      `/tasks/${taskId}/custom-fields`,
+      data
+    ),
+
+  validateTaskCustomFields: (
+    taskId: string,
+    data: {
+      fields?: Array<{ fieldDefinitionId?: string; fieldKey?: string; value: any }>;
+      values?: Record<string, any>;
+    }
+  ) =>
+    api.post<{ isValid: boolean; errors: Array<{ fieldKey: string; fieldLabel: string; error: string }> }>(
+      `/tasks/${taskId}/custom-fields/validate`,
+      data
+    ),
+
+  getTaskCustomFieldHistory: (taskId: string) =>
+    api.get<Array<{ id: string; version: number; changeDescription: string; changedBy: any; createdAt: string; snapshot: any }>>(
+      `/tasks/${taskId}/custom-fields/history`
+    ),
 };
