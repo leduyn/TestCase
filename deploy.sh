@@ -82,6 +82,10 @@ echo "[2/10] Updating source code..."
 
 cd "$APP_DIR"
 
+sudo chown -R "$(id -u):$(id -g)" "$APP_DIR"
+sudo chmod -R u+rwX "$APP_DIR/.git"
+git config --global --add safe.directory "$APP_DIR" || true
+
 git fetch origin "$BRANCH"
 
 OLD_COMMIT="$(git rev-parse HEAD)"
