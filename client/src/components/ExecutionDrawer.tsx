@@ -145,6 +145,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   // Danh sách user để chọn người theo dõi + lịch sử thay đổi (snapshots)
   const [watcherUsers, setWatcherUsers] = useState<{ id: string; fullName: string; email: string }[]>([]);
   const [snapshots, setSnapshots] = useState<TestExecutionHistory[]>([]);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<TestExecutionHistory | null>(null);
   const [snapshotsLoading, setSnapshotsLoading] = useState(false);
   const [watcherBusy, setWatcherBusy] = useState(false);
 
@@ -250,6 +251,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setSelectedExecutionId(undefined);
       setNextHandlerId(currentUser?.id || '');
     }
+    setSelectedSnapshot(null);
     setValidationError(null);
     setSaveSuccess(false);
   };
@@ -391,6 +393,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
   // Start new execution flow
   const handleStartNewExecution = () => {
+    setSelectedSnapshot(null);
     if (currentUser?.id) {
       setSelectedUserId(currentUser.id);
     }
@@ -558,6 +561,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   // Tải lịch sử thay đổi (snapshots) của execution đang chọn
   useEffect(() => {
     const id = activeExecution?.id;
+    setSelectedSnapshot(null);
     if (!id) {
       setSnapshots([]);
       return;
@@ -961,9 +965,22 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
             {/* Timeline Milestones List */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-              <div className="text-[11px] font-bold text-slate-400 dark:text-slate-500 px-1 uppercase tracking-wider flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                Lịch sử thay đổi
+              <div className="text-[11px] font-bold text-slate-400 dark:text-slate-500 px-1 uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  Lịch sử thay đổi
+                </span>
+                {selectedSnapshot && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSnapshot(null)}
+                    className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5"
+                    title="Trở về dữ liệu lần chạy hiện tại"
+                  >
+                    <RotateCcw className="w-2.5 h-2.5" />
+                    Bản hiện tại
+                  </button>
+                )}
               </div>
 
               {snapshotsLoading ? (
@@ -972,6 +989,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                 <div className="relative pl-3 space-y-3 before:absolute before:left-[17px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
                   {snapshots.map((snap, idx) => {
                     const isLatest = idx === snapshots.length - 1;
+                    const isSelected = selectedSnapshot?.id === snap.id;
 
                     let statusDotColor = 'bg-slate-400 ring-slate-200';
                     if (snap.status === 'PASSED') statusDotColor = 'bg-emerald-500 ring-emerald-200 dark:ring-emerald-950';
@@ -982,8 +1000,23 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
                     return (
                       <div key={snap.id} className="relative pl-5">
-                        <div className={`absolute left-0 top-3 -translate-x-1/2 w-3.5 h-3.5 rounded-full ring-4 ${statusDotColor}`} />
-                        <div className="w-full text-left p-3 rounded-xl border bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700">
+                        <div className={`absolute left-0 top-3 -translate-x-1/2 w-3.5 h-3.5 rounded-full ring-4 transition-transform ${statusDotColor} ${isSelected ? 'scale-125 ring-blue-400 ring-offset-1' : ''}`} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedSnapshot(null);
+                            } else {
+                              setIsEditing(false);
+                              setSelectedSnapshot(snap);
+                            }
+                          }}
+                          className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer group ${
+                            isSelected
+                              ? 'bg-blue-50/90 dark:bg-blue-950/50 border-blue-400 dark:border-blue-600 ring-2 ring-blue-400/30 shadow-md'
+                              : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm'
+                          }`}
+                        >
                           <div className="flex items-start justify-between gap-1.5 mb-1.5">
                             <span className="text-[11px] font-bold text-slate-900 dark:text-white flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
@@ -1001,6 +1034,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                           </div>
 
                           <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                            {isSelected && (
+                              <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-bold">
+                                Đang xem
+                              </span>
+                            )}
                             {isLatest && (
                               <span className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold">
                                 Mới nhất
@@ -1023,7 +1061,14 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                               Tiếp nhận từ: {snap.beforeExecutedBy.fullName || snap.beforeExecutedBy.email}
                             </div>
                           )}
-                        </div>
+
+                          {/* Preview snippet of actualResult / notes if present */}
+                          {(snap.actualResult || snap.notes) && (
+                            <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700/60 text-[10.5px] text-slate-600 dark:text-slate-400 line-clamp-2">
+                              {snap.notes ? snap.notes : snap.actualResult?.replace(/<[^>]*>?/gm, '')}
+                            </div>
+                          )}
+                        </button>
                       </div>
                     );
                   })}
@@ -1486,11 +1531,37 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     {/* Top Bar: Title & Edit Action Button */}
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 gap-2 flex-wrap">
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-blue-600" />
-                          Chi tiết kết quả kiểm thử
-                        </h3>
-                        {activeExecution?.executedBy ? (
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-blue-600" />
+                            Chi tiết kết quả kiểm thử
+                          </h3>
+                          {selectedSnapshot && (
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
+                              Bản lịch sử
+                            </span>
+                          )}
+                        </div>
+                        {selectedSnapshot ? (
+                          <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
+                            <User className="w-3 h-3 text-slate-400" />
+                            <span>
+                              Thực hiện bởi: <strong>{selectedSnapshot.executedBy?.fullName || selectedSnapshot.executedBy?.email || 'Hệ thống'}</strong>
+                            </span>
+                            <span>•</span>
+                            <span className="font-medium text-slate-600 dark:text-slate-300">
+                              {new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).toLocaleString('vi-VN')}
+                            </span>
+                            {selectedSnapshot.beforeExecutedBy && (
+                              <>
+                                <span>•</span>
+                                <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                  Tiếp nhận từ: {selectedSnapshot.beforeExecutedBy.fullName || selectedSnapshot.beforeExecutedBy.email}
+                                </span>
+                              </>
+                            )}
+                          </p>
+                        ) : activeExecution?.executedBy ? (
                           <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
                             <User className="w-3 h-3 text-slate-400" />
                             <span>
@@ -1512,7 +1583,16 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         )}
                       </div>
 
-                      {canEditCurrentExecution ? (
+                      {selectedSnapshot ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSnapshot(null)}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shrink-0"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Quay lại bản hiện tại</span>
+                        </button>
+                      ) : canEditCurrentExecution ? (
                         <button
                           type="button"
                           onClick={() => setIsEditing(true)}
@@ -1534,8 +1614,32 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                       )}
                     </div>
 
-                    {/* Notice if viewing other user's execution */}
-                    {!canEditCurrentExecution && activeExecution && (
+                    {/* Notice banner for historical snapshot or other user's execution */}
+                    {selectedSnapshot ? (
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 text-white shadow-sm">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <History className="w-4 h-4 text-blue-300 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold truncate">
+                              Đang xem lịch sử giai đoạn lúc {new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).toLocaleString('vi-VN')}
+                            </p>
+                            <p className="text-[11px] text-blue-200/90 mt-0.5">
+                              Người thực thi: <strong>{selectedSnapshot.executedBy?.fullName || selectedSnapshot.executedBy?.email || 'Hệ thống'}</strong>
+                              {selectedSnapshot.beforeExecutedBy && ` • Tiếp nhận từ: ${selectedSnapshot.beforeExecutedBy.fullName || selectedSnapshot.beforeExecutedBy.email}`}
+                              {' • '}Chế độ xem lại lịch sử (Chỉ đọc)
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSnapshot(null)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-blue-900 hover:bg-blue-50 text-xs font-bold shadow transition-all shrink-0 ml-2"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Quay lại</span>
+                        </button>
+                      </div>
+                    ) : !canEditCurrentExecution && activeExecution && (
                       <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-xs text-amber-800 dark:text-amber-300">
                         <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
                         <span>
@@ -1547,7 +1651,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     {/* Status Banner */}
                     <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                       <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Trạng thái đánh giá:</span>
-                      <StatusBadge status={status} size="md" />
+                      <StatusBadge status={selectedSnapshot ? selectedSnapshot.status : status} size="md" />
                     </div>
 
                     {/* Environment Details */}
@@ -1558,7 +1662,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                           Môi trường (Server)
                         </span>
                         <p className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
-                          {server || '—'}
+                          {(selectedSnapshot ? selectedSnapshot.server : server) || '—'}
                         </p>
                       </div>
 
@@ -1568,7 +1672,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                           Hệ điều hành (OS)
                         </span>
                         <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                          {os || '—'}
+                          {(selectedSnapshot ? selectedSnapshot.os : os) || '—'}
                         </p>
                       </div>
                     </div>
@@ -1578,26 +1682,40 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                         Kết quả thực tế (Actual Result):
                       </span>
-                      {actualResult ? (
+                      {(selectedSnapshot ? selectedSnapshot.actualResult : actualResult) ? (
                         <div
                           className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 rich-text-content overflow-auto max-h-60"
-                          dangerouslySetInnerHTML={{ __html: actualResult }}
+                          dangerouslySetInnerHTML={{ __html: selectedSnapshot ? (selectedSnapshot.actualResult || '') : actualResult }}
                         />
                       ) : (
                         <div className="p-4 text-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-400 italic">
-                          Chưa ghi nhận kết quả thực tế. Nhấn <strong>"Điều chỉnh kết quả"</strong> để cập nhật.
+                          {selectedSnapshot ? 'Không có ghi nhận kết quả thực tế ở giai đoạn này.' : (
+                            <>Chưa ghi nhận kết quả thực tế. Nhấn <strong>"Điều chỉnh kết quả"</strong> để cập nhật.</>
+                          )}
                         </div>
                       )}
                     </div>
 
+                    {/* Evaluation Content */}
+                    {(selectedSnapshot ? selectedSnapshot.evaluation : evaluation) && (
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                          Đánh giá (Evaluation):
+                        </span>
+                        <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 whitespace-pre-line">
+                          {selectedSnapshot ? selectedSnapshot.evaluation : evaluation}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Notes / Bug Link */}
-                    {notes && (
+                    {(selectedSnapshot ? selectedSnapshot.notes : notes) && (
                       <div>
                         <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                           Ghi chú / Link Bug / Nguyên nhân lỗi:
                         </span>
                         <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 whitespace-pre-line">
-                          {notes}
+                          {selectedSnapshot ? selectedSnapshot.notes : notes}
                         </p>
                       </div>
                     )}
@@ -1611,7 +1729,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400">
-                          {selectedExecutionId ? 'Đang xem thông tin lịch sử' : 'Chế độ xem thông tin kịch bản'}
+                          {selectedSnapshot
+                            ? `Đang xem giai đoạn lúc ${new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).toLocaleString('vi-VN')}`
+                            : selectedExecutionId
+                            ? 'Đang xem thông tin lần chạy hiện tại'
+                            : 'Chế độ xem thông tin kịch bản'}
                         </span>
                       )}
 
@@ -1623,7 +1745,16 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         >
                           Đóng
                         </button>
-                        {canEditCurrentExecution ? (
+                        {selectedSnapshot ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSnapshot(null)}
+                            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-md shadow-indigo-500/20 transition-all"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Quay lại bản hiện tại</span>
+                          </button>
+                        ) : canEditCurrentExecution ? (
                           <button
                             type="button"
                             onClick={() => setIsEditing(true)}
@@ -1639,7 +1770,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                             className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-md shadow-blue-500/20 transition-all"
                           >
                             <PlusCircle className="w-3.5 h-3.5" />
-                            <span>Ghi nhận kết quả mới</span>
+                            <span>Ghi nhận kết quả của bạn</span>
                           </button>
                         )}
                       </div>
