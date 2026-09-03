@@ -1,0 +1,325 @@
+### ====================================================================
+### WORKFLOW & TASK MANAGEMENT SYSTEM - API TEST SUITE
+### Base URL: http://localhost:3001
+### ====================================================================
+
+@baseUrl = http://localhost:3001/api
+@adminEmail = it@tanthinh68.vn
+@managerEmail = manager@tanthinh68.vn
+@userEmail = user1@tanthinh68.vn
+@password = 123456
+
+### --------------------------------------------------------------------
+### 1. AUTHENTICATION & LOGIN
+### --------------------------------------------------------------------
+
+### 1.1 Login as Admin
+# @name adminLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{password}}"
+}
+
+### Lưu token Admin từ response
+@adminToken = {{adminLogin.response.body.token}}
+
+### 1.2 Login as Manager
+# @name managerLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{managerEmail}}",
+  "password": "{{password}}"
+}
+
+### Lưu token Manager từ response
+@managerToken = {{managerLogin.response.body.token}}
+
+### 1.3 Login as User 1
+# @name userLogin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{password}}"
+}
+
+### Lưu token User từ response
+@userToken = {{userLogin.response.body.token}}
+
+
+### --------------------------------------------------------------------
+### 2. PROCESS MANAGEMENT (QUẢN LÝ QUY TRÌNH & BƯỚC THỰC THI)
+### --------------------------------------------------------------------
+
+### 2.1 Lấy danh sách tất cả quy trình
+# @name getProcesses
+GET {{baseUrl}}/processes
+Authorization: Bearer {{adminToken}}
+
+### 2.2 Tạo quy trình mới
+# @name createProcess
+POST {{baseUrl}}/processes
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Quy trình Mua sắm trang thiết bị",
+  "description": "Quy trình đề xuất, duyệt ngân sách và giải ngân mua sắm thiết bị văn phòng.",
+  "managerId": "{{adminLogin.response.body.user.id}}",
+  "watcherIds": [],
+  "steps": [
+    {
+      "name": "Lập phiếu yêu cầu mua sắm",
+      "order": 1,
+      "timeLimitHours": 24,
+      "instructions": "Điền biểu mẫu danh mục thiết bị cần mua và lý do đề xuất.",
+      "executorIds": ["{{userLogin.response.body.user.id}}"]
+    },
+    {
+      "name": "Phê duyệt ngân sách",
+      "order": 2,
+      "timeLimitHours": 48,
+      "instructions": "Phòng Kế toán kiểm tra định mức và trình Ban Giám đốc phê duyệt.",
+      "executorIds": ["{{managerLogin.response.body.user.id}}"]
+    },
+    {
+      "name": "Tiến hành mua hàng & Bàn giao",
+      "order": 3,
+      "timeLimitHours": 72,
+      "instructions": "Mua hàng, nghiệm thu và lập biên bản bàn giao cho phòng ban yêu cầu.",
+      "executorIds": ["{{userLogin.response.body.user.id}}"]
+    }
+  ]
+}
+
+@newProcessId = {{createProcess.response.body.data.id}}
+
+### 2.3 Xem chi tiết một quy trình (kèm các bước và thống kê task)
+GET {{baseUrl}}/processes/{{newProcessId}}
+Authorization: Bearer {{adminToken}}
+
+### 2.4 Cập nhật thông tin quy trình
+PUT {{baseUrl}}/processes/{{newProcessId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Quy trình Mua sắm trang thiết bị (Đã cập nhật)",
+  "description": "Quy trình đề xuất, duyệt ngân sách và nghiệm thu mua sắm thiết bị IT và văn phòng."
+}
+
+### 2.5 Thêm một bước mới vào quy trình
+# @name addStep
+POST {{baseUrl}}/processes/{{newProcessId}}/steps
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Đánh giá nhà cung cấp",
+  "order": 4,
+  "timeLimitHours": 24,
+  "instructions": "Khảo sát và chấm điểm tối thiểu 3 báo giá từ các nhà cung cấp khác nhau.",
+  "executorIds": ["{{userLogin.response.body.user.id}}"]
+}
+
+@newStepId = {{addStep.response.body.data.id}}
+
+### 2.6 Cập nhật thông tin một bước
+PUT {{baseUrl}}/processes/steps/{{newStepId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Đánh giá và so sánh báo giá nhà cung cấp",
+  "timeLimitHours": 36,
+  "instructions": "So sánh bảng báo giá chi tiết, thời gian bảo hành và cam kết hỗ trợ sau bán hàng."
+}
+
+### 2.7 Xóa một bước khỏi quy trình
+DELETE {{baseUrl}}/processes/steps/{{newStepId}}
+Authorization: Bearer {{adminToken}}
+
+
+### --------------------------------------------------------------------
+### 3. TASK MANAGEMENT (QUẢN LÝ NHIỆM VỤ & VÒNG ĐỜI)
+### --------------------------------------------------------------------
+
+### 3.1 Lấy danh sách nhiệm vụ (Hỗ trợ tìm kiếm, lọc, phân trang)
+# @name getTasks
+GET {{baseUrl}}/tasks?page=1&limit=10&status=IN_PROGRESS
+Authorization: Bearer {{adminToken}}
+
+### 3.2 Lấy danh sách nhiệm vụ quá hạn
+GET {{baseUrl}}/tasks?overdue=true
+Authorization: Bearer {{adminToken}}
+
+### 3.3 Khởi tạo nhiệm vụ mới từ quy trình
+# @name createTask
+POST {{baseUrl}}/tasks
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "processId": "{{newProcessId}}",
+  "name": "Mua 05 Laptop Dell Latitude cho đội Dự án mới",
+  "content": "Trang bị máy tính làm việc cho nhân sự dự án AI & Automation gia nhập tháng 9.",
+  "customFields": {
+    "department": "Khối Công nghệ Thông tin",
+    "budgetEstimate": 125000000
+  },
+  "watcherIds": ["{{managerLogin.response.body.user.id}}"]
+}
+
+@createdTaskId = {{createTask.response.body.data.id}}
+
+### 3.4 Xem chi tiết nhiệm vụ (Kèm todos, comments, histories)
+GET {{baseUrl}}/tasks/{{createdTaskId}}
+Authorization: Bearer {{adminToken}}
+
+### 3.5 Cập nhật thông tin nhiệm vụ
+PUT {{baseUrl}}/tasks/{{createdTaskId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "name": "Mua 05 Laptop Dell Latitude Core i7 cho đội Dự án mới",
+  "content": "Nâng cấp cấu hình lên Core i7, 32GB RAM phục vụ chạy model AI cục bộ.",
+  "changeDescription": "Điều chỉnh nâng cấp RAM và CPU theo yêu cầu kỹ thuật"
+}
+
+### 3.6 Chuyển nhiệm vụ sang bước kế tiếp (Transition Step)
+# @name transitionTask
+POST {{baseUrl}}/tasks/{{createdTaskId}}/transition
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "customExecutors": ["{{managerLogin.response.body.user.id}}"]
+}
+
+### 3.7 Đánh dấu hoàn thành nhiệm vụ trực tiếp
+POST {{baseUrl}}/tasks/{{createdTaskId}}/complete
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "description": "Đã hoàn thành toàn bộ các thủ tục và bàn giao máy tính cho nhân sự."
+}
+
+### 3.8 Lấy danh sách lịch sử (Histories) của nhiệm vụ
+GET {{baseUrl}}/tasks/{{createdTaskId}}/history
+Authorization: Bearer {{adminToken}}
+
+### 3.9 Lấy chi tiết Snapshot tại một version cụ thể (Ví dụ: version 1)
+GET {{baseUrl}}/tasks/{{createdTaskId}}/history/1
+Authorization: Bearer {{adminToken}}
+
+### 3.10 Hủy bỏ nhiệm vụ (Cancel)
+POST {{baseUrl}}/tasks/{{createdTaskId}}/cancel
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "reason": "Dự án tạm hoãn kế hoạch tuyển dụng, hủy đề xuất mua sắm thiết bị."
+}
+
+
+### --------------------------------------------------------------------
+### 4. TODO MANAGEMENT (CÔNG VIỆC CON TRONG TASK)
+### --------------------------------------------------------------------
+
+### 4.1 Thêm Todo mới vào nhiệm vụ
+# @name createTodo
+POST {{baseUrl}}/tasks/{{createdTaskId}}/todos
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "description": "Lấy báo giá chính hãng từ đại lý phân phối Dell Việt Nam",
+  "executorId": "{{userLogin.response.body.user.id}}",
+  "deadline": "2026-09-05T17:00:00.000Z"
+}
+
+@todoId = {{createTodo.response.body.data.id}}
+
+### 4.2 Đánh dấu hoàn thành / chưa hoàn thành (Toggle Todo)
+PUT {{baseUrl}}/todos/{{todoId}}/toggle
+Authorization: Bearer {{adminToken}}
+
+### 4.3 Cập nhật thông tin Todo
+PUT {{baseUrl}}/todos/{{todoId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "description": "Lấy báo giá chính hãng kèm chứng chỉ xuất xứ CO/CQ",
+  "isCompleted": true
+}
+
+### 4.4 Xóa Todo
+DELETE {{baseUrl}}/todos/{{todoId}}
+Authorization: Bearer {{adminToken}}
+
+
+### --------------------------------------------------------------------
+### 5. COMMENTS & ATTACHMENTS (BÌNH LUẬN & FILE ĐÍNH KÈM)
+### --------------------------------------------------------------------
+
+### 5.1 Thêm bình luận vào nhiệm vụ
+# @name createComment
+POST {{baseUrl}}/tasks/{{createdTaskId}}/comments
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "content": "Đại lý đã gửi báo giá chiết khấu 8% cho đơn hàng 5 máy tính.",
+  "files": [
+    {
+      "name": "Bao_gia_Dell_Latitude_2026.pdf",
+      "url": "/uploads/workflow/bao_gia.pdf",
+      "size": 1048576
+    }
+  ]
+}
+
+@commentId = {{createComment.response.body.data.id}}
+
+### 5.2 Cập nhật bình luận
+PUT {{baseUrl}}/comments/{{commentId}}
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "content": "Đại lý đã gửi báo giá chiết khấu 10% cho đơn hàng 5 máy tính (đã thương lượng lại)."
+}
+
+### 5.3 Xóa bình luận
+DELETE {{baseUrl}}/comments/{{commentId}}
+Authorization: Bearer {{adminToken}}
+
+
+### --------------------------------------------------------------------
+### 6. WORKFLOW REPORTS & ANALYTICS (THỐNG KÊ & BÁO CÁO)
+### --------------------------------------------------------------------
+
+### 6.1 Thống kê nhiệm vụ theo trạng thái (IN_PROGRESS, COMPLETED, OVERDUE, CANCELLED)
+GET {{baseUrl}}/workflow-reports/tasks-by-status
+Authorization: Bearer {{adminToken}}
+
+### 6.2 Thống kê nhiệm vụ theo quy trình
+GET {{baseUrl}}/workflow-reports/tasks-by-process
+Authorization: Bearer {{adminToken}}
+
+### 6.3 Thống kê nhiệm vụ theo người thực thi
+GET {{baseUrl}}/workflow-reports/tasks-by-executor
+Authorization: Bearer {{adminToken}}
+
+### 6.4 Danh sách nhiệm vụ quá hạn chi tiết
+GET {{baseUrl}}/workflow-reports/overdue-tasks
+Authorization: Bearer {{adminToken}}

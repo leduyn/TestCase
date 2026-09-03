@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { Upload, X, Trash2, Eye, AlertCircle, Loader2, Play, Film } from 'lucide-react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { Upload, X, Trash2, Eye, AlertCircle, Loader2, Play, Film, Clock } from 'lucide-react';
 import type { TestExecutionImage } from '../types';
 import { uploadApi } from '../services/api';
 import { ImageLightbox } from './ImageLightbox';
@@ -7,17 +7,27 @@ import { ImageLightbox } from './ImageLightbox';
 interface ImageUploaderProps {
   executionId?: string;
   images: TestExecutionImage[];
-  onImagesChange: (images: TestExecutionImage[]) => void;
+  onImagesChange?: (images: TestExecutionImage[]) => void;
+  pendingFiles?: File[];
+  onPendingFilesChange?: (files: File[]) => void;
   onUploadCustom?: (files: File[]) => Promise<TestExecutionImage[] | undefined>;
   maxFiles?: number;
   maxFileSizeMB?: number;
   disabled?: boolean;
 }
 
+interface PendingPreview {
+  file: File;
+  previewUrl: string;
+  isVideo: boolean;
+}
+
 export const ImageUploader: React.FC<ImageUploaderProps> = ({
   executionId,
-  images,
+  images = [],
   onImagesChange,
+  pendingFiles = [],
+  onPendingFilesChange,
   onUploadCustom,
   maxFiles = 10,
   maxFileSizeMB = 10,
@@ -32,11 +42,34 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Tạo URL preview tạm thời cho các file pending
+  const pendingPreviews = useMemo<PendingPreview[]>(() => {
+    if (!pendingFiles || pendingFiles.length === 0) return [];
+    return pendingFiles.map((file) => {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(file.name);
+      return {
+        file,
+        previewUrl: URL.createObjectURL(file),
+        isVideo,
+      };
+    });
+  }, [pendingFiles]);
+
+  // Dọn dẹp object URLs khi component unmount hoặc pendingPreviews thay đổi
+  useEffect(() => {
+    return () => {
+      pendingPreviews.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    };
+  }, [pendingPreviews]);
+
+  const totalCount = images.length + pendingFiles.length;
+
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setError(null);
 
-    if (!executionId && !onUploadCustom) {
+    // Nếu không có cả executionId, không có onPendingFilesChange, và không có onUploadCustom
+    if (!executionId && !onPendingFilesChange && !onUploadCustom) {
       setError('Vui lòng lưu kết quả kiểm thử trước khi tải ảnh minh chứng');
       return;
     }
@@ -49,8 +82,8 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     ];
 
     // Check count limit
-    if (images.length + files.length > maxFiles) {
-      setError(`Chỉ được tải tối đa ${maxFiles} file. Hiện có ${images.length} file, bạn chọn ${files.length} file.`);
+    if (totalCount + files.length > maxFiles) {
+      setError(`Chỉ được tải tối đa ${maxFiles} file. Hiện có ${totalCount} file, bạn chọn ${files.length} file.`);
       return;
     }
 
@@ -69,14 +102,24 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
     if (validFiles.length === 0) return;
 
+    // Ưu tiên chế độ LƯU TẠM (Pending Mode)
+    if (onPendingFilesChange) {
+      onPendingFilesChange([...pendingFiles, ...validFiles]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
+    // Chế độ upload trực tiếp
     setUploading(true);
     try {
       if (onUploadCustom) {
         const uploaded = await onUploadCustom(validFiles);
-        if (uploaded && uploaded.length > 0) {
+        if (uploaded && uploaded.length > 0 && onImagesChange) {
           onImagesChange([...images, ...uploaded]);
         }
-      } else if (executionId) {
+      } else if (executionId && onImagesChange) {
         const res = await uploadApi.uploadImages(executionId, validFiles);
         if (res.data.images) {
           onImagesChange([...images, ...res.data.images]);
@@ -93,19 +136,28 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     }
   };
 
-  const handleDelete = async (imageId: string, e: React.MouseEvent) => {
+  const handleDeleteExisting = async (imageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm('Bạn có chắc chắn muốn xóa file này?')) return;
 
     setDeletingId(imageId);
     try {
       await uploadApi.deleteImage(imageId);
-      onImagesChange(images.filter((img) => img.id !== imageId));
+      if (onImagesChange) {
+        onImagesChange(images.filter((img) => img.id !== imageId));
+      }
     } catch (err: any) {
       console.error('Delete image error:', err);
       alert(err.response?.data?.message || 'Lỗi khi xóa file');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleDeletePending = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onPendingFilesChange) {
+      onPendingFilesChange(pendingFiles.filter((_, i) => i !== index));
     }
   };
 
@@ -146,7 +198,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           <span>Ảnh / Video minh chứng lỗi (Evidence)</span>
         </label>
         <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-          {images.length} / {maxFiles} file (tối đa {maxFileSizeMB}MB/file)
+          {totalCount} / {maxFiles} file (tối đa {maxFileSizeMB}MB/file)
         </span>
       </div>
 
@@ -167,7 +219,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       )}
 
       {/* Upload Drop Zone */}
-      {images.length < maxFiles && !disabled && (
+      {totalCount < maxFiles && !disabled && (
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -212,8 +264,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       )}
 
       {/* Image Gallery Grid */}
-      {images.length > 0 && (
+      {(images.length > 0 || pendingPreviews.length > 0) && (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-1">
+          {/* 1. Các file đã lưu trên server */}
           {images.map((img, idx) => {
             const isVideo = img.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(img.filename);
             const thumbUrl = isVideo ? uploadApi.getThumbnailUrl(img.id) : uploadApi.getImageUrl(img.id);
@@ -233,7 +286,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                       loading="lazy"
                     />
-                    {/* Play icon overlay for videos */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none bg-black/20 group-hover:bg-black/30 transition-colors">
                       <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center shadow-lg ring-2 ring-white/40 group-hover:scale-110 transition-transform">
                         <Play className="w-5 h-5 text-white fill-white ml-0.5" />
@@ -252,10 +304,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                 {/* Overlay actions on hover */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
                   <div className="flex justify-end">
-                    {!disabled && (
+                    {!disabled && onImagesChange && (
                       <button
                         type="button"
-                        onClick={(e) => handleDelete(img.id, e)}
+                        onClick={(e) => handleDeleteExisting(img.id, e)}
                         disabled={isDeleting}
                         className="p-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-700 text-white shadow transition-all hover:scale-105"
                         title="Xóa file này"
@@ -276,6 +328,58 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                     </div>
                     <p className="text-[10px] text-slate-300 drop-shadow">
                       {formatFileSize(img.fileSize)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* 2. Các file đang chờ lưu (Pending) */}
+          {pendingPreviews.map((p, pIdx) => {
+            return (
+              <div
+                key={`pending-${pIdx}-${p.file.name}`}
+                className="group relative aspect-square rounded-xl overflow-hidden border-2 border-dashed border-amber-400 dark:border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm"
+              >
+                {/* Badge Chờ lưu */}
+                <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500 text-white text-[10px] font-bold shadow">
+                  <Clock className="w-3 h-3" />
+                  <span>Chờ lưu</span>
+                </div>
+
+                {p.isVideo ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-3 bg-slate-900/10 dark:bg-slate-900/40">
+                    <Film className="w-8 h-8 text-amber-600 dark:text-amber-400 mb-1" />
+                    <p className="text-[10px] font-semibold text-slate-700 dark:text-slate-300 text-center truncate max-w-full">
+                      {p.file.name}
+                    </p>
+                  </div>
+                ) : (
+                  <img
+                    src={p.previewUrl}
+                    alt={p.file.name}
+                    className="w-full h-full object-cover"
+                  />
+                )}
+
+                {/* Overlay actions on hover */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeletePending(pIdx, e)}
+                      className="p-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-700 text-white shadow transition-all hover:scale-105"
+                      title="Hủy file này"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="text-white space-y-0.5">
+                    <p className="text-[11px] font-medium truncate drop-shadow">{p.file.name}</p>
+                    <p className="text-[10px] text-amber-300 drop-shadow">
+                      {formatFileSize(p.file.size)} (Chưa tải lên)
                     </p>
                   </div>
                 </div>
