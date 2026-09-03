@@ -33,5 +33,8 @@ jobs:
 
           script: |
             cd /var/www/testcase
+            sudo chown -R $(id -u):$(id -g) /var/www/testcase
+            sudo chmod -R u+rwX /var/www/testcase/.git
+            git config --global --add safe.directory /var/www/testcase || true
             chmod +x deploy.sh || true
             bash deploy.sh
