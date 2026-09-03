@@ -113,6 +113,7 @@ export interface TestExecutionHistory {
   actualResult?: string | null;
   evaluation?: string | null;
   notes?: string | null;
+  images?: TestExecutionImage[];
   executedAt: string;
   updatedAt: string;
 }

@@ -45,7 +45,7 @@ export class ExecutionController {
   static async executeTestCase(req: AuthRequest, res: Response) {
     try {
       const { testCaseId } = req.params;
-      const { server, os, status, actualResult, evaluation, notes, executedById, viewerIds } = req.body;
+      const { server, os, status, actualResult, evaluation, notes, executedById, viewerIds, imageIds } = req.body;
 
       if (!testCaseId) {
         return res.status(400).json({ message: 'Thiếu testCaseId' });
@@ -125,7 +125,7 @@ export class ExecutionController {
       }
 
       // Ghi snapshot lịch sử
-      await ExecutionController.snapshotExecution(execution.id);
+      await ExecutionController.snapshotExecution(execution.id, Array.isArray(imageIds) ? imageIds : undefined);
 
       // Cập nhật danh sách người theo dõi (nếu được truyền)
       if (Array.isArray(viewerIds)) {
@@ -154,9 +154,23 @@ export class ExecutionController {
   }
 
   // Tạo bản snapshot sao chép trạng thái hiện tại của execution vào bảng lịch sử
-  static async snapshotExecution(executionId: string) {
+  static async snapshotExecution(executionId: string, customImageIds?: string[]) {
     const exec = await prisma.testExecution.findUnique({ where: { id: executionId } });
     if (!exec) return;
+
+    // Lấy danh sách hình ảnh hiện tại hoặc danh sách imageIds được chỉ định để đóng băng vào snapshot
+    let currentImages: any[] = [];
+    if (Array.isArray(customImageIds)) {
+      currentImages = await prisma.testExecutionImage.findMany({
+        where: { id: { in: customImageIds } },
+        orderBy: { uploadedAt: 'asc' },
+      });
+    } else {
+      currentImages = await prisma.testExecutionImage.findMany({
+        where: { executionId },
+        orderBy: { uploadedAt: 'asc' },
+      });
+    }
 
     // Tìm snapshot gần nhất của execution này
     const lastSnapshot = await prisma.testExecutionHistory.findFirst({
@@ -179,6 +193,7 @@ export class ExecutionController {
           actualResult: exec.actualResult,
           evaluation: exec.evaluation,
           notes: exec.notes,
+          images: currentImages as any,
           updatedAt: exec.updatedAt,
         },
       });
@@ -198,6 +213,7 @@ export class ExecutionController {
         actualResult: exec.actualResult,
         evaluation: exec.evaluation,
         notes: exec.notes,
+        images: currentImages as any,
         executedAt: exec.executedAt,
         updatedAt: exec.updatedAt,
       },
@@ -217,7 +233,7 @@ export class ExecutionController {
   static async updateExecution(req: AuthRequest, res: Response) {
     try {
       const { executionId } = req.params;
-      const { server, os, status, actualResult, evaluation, notes, executedById, viewerIds } = req.body;
+      const { server, os, status, actualResult, evaluation, notes, executedById, viewerIds, imageIds } = req.body;
       const userId = req.user?.id;
       const userRole = req.user?.role;
 
@@ -302,7 +318,7 @@ export class ExecutionController {
       });
 
       // Ghi snapshot lịch sử và cập nhật người theo dõi
-      await ExecutionController.snapshotExecution(executionId);
+      await ExecutionController.snapshotExecution(executionId, Array.isArray(imageIds) ? imageIds : undefined);
       if (Array.isArray(viewerIds)) {
         await ExecutionController.replaceWatchers(executionId, viewerIds as string[]);
       }
