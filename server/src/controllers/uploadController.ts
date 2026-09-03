@@ -117,6 +117,28 @@ export class UploadController {
         uploadedImages.push(image);
       }
 
+      // Đóng băng / đồng bộ danh sách ảnh mới vào snapshot gần nhất của execution
+      try {
+        const lastSnapshot = await prisma.testExecutionHistory.findFirst({
+          where: { executionId },
+          orderBy: { updatedAt: 'desc' },
+        });
+        if (lastSnapshot) {
+          const currentSnapImages = (Array.isArray(lastSnapshot.images) ? lastSnapshot.images : []) as any[];
+          // Chỉ nối thêm các ảnh vừa upload vào snapshot, không kéo lại các ảnh cũ đã bị user gỡ khỏi mốc này
+          const merged = [...currentSnapImages, ...uploadedImages];
+          const uniqueMap = new Map();
+          merged.forEach((img: any) => uniqueMap.set(img.id, img));
+          const updatedSnapImages = Array.from(uniqueMap.values());
+          await prisma.testExecutionHistory.update({
+            where: { id: lastSnapshot.id },
+            data: { images: updatedSnapImages as any },
+          });
+        }
+      } catch (snapErr: any) {
+        console.warn('[UploadController] Could not sync snapshot images on upload:', snapErr.message);
+      }
+
       return res.status(201).json({
         message: `Upload ${uploadedImages.length} file thành công`,
         images: uploadedImages,
@@ -148,20 +170,8 @@ export class UploadController {
         return res.status(404).json({ message: 'Không tìm thấy ảnh' });
       }
 
-      // Delete from storage
-      const storageConfig = await getStorageConfig();
-      const provider = createStorageProvider(storageConfig);
-
-      try {
-        await provider.delete(image.storagePath);
-        if (image.thumbnailPath) {
-          await provider.delete(image.thumbnailPath);
-        }
-      } catch (err: any) {
-        console.warn(`Warning: Could not delete file from storage (${image.storagePath}):`, err.message);
-      }
-
-      // Delete from DB
+      // Không xóa file vật lý trên storage nếu ảnh này có thể thuộc về các mốc lịch sử (snapshots)
+      // Chỉ xóa bản ghi TestExecutionImage của lần thực thi hiện tại
       await prisma.testExecutionImage.delete({
         where: { id: imageId },
       });
