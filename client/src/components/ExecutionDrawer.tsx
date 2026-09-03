@@ -225,7 +225,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       cancelled = true;
     };
   }, [status, isEditing]);
-  const loadExecutionData = (exec: TestExecution | null) => {
+  const loadExecutionData = (
+    exec: TestExecution | null,
+    keepSelectedExecutionId?: string,
+    initialImages?: TestExecutionImage[]
+  ) => {
     if (exec) {
       setServer(exec.server || 'STAGING');
       setOs(exec.os || 'Windows 11');
@@ -245,10 +249,10 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setActualResult('');
       setEvaluation('');
       setNotes('');
-      setImages([]);
+      setImages(initialImages || []);
       setPendingFiles([]);
       setCurrentExecutionId(undefined);
-      setSelectedExecutionId(undefined);
+      setSelectedExecutionId(keepSelectedExecutionId || undefined);
       setNextHandlerId(currentUser?.id || '');
     }
     setSelectedSnapshot(null);
@@ -321,11 +325,55 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
       // Determine initial user & execution to display
       if (isNewExecution) {
-        if (currentUser?.id) {
-          setSelectedUserId(currentUser.id);
+        const targetUserId = currentUser?.id;
+        if (targetUserId) {
+          setSelectedUserId(targetUserId);
         }
-        loadExecutionData(null);
+        const existingOwnExec = execs.find((e) => getUserKey(e) === targetUserId);
+        const fallbackExec = existingOwnExec || execs[0] || testCase.latestExecution;
+        const targetExecId = existingOwnExec?.id || fallbackExec?.id;
+
+        if (existingOwnExec) {
+          setCurrentExecutionId(existingOwnExec.id);
+          setSelectedExecutionId(existingOwnExec.id);
+          setServer(existingOwnExec.server || 'STAGING');
+          setOs(existingOwnExec.os || 'Windows 11');
+        } else {
+          setCurrentExecutionId(undefined);
+          if (fallbackExec) {
+            setSelectedExecutionId(fallbackExec.id);
+          }
+          setServer('STAGING');
+          setOs('Windows 11');
+        }
+        setStatus('PASSED');
+        setActualResult('');
+        setEvaluation('');
+        setNotes('');
+        setImages([]);
+        setPendingFiles([]);
+        setNextHandlerId(currentUser?.id || '');
         setIsEditing(true);
+        setSelectedSnapshot(null);
+        setValidationError(null);
+        setSaveSuccess(false);
+
+        // Lấy chính xác danh sách ảnh của snapshot gần nhất (mốc mới nhất)
+        if (targetExecId) {
+          try {
+            const snapRes = await executionApi.getSnapshots(targetExecId);
+            const snapList = snapRes.data.snapshots || [];
+            setSnapshots(snapList);
+            if (snapList.length > 0) {
+              const lastSnap = snapList[snapList.length - 1];
+              if (lastSnap?.images && Array.isArray(lastSnap.images)) {
+                setImages(lastSnap.images);
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       } else if (initialExecution) {
         const uKey = getUserKey(initialExecution);
         setSelectedUserId(uKey);
@@ -383,8 +431,16 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       loadExecutionData(execs[0]);
       setIsEditing(false);
     } else {
-      // User has no executions yet -> prepare a new execution for this user
-      loadExecutionData(null);
+      // User has no executions yet -> prepare a new execution for this user while retaining fallback history
+      const fallbackExec = allExecutions[0] || testCase?.latestExecution;
+      let fallbackImages: TestExecutionImage[] = [];
+      if (snapshots && snapshots.length > 0) {
+        const lastSnap = snapshots[snapshots.length - 1];
+        if (lastSnap?.images && Array.isArray(lastSnap.images)) {
+          fallbackImages = lastSnap.images;
+        }
+      }
+      loadExecutionData(null, fallbackExec?.id, fallbackImages);
       if (currentUser?.id === newUserId) {
         setIsEditing(true);
       }
@@ -394,11 +450,45 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   // Start new execution flow
   const handleStartNewExecution = () => {
     setSelectedSnapshot(null);
-    if (currentUser?.id) {
-      setSelectedUserId(currentUser.id);
+    const targetUserId = currentUser?.id || selectedUserId;
+    if (targetUserId) {
+      setSelectedUserId(targetUserId);
     }
-    loadExecutionData(null);
+    const existingOwnExec = allExecutions.find((e) => getUserKey(e) === targetUserId);
+    const fallbackExec = existingOwnExec || allExecutions[0] || testCase?.latestExecution;
+
+    // Lấy danh sách ảnh từ snapshot gần nhất (chỉ những ảnh của kết quả mới nhất)
+    let latestMilestoneImages: TestExecutionImage[] = [];
+    if (snapshots && snapshots.length > 0) {
+      const lastSnap = snapshots[snapshots.length - 1];
+      if (lastSnap?.images && Array.isArray(lastSnap.images)) {
+        latestMilestoneImages = lastSnap.images;
+      }
+    }
+
+    if (existingOwnExec) {
+      setCurrentExecutionId(existingOwnExec.id);
+      setSelectedExecutionId(existingOwnExec.id);
+      setServer(existingOwnExec.server || 'STAGING');
+      setOs(existingOwnExec.os || 'Windows 11');
+    } else {
+      setCurrentExecutionId(undefined);
+      if (fallbackExec) {
+        setSelectedExecutionId(fallbackExec.id);
+      }
+      setServer('STAGING');
+      setOs('Windows 11');
+    }
+    setStatus('PASSED');
+    setActualResult('');
+    setEvaluation('');
+    setNotes('');
+    setImages(latestMilestoneImages);
+    setPendingFiles([]);
+    setNextHandlerId(currentUser?.id || '');
     setIsEditing(true);
+    setValidationError(null);
+    setSaveSuccess(false);
   };
 
   // Helper to check if rich text content is actually empty
@@ -440,6 +530,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
     try {
       let savedExec: TestExecution;
+      const retainedImages = images; // Danh sách ảnh user giữ lại trong form (đã loại bỏ các ảnh bị remove)
 
       if (currentExecutionId) {
         // Update existing execution milestone (or finalize newly created milestone from image upload)
@@ -452,10 +543,11 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           notes,
           executedById: nextHandlerId,
           viewerIds: activeExecution?.watchers?.map((w) => w.userId) || [],
+          imageIds: retainedImages.map((img) => img.id),
         });
         savedExec = {
           ...res.data.execution,
-          images: res.data.execution.images || images,
+          images: retainedImages,
         };
       } else {
         // Create brand new execution milestone
@@ -468,30 +560,34 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           notes,
           executedById: nextHandlerId,
           viewerIds: activeExecution?.watchers?.map((w) => w.userId) || [],
+          imageIds: retainedImages.map((img) => img.id),
         });
         savedExec = {
           ...res.data.execution,
-          images: res.data.execution.images || images,
+          images: retainedImages,
         };
       }
 
       // Tải lên các file minh chứng đang chờ lưu (pendingFiles) nếu có
+      let finalMilestoneImages = [...retainedImages];
       if (pendingFiles.length > 0 && savedExec?.id) {
         try {
           const uploadRes = await uploadApi.uploadImages(savedExec.id, pendingFiles);
           if (uploadRes.data.images && uploadRes.data.images.length > 0) {
-            const mergedImages = [...(savedExec.images || []), ...uploadRes.data.images];
+            finalMilestoneImages = [...retainedImages, ...uploadRes.data.images];
             savedExec = {
               ...savedExec,
-              images: mergedImages,
+              images: finalMilestoneImages,
             };
-            setImages(mergedImages);
+            setImages(finalMilestoneImages);
           }
         } catch (uploadErr: any) {
           console.error('Lỗi khi tải ảnh đính kèm:', uploadErr);
           alert(`Đã lưu kết quả nhưng gặp lỗi khi tải file đính kèm: ${uploadErr.response?.data?.message || uploadErr.message}`);
         }
         setPendingFiles([]);
+      } else {
+        setImages(finalMilestoneImages);
       }
 
       let updatedExecs: TestExecution[];
@@ -545,9 +641,15 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   };
 
   const activeExecution = useMemo(() => {
-    if (!selectedExecutionId) return null;
-    return allExecutions.find((e) => e.id === selectedExecutionId) || null;
-  }, [allExecutions, selectedExecutionId]);
+    if (selectedExecutionId) {
+      const found = allExecutions.find((e) => e.id === selectedExecutionId);
+      if (found) return found;
+    }
+    const userExec = allExecutions.find((e) => getUserKey(e) === selectedUserId);
+    if (userExec) return userExec;
+    if (allExecutions.length > 0) return allExecutions[0];
+    return testCase?.latestExecution || null;
+  }, [allExecutions, selectedExecutionId, selectedUserId, testCase?.latestExecution]);
 
   // Tải danh sách user để chọn người theo dõi khi mở drawer
   useEffect(() => {
@@ -569,7 +671,16 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     setSnapshotsLoading(true);
     executionApi
       .getSnapshots(id)
-      .then((r) => setSnapshots(r.data.snapshots || []))
+      .then((r) => {
+        const snapList = r.data.snapshots || [];
+        setSnapshots(snapList);
+        if (snapList.length > 0) {
+          const lastSnap = snapList[snapList.length - 1];
+          if (lastSnap?.images && Array.isArray(lastSnap.images)) {
+            setImages(lastSnap.images);
+          }
+        }
+      })
       .catch(() => setSnapshots([]))
       .finally(() => setSnapshotsLoading(false));
   }, [activeExecution?.id]);
@@ -685,8 +796,34 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     return allExecutions.reduce((acc, e) => acc + (e.images?.length || 0), 0);
   }, [allExecutions]);
 
+  // The latest snapshot of the active execution
+  const latestSnapshot = useMemo<TestExecutionHistory | null>(() => {
+    if (!snapshots || snapshots.length === 0) return null;
+    return snapshots[snapshots.length - 1];
+  }, [snapshots]);
+
   // Current milestone images enriched with active execution context
   const currentMilestoneImagesEnriched = useMemo<TestExecutionImage[]>(() => {
+    // Khi đang xem kết quả mốc mới nhất (không phải đang chỉnh sửa) và có snapshot:
+    // Chỉ hiển thị đúng tập ảnh đã đóng băng của mốc mới nhất
+    if (!isEditing && latestSnapshot?.images && Array.isArray(latestSnapshot.images)) {
+      return latestSnapshot.images.map((img) => ({
+        ...img,
+        execution: activeExecution
+          ? {
+              id: activeExecution.id,
+              executedAt: activeExecution.executedAt,
+              status: activeExecution.status,
+              server: activeExecution.server,
+              os: activeExecution.os,
+              notes: activeExecution.notes,
+              actualResult: activeExecution.actualResult,
+              executedBy: activeExecution.executedBy,
+            }
+          : undefined,
+      }));
+    }
+
     return images.map((img) => ({
       ...img,
       execution: activeExecution
@@ -702,7 +839,50 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           }
         : undefined,
     }));
-  }, [images, activeExecution]);
+  }, [images, activeExecution, latestSnapshot, isEditing]);
+
+  // Images for the currently selected snapshot (frozen at time of snapshot)
+  const snapshotMilestoneImages = useMemo<TestExecutionImage[]>(() => {
+    if (!selectedSnapshot) return [];
+
+    // Phương án 2: Ưu tiên dùng images đã đóng băng trong snapshot
+    if (selectedSnapshot.images && selectedSnapshot.images.length > 0) {
+      return selectedSnapshot.images.map((img) => ({
+        ...img,
+        execution: {
+          id: selectedSnapshot.executionId,
+          executedAt: selectedSnapshot.executedAt,
+          status: selectedSnapshot.status,
+          server: selectedSnapshot.server || undefined,
+          os: selectedSnapshot.os || undefined,
+          notes: selectedSnapshot.notes || undefined,
+          actualResult: selectedSnapshot.actualResult || undefined,
+          executedBy: selectedSnapshot.executedBy || undefined,
+        },
+      }));
+    }
+
+    // Fallback cho các mốc cũ chưa có images: lọc theo thời gian upload
+    const snapshotTime = new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).getTime();
+    return images
+      .filter((img) => new Date(img.uploadedAt).getTime() <= snapshotTime)
+      .map((img) => ({
+        ...img,
+        execution: {
+          id: selectedSnapshot.executionId,
+          executedAt: selectedSnapshot.executedAt,
+          status: selectedSnapshot.status,
+          server: selectedSnapshot.server || undefined,
+          os: selectedSnapshot.os || undefined,
+          notes: selectedSnapshot.notes || undefined,
+          actualResult: selectedSnapshot.actualResult || undefined,
+          executedBy: selectedSnapshot.executedBy || undefined,
+        },
+      }));
+  }, [selectedSnapshot, images]);
+
+  // The displayed milestone images: snapshot images if viewing history, otherwise current
+  const displayedMilestoneImages = selectedSnapshot ? snapshotMilestoneImages : currentMilestoneImagesEnriched;
 
   // All images by the selected user across their milestones
   const userAllImagesEnriched = useMemo<TestExecutionImage[]>(() => {
@@ -1144,7 +1324,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
                 {/* Evidence Images Section */}
                 <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
-                  {isEditing ? (
+                  {isEditing && !selectedSnapshot ? (
                     // In Edit Mode: Show Uploader with Drop Zone & Delete buttons
                     <ImageUploader
                       executionId={currentExecutionId}
@@ -1187,7 +1367,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                             }`}
                           >
-                            Mốc này ({currentMilestoneImagesEnriched.length})
+                            {selectedSnapshot ? `Ảnh tại mốc lịch sử (${displayedMilestoneImages.length})` : `Mốc mới nhất (${displayedMilestoneImages.length})`}
                           </button>
                           <button
                             type="button"
@@ -1218,15 +1398,15 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
                       {/* Displayed Images based on tab */}
                       {evidenceViewMode === 'MILESTONE' ? (
-                        currentMilestoneImagesEnriched.length > 0 ? (
+                        displayedMilestoneImages.length > 0 ? (
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-                            {currentMilestoneImagesEnriched.map((img, idx) => {
+                            {displayedMilestoneImages.map((img, idx) => {
                               const isVideo = img.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(img.filename);
                               const thumbUrl = isVideo ? uploadApi.getThumbnailUrl(img.id) : uploadApi.getImageUrl(img.id);
                               return (
                                 <div
                                   key={img.id}
-                                  onClick={() => openLightboxWithPool(currentMilestoneImagesEnriched, idx)}
+                                  onClick={() => openLightboxWithPool(displayedMilestoneImages, idx)}
                                   className="group relative aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 shadow-sm hover:shadow-md transition-all cursor-pointer hover:border-blue-500"
                                 >
                                   <img
@@ -1266,8 +1446,12 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                         ) : (
                           <div className="p-6 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/20 space-y-1">
                             <ImageIcon className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-1" />
-                            <p className="text-xs text-slate-500">Chưa có hình ảnh minh chứng nào cho mốc chạy này.</p>
-                            {canEditCurrentExecution && (
+                            <p className="text-xs text-slate-500">
+                              {selectedSnapshot
+                                ? 'Không có hình ảnh minh chứng nào tại giai đoạn lịch sử này.'
+                                : 'Chưa có hình ảnh minh chứng nào cho mốc chạy này.'}
+                            </p>
+                            {!selectedSnapshot && canEditCurrentExecution && (
                               <p className="text-[11px] text-blue-600 mt-1 font-medium">
                                 Nhấn <strong>"Điều chỉnh kết quả"</strong> để tải ảnh lên.
                               </p>
@@ -1595,7 +1779,12 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                       ) : canEditCurrentExecution ? (
                         <button
                           type="button"
-                          onClick={() => setIsEditing(true)}
+                          onClick={() => {
+                            if (latestSnapshot?.images && Array.isArray(latestSnapshot.images)) {
+                              setImages(latestSnapshot.images);
+                            }
+                            setIsEditing(true);
+                          }}
                           className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
