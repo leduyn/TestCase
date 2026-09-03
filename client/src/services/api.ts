@@ -211,6 +211,7 @@ export const executionApi = {
       notes?: string;
       executedById?: string;
       viewerIds?: string[];
+      imageIds?: string[];
     }
   ) =>
     api.post<{ message: string; execution: TestExecution }>(
@@ -228,6 +229,7 @@ export const executionApi = {
       notes?: string;
       executedById?: string;
       viewerIds?: string[];
+      imageIds?: string[];
     }
   ) =>
     api.put<{ message: string; execution: TestExecution }>(
