@@ -591,15 +591,61 @@ export class TestCaseController {
 
       let created = 0;
       if (missing.length > 0) {
+        // Tìm execution gần nhất của user khác (nếu có) để kế thừa beforeExecutedId (tiếp nhận từ ai)
+        const prevExecutions = await prisma.testExecution.findMany({
+          where: {
+            testCaseId: { in: missing },
+            NOT: { createdById: currentUserId },
+          },
+          orderBy: { executedAt: 'desc' },
+          select: { testCaseId: true, executedById: true },
+        });
+
+        const prevMap = new Map<string, string>();
+        for (const pe of prevExecutions) {
+          if (!prevMap.has(pe.testCaseId) && pe.executedById) {
+            prevMap.set(pe.testCaseId, pe.executedById);
+          }
+        }
+
         await prisma.testExecution.createMany({
           data: missing.map((cid) => ({
             testCaseId: cid,
             status: 'UNTESTED',
             createdById: currentUserId,
             executedById: currentUserId,
+            beforeExecutedId: prevMap.get(cid) || null,
           })),
         });
         created = missing.length;
+
+        // Ghi nhận snapshot lịch sử ban đầu cho các execution vừa nhận
+        const newExecutions = await prisma.testExecution.findMany({
+          where: {
+            testCaseId: { in: missing },
+            createdById: currentUserId,
+          },
+        });
+
+        if (newExecutions.length > 0) {
+          await prisma.testExecutionHistory.createMany({
+            data: newExecutions.map((exec) => ({
+              executionId: exec.id,
+              testCaseId: exec.testCaseId,
+              executedById: exec.executedById,
+              beforeExecutedId: exec.beforeExecutedId,
+              createdById: exec.createdById,
+              server: exec.server,
+              os: exec.os,
+              status: exec.status,
+              actualResult: exec.actualResult,
+              evaluation: exec.evaluation,
+              notes: exec.notes || 'Nhận test case để bắt đầu thực hiện',
+              executedAt: exec.executedAt,
+              updatedAt: exec.updatedAt,
+            })),
+          });
+        }
       }
 
       return res.json({

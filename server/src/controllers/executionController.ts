@@ -157,6 +157,34 @@ export class ExecutionController {
   static async snapshotExecution(executionId: string) {
     const exec = await prisma.testExecution.findUnique({ where: { id: executionId } });
     if (!exec) return;
+
+    // Tìm snapshot gần nhất của execution này
+    const lastSnapshot = await prisma.testExecutionHistory.findFirst({
+      where: { executionId },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    // Nếu snapshot gần nhất có cùng trạng thái và cùng người thực thi,
+    // cập nhật snapshot đó thay vì tạo thêm 1 bản ghi trùng lặp
+    if (
+      lastSnapshot &&
+      lastSnapshot.status === exec.status &&
+      lastSnapshot.executedById === exec.executedById
+    ) {
+      await prisma.testExecutionHistory.update({
+        where: { id: lastSnapshot.id },
+        data: {
+          server: exec.server,
+          os: exec.os,
+          actualResult: exec.actualResult,
+          evaluation: exec.evaluation,
+          notes: exec.notes,
+          updatedAt: exec.updatedAt,
+        },
+      });
+      return;
+    }
+
     await prisma.testExecutionHistory.create({
       data: {
         executionId: exec.id,
@@ -394,7 +422,7 @@ export class ExecutionController {
         return res.status(403).json({ message: 'Bạn không có quyền xem lịch sử này' });
       }
 
-      const snapshots = await prisma.testExecutionHistory.findMany({
+      let snapshots = await prisma.testExecutionHistory.findMany({
         where: { executionId },
         orderBy: { updatedAt: 'asc' },
         include: {
@@ -403,6 +431,20 @@ export class ExecutionController {
           beforeExecutedBy: { select: { id: true, fullName: true, email: true } },
         },
       });
+
+      // Nếu chưa có snapshot nào (ví dụ execution được tạo khi nhận test case trước đây), tự động ghi nhận snapshot khởi tạo
+      if (snapshots.length === 0) {
+        await ExecutionController.snapshotExecution(execution.id);
+        snapshots = await prisma.testExecutionHistory.findMany({
+          where: { executionId },
+          orderBy: { updatedAt: 'asc' },
+          include: {
+            executedBy: { select: { id: true, fullName: true, email: true } },
+            createdBy: { select: { id: true, fullName: true, email: true } },
+            beforeExecutedBy: { select: { id: true, fullName: true, email: true } },
+          },
+        });
+      }
 
       return res.json({ snapshots });
     } catch (error: any) {

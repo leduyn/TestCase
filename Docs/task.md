@@ -1,20 +1,32 @@
-# Task List - AI Test Case Generator & Management System
+# Custom Fields - Task Checklist
 
-## Phase 0: Database Setup Module ⭐
-- [ ] Backend: Cài thêm dependency `pg` (PostgreSQL native driver) cho setup service
-- [ ] Backend: Tạo `server/src/services/databaseSetup.ts`
-- [ ] Backend: Sửa `server/src/config/database.ts` (thêm checkConnection, reinitialize)
-- [ ] Backend: Tạo `server/src/controllers/setupController.ts`
-- [ ] Backend: Tạo `server/src/routes/setupRoutes.ts`
-- [ ] Backend: Sửa `server/src/index.ts` (thêm dbCheckMiddleware, mount setupRoutes)
-- [ ] Frontend: Tạo `client/src/pages/Setup/DatabaseSetupPage.tsx`
-- [ ] Frontend: Sửa `client/src/App.tsx` (auto-redirect logic)
-- [ ] Kiểm tra end-to-end Database Setup flow
+## Giai đoạn 1: Database Schema
+- [x] Thêm `CustomFieldDefinition` model vào schema.prisma
+- [x] Thêm `TaskCustomFieldValue` model vào schema.prisma
+- [x] Thêm enum `FIELD_UPDATED` vào `TaskHistoryChangeType`
+- [x] Cập nhật quan hệ User, Process, ProcessStep, Task
+- [x] Chạy `prisma db push` đồng bộ database
 
-## Phase 1-6: (Sau khi Phase 0 hoàn tất)
-- [ ] Phase 1: Setup & Database Migration
-- [ ] Phase 2: Auth & User Management
-- [ ] Phase 3: Multi-Provider AI Engine
-- [ ] Phase 4: Test Case Execution & Detail View
-- [ ] Phase 5: Excel Export & Dashboard Stats
-- [ ] Phase 6: Verification & Final Polish
+## Giai đoạn 2: Backend API & Services
+- [x] Tạo `customFieldService.ts` (CRUD Custom Field Definitions)
+- [x] Tạo `customFieldController.ts` (REST endpoints)
+- [x] Tạo `taskCustomFieldService.ts` (Lưu/đọc giá trị)
+- [x] Tạo `taskCustomFieldController.ts` (Task field values endpoints)
+- [x] Đăng ký routes
+- [x] Kiểm tra TypeScript (`tsc --noEmit`)
+
+## Giai đoạn 3: Frontend Custom Field Builder
+- [x] Tạo `CustomFieldList.tsx` (Danh sách fields theo process/step)
+- [x] Tạo `CustomFieldEditorModal.tsx` (Tạo/sửa field)
+- [x] Tích hợp vào `ProcessModal.tsx`
+- [x] Tạo `workflowApi.ts` endpoints cho custom fields
+
+## Giai đoạn 4: Frontend Dynamic Form Renderer
+- [x] Tạo `DynamicFieldRenderer.tsx` (Render 1 field theo type)
+- [x] Tạo `DynamicFormRenderer.tsx` (Render form nhiều fields)
+- [x] Tích hợp vào `TaskDetail.tsx`
+- [x] Kiểm tra TypeScript client
+
+## Giai đoạn 5: Seed Data & Testing
+- [x] Bổ sung seed data custom fields
+- [x] Kiểm thử tổng thể

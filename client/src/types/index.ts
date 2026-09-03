@@ -1,4 +1,6 @@
-export type Role = 'ADMIN' | 'TESTER' | 'VIEWER';
+export type Role = 'ADMIN' | 'TESTER' | 'VIEWER' | 'MANAGER' | 'USER';
+
+export * from './workflow';
 
 export interface User {
   id: string;

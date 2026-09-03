@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, LayoutDashboard, Settings, LogIn, LogOut, User as UserIcon, FileSpreadsheet, Users, ShieldCheck } from 'lucide-react';
+import { Sparkles, LayoutDashboard, Settings, LogIn, LogOut, User as UserIcon, FileSpreadsheet, Users, ShieldCheck, Layers } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 
@@ -10,7 +10,7 @@ export const Navbar: React.FC = () => {
   const { user, logout } = useAuth();
   const { hasPermission } = usePermissions();
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
 
   const canAccessGenerate = hasPermission('testcase:generate');
   const canAccessImport = hasPermission('testcase:import');
@@ -41,13 +41,24 @@ export const Navbar: React.FC = () => {
           <Link
             to="/"
             className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isActive('/')
+              location.pathname === '/'
                 ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
             Dashboard
+          </Link>
+          <Link
+            to="/workflow"
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors ${
+              isActive('/workflow')
+                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
+            }`}
+          >
+            <Layers className="w-4 h-4 text-indigo-500" />
+            Quy trình & Nhiệm vụ
           </Link>
           {canAccessGenerate && (
             <Link

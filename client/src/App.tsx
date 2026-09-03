@@ -13,6 +13,10 @@ import { Settings } from './pages/Settings';
 import UserManagement from './pages/UserManagement';
 import { TestCaseManagement } from './pages/TestCaseManagement';
 import { DatabaseSetupPage } from './pages/Setup/DatabaseSetupPage';
+import { WorkflowDashboard } from './pages/Workflow/WorkflowDashboard';
+import { ProcessList } from './pages/Workflow/ProcessList';
+import { TaskList } from './pages/Workflow/TaskList';
+import { TaskDetail } from './pages/Workflow/TaskDetail';
 import { setupApi } from './services/api';
 import { Loader2 } from 'lucide-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -128,6 +132,19 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/testcase-management" element={
             <ProtectedRoute permission="testcase:review"><TestCaseManagement /></ProtectedRoute>
+          } />
+          {/* Workflow & Task Management Routes */}
+          <Route path="/workflow" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : <WorkflowDashboard />
+          } />
+          <Route path="/workflow/processes" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : <ProcessList />
+          } />
+          <Route path="/workflow/tasks" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : <TaskList />
+          } />
+          <Route path="/workflow/tasks/:id" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : <TaskDetail />
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
