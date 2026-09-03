@@ -38,7 +38,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const [isDragOver, setIsDragOver] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -259,8 +258,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           {images.map((img, idx) => {
             const isVideo = img.mimeType?.startsWith('video/') || /\.(mp4|webm|ogg|ogv|mov|avi|mkv)$/i.test(img.filename);
             const thumbUrl = isVideo ? uploadApi.getThumbnailUrl(img.id) : uploadApi.getImageUrl(img.id);
-            const isDeleting = deletingId === img.id;
-
             return (
               <div
                 key={img.id}
@@ -297,15 +294,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleDeleteExisting(img.id, e)}
-                        disabled={isDeleting}
                         className="p-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-700 text-white shadow transition-all hover:scale-105"
                         title="Xóa file này"
                       >
-                        {isDeleting ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
