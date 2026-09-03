@@ -144,13 +144,38 @@ cd "$BACKEND_DIR"
 npm ci
 
 ########################################
-# STEP 5 - DATABASE MIGRATION
+# STEP 5 - FIX DB OWNERSHIP & MIGRATION
 ########################################
 
 echo ""
-echo "[5/10] Generating Prisma client & running migrations..."
+echo "[5/10] Fixing DB ownership & running migrations..."
 
 cd "$BACKEND_DIR"
+
+# Chuyển ownership tất cả tables, sequences, types cho user testcase
+# để tránh lỗi "must be owner of table" khi chạy ALTER TABLE
+echo "Transferring database object ownership to 'testcase'..."
+
+sudo -u postgres psql -d testcase_db -q <<'EOSQL'
+DO $$
+DECLARE r RECORD;
+BEGIN
+  -- Tables
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE 'ALTER TABLE public.' || quote_ident(r.tablename) || ' OWNER TO testcase';
+  END LOOP;
+  -- Sequences
+  FOR r IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP
+    EXECUTE 'ALTER SEQUENCE public.' || quote_ident(r.sequencename) || ' OWNER TO testcase';
+  END LOOP;
+  -- Types (enums)
+  FOR r IN SELECT typname FROM pg_type t JOIN pg_namespace n ON t.typnamespace = n.oid WHERE n.nspname = 'public' AND t.typtype = 'e' LOOP
+    EXECUTE 'ALTER TYPE public.' || quote_ident(r.typname) || ' OWNER TO testcase';
+  END LOOP;
+END $$;
+EOSQL
+
+echo "Database ownership transferred successfully."
 
 npx prisma generate
 
