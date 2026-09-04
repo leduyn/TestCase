@@ -135,6 +135,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const [isEditing, setIsEditing] = useState(initialEditing);
   const [availableServers, setAvailableServers] = useState<string[]>(DEFAULT_SERVERS);
   const [availableOsList, setAvailableOsList] = useState<string[]>(DEFAULT_OS_LIST);
+  const [defaultServerVal, setDefaultServerVal] = useState<string>('STAGING');
+  const [defaultOsVal, setDefaultOsVal] = useState<string>('Windows 11');
 
   // All execution history
   const [allExecutions, setAllExecutions] = useState<TestExecution[]>(testCase.executions || []);
@@ -192,12 +194,24 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
         if (res.data.osList && res.data.osList.length > 0) {
           setAvailableOsList(res.data.osList);
         }
+        if (res.data.defaultServer) {
+          setDefaultServerVal(res.data.defaultServer);
+          if (!initialExecution) {
+            setServer(res.data.defaultServer);
+          }
+        }
+        if (res.data.defaultOs) {
+          setDefaultOsVal(res.data.defaultOs);
+          if (!initialExecution) {
+            setOs(res.data.defaultOs);
+          }
+        }
       } catch (err) {
         console.warn('Could not load environment settings, using defaults:', err);
       }
     };
     loadEnvironments();
-  }, []);
+  }, [initialExecution]);
 
   // (Không còn chặn chọn trạng thái trên Frontend — Backend sẽ kiểm tra quyền khi lưu)
 
@@ -231,8 +245,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     initialImages?: TestExecutionImage[]
   ) => {
     if (exec) {
-      setServer(exec.server || 'STAGING');
-      setOs(exec.os || 'Windows 11');
+      setServer(exec.server || defaultServerVal);
+      setOs(exec.os || defaultOsVal);
       setStatus(exec.status || 'UNTESTED');
       setActualResult(exec.actualResult || '');
       setEvaluation(exec.evaluation || '');
@@ -243,8 +257,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setSelectedExecutionId(exec.id);
       setNextHandlerId(exec.executedById || currentUser?.id || '');
     } else {
-      setServer('STAGING');
-      setOs('Windows 11');
+      setServer(defaultServerVal);
+      setOs(defaultOsVal);
       setStatus('PASSED');
       setActualResult('');
       setEvaluation('');
@@ -336,15 +350,15 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
         if (existingOwnExec) {
           setCurrentExecutionId(existingOwnExec.id);
           setSelectedExecutionId(existingOwnExec.id);
-          setServer(existingOwnExec.server || 'STAGING');
-          setOs(existingOwnExec.os || 'Windows 11');
+          setServer(existingOwnExec.server || defaultServerVal);
+          setOs(existingOwnExec.os || defaultOsVal);
         } else {
           setCurrentExecutionId(undefined);
           if (fallbackExec) {
             setSelectedExecutionId(fallbackExec.id);
           }
-          setServer('STAGING');
-          setOs('Windows 11');
+          setServer(defaultServerVal);
+          setOs(defaultOsVal);
         }
         setStatus('PASSED');
         setActualResult('');
@@ -469,15 +483,15 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     if (existingOwnExec) {
       setCurrentExecutionId(existingOwnExec.id);
       setSelectedExecutionId(existingOwnExec.id);
-      setServer(existingOwnExec.server || 'STAGING');
-      setOs(existingOwnExec.os || 'Windows 11');
+      setServer(existingOwnExec.server || defaultServerVal);
+      setOs(existingOwnExec.os || defaultOsVal);
     } else {
       setCurrentExecutionId(undefined);
       if (fallbackExec) {
         setSelectedExecutionId(fallbackExec.id);
       }
-      setServer('STAGING');
-      setOs('Windows 11');
+      setServer(defaultServerVal);
+      setOs(defaultOsVal);
     }
     setStatus('PASSED');
     setActualResult('');

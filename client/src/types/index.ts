@@ -216,6 +216,8 @@ export interface AIConfig {
 export interface EnvironmentSettings {
   servers: string[];
   osList: string[];
+  defaultServer?: string;
+  defaultOs?: string;
 }
 
 export interface GenerationResult {

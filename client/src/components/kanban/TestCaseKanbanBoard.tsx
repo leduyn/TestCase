@@ -207,6 +207,14 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
     return groups;
   }, [testCases, showAllUntested, user?.id]);
 
+  useEffect(() => {
+    if (defaultServer) setDropServer(defaultServer);
+  }, [defaultServer]);
+
+  useEffect(() => {
+    if (defaultOs) setDropOs(defaultOs);
+  }, [defaultOs]);
+
   // Load environment settings (servers & OS list)
   useEffect(() => {
     const loadEnvironments = async () => {
@@ -217,6 +225,12 @@ export const TestCaseKanbanBoard: React.FC<TestCaseKanbanBoardProps> = ({
         }
         if (res.data.osList && res.data.osList.length > 0) {
           setAvailableOsList(res.data.osList);
+        }
+        if (res.data.defaultServer && !dropConfirm) {
+          setDropServer(res.data.defaultServer);
+        }
+        if (res.data.defaultOs && !dropConfirm) {
+          setDropOs(res.data.defaultOs);
         }
       } catch (err) {
         console.warn('Could not load environment settings, using defaults:', err);

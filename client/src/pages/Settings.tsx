@@ -77,6 +77,8 @@ export const Settings: React.FC = () => {
   // Environment Settings (Server & OS)
   const [servers, setServers] = useState<string[]>(DEFAULT_SERVERS);
   const [osList, setOsList] = useState<string[]>(DEFAULT_OS_LIST);
+  const [defaultServer, setDefaultServer] = useState<string>('STAGING');
+  const [defaultOs, setDefaultOs] = useState<string>('Windows 11');
   const [newServer, setNewServer] = useState('');
   const [newOs, setNewOs] = useState('');
   const [savingEnv, setSavingEnv] = useState(false);
@@ -129,6 +131,16 @@ export const Settings: React.FC = () => {
       }
       if (envRes.data.osList && envRes.data.osList.length > 0) {
         setOsList(envRes.data.osList);
+      }
+      if (envRes.data.defaultServer) {
+        setDefaultServer(envRes.data.defaultServer);
+      } else if (envRes.data.servers && envRes.data.servers.length > 0) {
+        setDefaultServer(envRes.data.servers[0]);
+      }
+      if (envRes.data.defaultOs) {
+        setDefaultOs(envRes.data.defaultOs);
+      } else if (envRes.data.osList && envRes.data.osList.length > 0) {
+        setDefaultOs(envRes.data.osList[0]);
       }
       if (storageRes?.data?.config) {
         setStorageConfig(storageRes.data.config);
@@ -287,12 +299,19 @@ export const Settings: React.FC = () => {
     if (!val) return;
     if (!servers.includes(val)) {
       setServers([...servers, val]);
+      if (!defaultServer) {
+        setDefaultServer(val);
+      }
     }
     setNewServer('');
   };
 
   const handleRemoveServer = (serverToRemove: string) => {
-    setServers(servers.filter((s) => s !== serverToRemove));
+    const remaining = servers.filter((s) => s !== serverToRemove);
+    setServers(remaining);
+    if (defaultServer === serverToRemove) {
+      setDefaultServer(remaining[0] || '');
+    }
   };
 
   // Add OS
@@ -302,18 +321,27 @@ export const Settings: React.FC = () => {
     if (!val) return;
     if (!osList.includes(val)) {
       setOsList([...osList, val]);
+      if (!defaultOs) {
+        setDefaultOs(val);
+      }
     }
     setNewOs('');
   };
 
   const handleRemoveOs = (osToRemove: string) => {
-    setOsList(osList.filter((o) => o !== osToRemove));
+    const remaining = osList.filter((o) => o !== osToRemove);
+    setOsList(remaining);
+    if (defaultOs === osToRemove) {
+      setDefaultOs(remaining[0] || '');
+    }
   };
 
   // Restore Default Environments
   const handleRestoreDefaultEnv = () => {
     setServers(DEFAULT_SERVERS);
     setOsList(DEFAULT_OS_LIST);
+    setDefaultServer('STAGING');
+    setDefaultOs('Windows 11');
   };
 
   // Save Environment Settings
@@ -323,7 +351,7 @@ export const Settings: React.FC = () => {
     setSavedEnvSuccess(false);
 
     try {
-      await environmentApi.saveEnvironments({ servers, osList });
+      await environmentApi.saveEnvironments({ servers, osList, defaultServer, defaultOs });
       setSavedEnvSuccess(true);
       setTimeout(() => setSavedEnvSuccess(false), 3000);
     } catch (err: any) {
@@ -415,7 +443,7 @@ export const Settings: React.FC = () => {
                 Lựa chọn Selectbox: Server & Hệ điều hành (OS)
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Các mục tại đây sẽ xuất hiện trong menu chọn Server và OS khi thực thi Test Case và bộ lọc.
+                Các mục tại đây sẽ xuất hiện trong menu chọn Server và OS khi thực thi Test Case và bộ lọc. Bạn có thể thiết lập giá trị mặc định được chọn sẵn khi tạo hoặc thực thi mới.
               </p>
             </div>
             <button
@@ -432,7 +460,7 @@ export const Settings: React.FC = () => {
           {savedEnvSuccess && (
             <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-semibold animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Đã lưu danh sách Server và Hệ điều hành thành công!
+              Đã lưu danh sách Server và Hệ điều hành cùng giá trị mặc định thành công!
             </div>
           )}
 
@@ -446,10 +474,35 @@ export const Settings: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Cài đặt Servers */}
             <div className="space-y-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Server className="w-3.5 h-3.5 text-blue-600" />
-                Danh sách Server ({servers.length})
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-blue-600" />
+                  Danh sách Server ({servers.length})
+                </label>
+              </div>
+
+              {/* Selectbox chọn Server mặc định */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-blue-50/60 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50">
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Server mặc định:
+                  </span>
+                </div>
+                <select
+                  value={defaultServer}
+                  onChange={(e) => setDefaultServer(e.target.value)}
+                  disabled={!canManageEnv || servers.length === 0}
+                  className="px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800 dark:text-slate-200 disabled:opacity-50 min-w-[140px]"
+                >
+                  {servers.length === 0 && <option value="">-- Chưa có Server --</option>}
+                  {servers.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               {/* Input thêm Server mới */}
               {canManageEnv && (
@@ -476,34 +529,80 @@ export const Settings: React.FC = () => {
                 {servers.length === 0 ? (
                   <span className="text-xs text-slate-400 italic">Chưa có Server nào. Hãy nhập để thêm.</span>
                 ) : (
-                  servers.map((s) => (
-                    <span
-                      key={s}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-semibold text-slate-800 dark:text-slate-200 shadow-sm"
-                    >
-                      {s}
-                      {canManageEnv && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveServer(s)}
-                          className="text-slate-400 hover:text-rose-500 transition-colors"
-                          title={`Xóa ${s}`}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </span>
-                  ))
+                  servers.map((s) => {
+                    const isDefault = defaultServer === s;
+                    return (
+                      <span
+                        key={s}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono transition-all ${
+                          isDefault
+                            ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-400 dark:border-blue-500 text-blue-800 dark:text-blue-200 font-bold shadow-sm ring-1 ring-blue-400/40'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-semibold text-slate-800 dark:text-slate-200 shadow-sm'
+                        }`}
+                      >
+                        <span>{s}</span>
+                        {isDefault ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-sans font-bold shadow-xs">
+                            Mặc định
+                          </span>
+                        ) : canManageEnv ? (
+                          <button
+                            type="button"
+                            onClick={() => setDefaultServer(s)}
+                            className="text-[10px] text-slate-400 hover:text-blue-600 underline font-sans font-normal"
+                            title={`Đặt ${s} làm mặc định`}
+                          >
+                            Đặt mặc định
+                          </button>
+                        ) : null}
+                        {canManageEnv && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveServer(s)}
+                            className="text-slate-400 hover:text-rose-500 transition-colors ml-0.5"
+                            title={`Xóa ${s}`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })
                 )}
               </div>
             </div>
 
             {/* Cài đặt OS */}
             <div className="space-y-3">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <Monitor className="w-3.5 h-3.5 text-indigo-600" />
-                Danh sách Hệ điều hành (OS) ({osList.length})
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Monitor className="w-3.5 h-3.5 text-indigo-600" />
+                  Danh sách Hệ điều hành (OS) ({osList.length})
+                </label>
+              </div>
+
+              {/* Selectbox chọn OS mặc định */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 bg-indigo-50/60 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Hệ điều hành mặc định:
+                  </span>
+                </div>
+                <select
+                  value={defaultOs}
+                  onChange={(e) => setDefaultOs(e.target.value)}
+                  disabled={!canManageEnv || osList.length === 0}
+                  className="px-3 py-1.5 text-xs font-semibold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-800 dark:text-slate-200 disabled:opacity-50 min-w-[140px]"
+                >
+                  {osList.length === 0 && <option value="">-- Chưa có OS --</option>}
+                  {osList.map((o) => (
+                    <option key={o} value={o}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               {/* Input thêm OS mới */}
               {canManageEnv && (
@@ -530,24 +629,45 @@ export const Settings: React.FC = () => {
                 {osList.length === 0 ? (
                   <span className="text-xs text-slate-400 italic">Chưa có OS nào. Hãy nhập để thêm.</span>
                 ) : (
-                  osList.map((o) => (
-                    <span
-                      key={o}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-sm"
-                    >
-                      {o}
-                      {canManageEnv && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveOs(o)}
-                          className="text-slate-400 hover:text-rose-500 transition-colors"
-                          title={`Xóa ${o}`}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </span>
-                  ))
+                  osList.map((o) => {
+                    const isDefault = defaultOs === o;
+                    return (
+                      <span
+                        key={o}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs transition-all ${
+                          isDefault
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-400 dark:border-indigo-500 text-indigo-800 dark:text-indigo-200 font-bold shadow-sm ring-1 ring-indigo-400/40'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-medium text-slate-800 dark:text-slate-200 shadow-sm'
+                        }`}
+                      >
+                        <span>{o}</span>
+                        {isDefault ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] bg-indigo-600 text-white px-1.5 py-0.5 rounded font-sans font-bold shadow-xs">
+                            Mặc định
+                          </span>
+                        ) : canManageEnv ? (
+                          <button
+                            type="button"
+                            onClick={() => setDefaultOs(o)}
+                            className="text-[10px] text-slate-400 hover:text-indigo-600 underline font-sans font-normal"
+                            title={`Đặt ${o} làm mặc định`}
+                          >
+                            Đặt mặc định
+                          </button>
+                        ) : null}
+                        {canManageEnv && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveOs(o)}
+                            className="text-slate-400 hover:text-rose-500 transition-colors ml-0.5"
+                            title={`Xóa ${o}`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })
                 )}
               </div>
             </div>
