@@ -275,12 +275,22 @@ export const exportApi = {
 // Environment Settings API
 export const environmentApi = {
   getEnvironments: () =>
-    api.get<{ servers: string[]; osList: string[] }>('/settings/environments'),
-  saveEnvironments: (data: { servers: string[]; osList: string[] }) =>
-    api.post<{ message: string; servers: string[]; osList: string[] }>(
-      '/settings/environments',
-      data
+    api.get<{ servers: string[]; osList: string[]; defaultServer?: string; defaultOs?: string }>(
+      '/settings/environments'
     ),
+  saveEnvironments: (data: {
+    servers: string[];
+    osList: string[];
+    defaultServer?: string;
+    defaultOs?: string;
+  }) =>
+    api.post<{
+      message: string;
+      servers: string[];
+      osList: string[];
+      defaultServer?: string;
+      defaultOs?: string;
+    }>('/settings/environments', data),
 };
 
 // --- User Management API ---

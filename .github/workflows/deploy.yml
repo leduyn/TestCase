@@ -35,5 +35,7 @@ jobs:
             cd /var/www/testcase
             git config --global --add safe.directory /var/www/testcase || true
             chmod -R u+rwX .git 2>/dev/null || true
+            git fetch origin main
+            git reset --hard origin/main
             chmod +x deploy.sh || true
             bash deploy.sh

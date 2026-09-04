@@ -32,6 +32,12 @@ export class SettingController {
       const osSetting = await prisma.systemSetting.findUnique({
         where: { key: 'environments_os' },
       });
+      const defaultServerSetting = await prisma.systemSetting.findUnique({
+        where: { key: 'environments_default_server' },
+      });
+      const defaultOsSetting = await prisma.systemSetting.findUnique({
+        where: { key: 'environments_default_os' },
+      });
 
       let servers = DEFAULT_SERVERS;
       let osList = DEFAULT_OS_LIST;
@@ -54,16 +60,31 @@ export class SettingController {
         }
       }
 
-      return res.json({ servers, osList });
+      let defaultServer = defaultServerSetting?.value || '';
+      if (!defaultServer || !servers.includes(defaultServer)) {
+        defaultServer = servers.includes('STAGING') ? 'STAGING' : (servers[0] || '');
+      }
+
+      let defaultOs = defaultOsSetting?.value || '';
+      if (!defaultOs || !osList.includes(defaultOs)) {
+        defaultOs = osList.includes('Windows 11') ? 'Windows 11' : (osList[0] || '');
+      }
+
+      return res.json({ servers, osList, defaultServer, defaultOs });
     } catch (error: any) {
       console.error('Error fetching environment settings:', error);
-      return res.json({ servers: DEFAULT_SERVERS, osList: DEFAULT_OS_LIST });
+      return res.json({
+        servers: DEFAULT_SERVERS,
+        osList: DEFAULT_OS_LIST,
+        defaultServer: 'STAGING',
+        defaultOs: 'Windows 11',
+      });
     }
   }
 
   static async saveEnvironments(req: AuthRequest, res: Response) {
     try {
-      const { servers, osList } = req.body;
+      const { servers, osList, defaultServer, defaultOs } = req.body;
 
       if (!Array.isArray(servers) || !Array.isArray(osList)) {
         return res.status(400).json({ message: 'Dữ liệu servers hoặc osList không hợp lệ' });
@@ -75,6 +96,16 @@ export class SettingController {
       const cleanOsList = Array.from(
         new Set(osList.map((o: string) => String(o).trim()).filter(Boolean))
       );
+
+      let cleanDefaultServer = typeof defaultServer === 'string' ? defaultServer.trim() : '';
+      if (!cleanDefaultServer || !cleanServers.includes(cleanDefaultServer)) {
+        cleanDefaultServer = cleanServers.includes('STAGING') ? 'STAGING' : (cleanServers[0] || '');
+      }
+
+      let cleanDefaultOs = typeof defaultOs === 'string' ? defaultOs.trim() : '';
+      if (!cleanDefaultOs || !cleanOsList.includes(cleanDefaultOs)) {
+        cleanDefaultOs = cleanOsList.includes('Windows 11') ? 'Windows 11' : (cleanOsList[0] || '');
+      }
 
       await prisma.systemSetting.upsert({
         where: { key: 'environments_servers' },
@@ -88,10 +119,24 @@ export class SettingController {
         create: { key: 'environments_os', value: JSON.stringify(cleanOsList) },
       });
 
+      await prisma.systemSetting.upsert({
+        where: { key: 'environments_default_server' },
+        update: { value: cleanDefaultServer },
+        create: { key: 'environments_default_server', value: cleanDefaultServer },
+      });
+
+      await prisma.systemSetting.upsert({
+        where: { key: 'environments_default_os' },
+        update: { value: cleanDefaultOs },
+        create: { key: 'environments_default_os', value: cleanDefaultOs },
+      });
+
       return res.json({
         message: 'Lưu danh sách Server & Hệ điều hành thành công',
         servers: cleanServers,
         osList: cleanOsList,
+        defaultServer: cleanDefaultServer,
+        defaultOs: cleanDefaultOs,
       });
     } catch (error: any) {
       console.error('Error saving environment settings:', error);
