@@ -7,6 +7,27 @@ import { requirePermission } from '../middleware/rbac';
 
 const router = Router();
 
+// GET /api/users/directory - Danh bạ người dùng hoạt động (dùng cho chọn người duyệt, người thực hiện)
+router.get('/directory', authenticate, async (_req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        department: true,
+        managerId: true,
+      },
+      orderBy: { fullName: 'asc' },
+    });
+    res.json(users);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // GET /api/users - Lấy danh sách tất cả người dùng
 router.get('/', authenticate, requirePermission('users:read'), async (req, res) => {
   try {
@@ -17,6 +38,8 @@ router.get('/', authenticate, requirePermission('users:read'), async (req, res) 
         fullName: true,
         role: true,
         status: true,
+        department: true,
+        managerId: true,
         lastLogin: true,
         createdAt: true,
       },

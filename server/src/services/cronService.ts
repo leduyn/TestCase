@@ -1,6 +1,7 @@
 import cron, { ScheduledTask } from 'node-cron';
 import prisma from '../config/database';
 import { TaskStatus, TaskHistoryChangeType } from '@prisma/client';
+import { ProposalNotificationService } from './proposalNotificationService';
 
 export class CronService {
   private static task: ScheduledTask | null = null;
@@ -11,15 +12,19 @@ export class CronService {
   static init() {
     console.log('⏰ Khởi tạo Cron Jobs cho hệ thống Workflow...');
 
-    // Chạy kiểm tra Overdue mỗi 15 phút ('*/15 * * * *') hoặc đầu mỗi giờ
+    // Chạy kiểm tra Overdue & Deadline mỗi 15 phút ('*/15 * * * *')
     this.task = cron.schedule('*/15 * * * *', async () => {
       await this.checkOverdueTasks();
+      await this.checkProposalDeadlines();
     });
 
     // Chạy ngay 1 lần khi server vừa khởi động (sau 10s để DB ổn định)
     setTimeout(() => {
       this.checkOverdueTasks().catch((err) =>
         console.error('Lỗi khi chạy quét overdue lần đầu:', err)
+      );
+      this.checkProposalDeadlines().catch((err) =>
+        console.error('Lỗi khi chạy quét proposal deadline lần đầu:', err)
       );
     }, 10000);
   }
@@ -97,6 +102,22 @@ export class CronService {
       console.log(`✅ Cron: Đã hoàn tất cập nhật ${overdueTasks.length} nhiệm vụ quá hạn.`);
     } catch (error) {
       console.error('❌ Lỗi trong Cron Job checkOverdueTasks:', error);
+    }
+  }
+
+  /**
+   * Quét và xử lý hạn chót cũng như gửi nhắc nhở cho module Đề xuất
+   */
+  static async checkProposalDeadlines() {
+    try {
+      const result = await ProposalNotificationService.checkDeadlines();
+      if (result.expired > 0 || result.remindersSent > 0) {
+        console.log(
+          `🔔 Cron Proposal: Đã cập nhật ${result.expired} đề xuất hết hạn, gửi ${result.remindersSent} thông báo nhắc nhở.`
+        );
+      }
+    } catch (error) {
+      console.error('❌ Lỗi trong Cron Job checkProposalDeadlines:', error);
     }
   }
 

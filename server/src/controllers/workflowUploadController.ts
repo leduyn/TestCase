@@ -1,3 +1,4 @@
+import path from 'path';
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { getStorageConfig, createStorageProvider } from '../services/storageService';
@@ -71,12 +72,25 @@ export class WorkflowUploadController {
       const storageConfig = await getStorageConfig();
       const provider = createStorageProvider(storageConfig);
 
-      const fileResult = await provider.getFileStream(storagePath);
+      const cleanPath = storagePath.replace(/^(\/|\\)?uploads(\/|\\)/i, '').replace(/^(\/|\\)+/, '');
+      let fileResult = await provider.getFileStream(cleanPath);
+      if (!fileResult && cleanPath !== storagePath) {
+        fileResult = await provider.getFileStream(storagePath);
+      }
+
       if (!fileResult) {
         return res.status(404).json({ message: 'Không tìm thấy file' });
       }
 
+      const filename = (req.query.filename as string) || path.basename(cleanPath);
+      const isDownload = req.query.download === 'true';
+      const disposition = isDownload ? 'attachment' : 'inline';
+
       res.setHeader('Content-Type', fileResult.mimeType);
+      res.setHeader(
+        'Content-Disposition',
+        `${disposition}; filename="${encodeURIComponent(filename)}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+      );
       res.setHeader('Cache-Control', 'public, max-age=86400');
       fileResult.stream.pipe(res);
     } catch (error: any) {

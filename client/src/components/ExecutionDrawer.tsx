@@ -28,6 +28,9 @@ import {
   Share2,
   Link2,
   Check,
+  MessageSquare,
+  UserPlus,
+  UserMinus,
 } from 'lucide-react';
 import type {
   TestCase,
@@ -37,12 +40,14 @@ import type {
   TestExecutionHistory,
   TestExecutionWatcher,
 } from '../types';
-import { executionApi, environmentApi, uploadApi, statusHandlerApi } from '../services/api';
+import { executionApi, executionCommentApi, environmentApi, uploadApi, statusHandlerApi } from '../services/api';
 import { PlatformBadge, PriorityBadge, TestTypeBadge, StatusBadge } from './Badge';
 import { ResultEditor, type ResultEditorHandle } from './ResultEditor';
 import { ImageUploader } from './ImageUploader';
 import { ImageLightbox } from './ImageLightbox';
 import { TestCaseEvidenceModal } from './TestCaseEvidenceModal';
+import { ExecutionCommentsSection } from './ExecutionCommentsSection';
+import { onExecutionCommentUpdated } from '../utils/executionEvents';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -182,6 +187,16 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   // Evidence Gallery Modal & View Mode
   const [isEvidenceGalleryOpen, setIsEvidenceGalleryOpen] = useState(false);
   const [evidenceViewMode, setEvidenceViewMode] = useState<'MILESTONE' | 'USER_ALL'>('MILESTONE');
+
+  // Trao đổi & Bình luận lượt thực thi
+  const [commentCount, setCommentCount] = useState<number>(0);
+  const commentsSectionRef = useRef<HTMLDivElement>(null);
+
+  const scrollToComments = () => {
+    if (commentsSectionRef.current) {
+      commentsSectionRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
 
   // Load environments
   useEffect(() => {
@@ -707,6 +722,53 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     return activeExecution.createdById === id || activeExecution.executedById === id;
   }, [activeExecution, currentUser]);
 
+  // Kiểm tra tài khoản hiện tại có đang theo dõi lượt này không
+  const isCurrentWatcher = useMemo(() => {
+    if (!currentUser?.id || !activeExecution?.watchers) return false;
+    return activeExecution.watchers.some((w) => w.userId === currentUser.id);
+  }, [currentUser?.id, activeExecution?.watchers]);
+
+  // Đồng bộ số lượng bình luận
+  const handleCommentCountRefresh = async () => {
+    if (!activeExecution?.id) return;
+    try {
+      const res = await executionCommentApi.getComments(activeExecution.id);
+      setCommentCount(res.data.comments?.length || 0);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (!activeExecution?.id) {
+      setCommentCount(0);
+      return;
+    }
+    executionCommentApi
+      .getComments(activeExecution.id)
+      .then((res) => setCommentCount(res.data.comments?.length || 0))
+      .catch(() => {});
+
+    // Lắng nghe sự kiện bình luận được thêm hoặc xóa trên execution này
+    const unsubscribe = onExecutionCommentUpdated((updatedId) => {
+      if (!updatedId || updatedId === activeExecution.id) {
+        handleCommentCountRefresh();
+      }
+    });
+
+    // Polling định kỳ cập nhật số lượng bình luận mỗi 5s khi tab visible
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        handleCommentCountRefresh();
+      }
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [activeExecution?.id]);
+
   const handleToggleWatcher = async (userId: string, add: boolean) => {
     if (!activeExecution || watcherBusy) return;
     const current = activeExecution.watchers?.map((w) => w.userId) || [];
@@ -981,6 +1043,17 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                 <span>Kho ảnh ({totalTestCaseImages})</span>
               </button>
             )}
+            {activeExecution && (
+              <button
+                type="button"
+                onClick={scrollToComments}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 transition-colors shadow-sm"
+                title="Cuộn nhanh xuống khu vực Trao đổi & Bình luận"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                <span>Trao đổi ({commentCount})</span>
+              </button>
+            )}
             {onEditTestCase && (
               <button
                 type="button"
@@ -1109,21 +1182,51 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     <Eye className="w-3 h-3 text-slate-400" />
                     Người theo dõi ({activeExecution?.watchers?.length || 0})
                   </span>
+                  {currentUser?.id && activeExecution && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleWatcher(currentUser.id, !isCurrentWatcher)}
+                      disabled={watcherBusy}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition shadow-xs ${
+                        isCurrentWatcher
+                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900 border border-amber-300 dark:border-amber-800'
+                          : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800'
+                      }`}
+                      title={isCurrentWatcher ? 'Bấm để hủy theo dõi lượt này' : 'Bấm để theo dõi và nhận thông tin trao đổi lượt này'}
+                    >
+                      {isCurrentWatcher ? (
+                        <>
+                          <UserMinus className="w-2.5 h-2.5" />
+                          <span>Đang theo dõi</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserPlus className="w-2.5 h-2.5" />
+                          <span>+ Theo dõi</span>
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {(activeExecution?.watchers && activeExecution.watchers.length > 0) ? (
                     activeExecution.watchers.map((w) => (
                       <span
                         key={w.id}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 text-[11px] border border-sky-200 dark:border-sky-800"
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border ${
+                          w.userId === currentUser?.id
+                            ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800 font-semibold'
+                            : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
+                        }`}
                       >
                         {w.user.fullName || w.user.email}
-                        {canManageWatchers && (
+                        {w.userId === currentUser?.id && <span className="text-[9px] opacity-70">(Tôi)</span>}
+                        {(canManageWatchers || w.userId === currentUser?.id) && (
                           <button
                             type="button"
                             onClick={() => handleToggleWatcher(w.userId, false)}
                             disabled={watcherBusy}
-                            title="Bỏ theo dõi"
+                            title={w.userId === currentUser?.id ? 'Hủy theo dõi' : 'Bỏ theo dõi'}
                             className="hover:text-rose-600 disabled:opacity-50"
                           >
                             <X className="w-3 h-3" />
@@ -1280,7 +1383,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
           {/* ==================== MAIN CONTENT: SPECIFICATION & EXECUTION DETAILS ==================== */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
 
               {/* Left/Middle Column: Specification Details & Evidence Images */}
               <div className="space-y-5">
@@ -1567,140 +1670,159 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Trao đổi & Bình luận cho lượt thực thi (Ngay dưới hình ảnh minh chứng) */}
+                {activeExecution && (
+                  <div id="execution-comments-section" ref={commentsSectionRef} className="pt-1">
+                    <ExecutionCommentsSection
+                      executionId={activeExecution.id}
+                      testExecution={activeExecution}
+                      onFollowRequest={() => {
+                        if (currentUser?.id) {
+                          handleToggleWatcher(currentUser.id, true);
+                        }
+                      }}
+                      onCommentAdded={handleCommentCountRefresh}
+                      onCommentDeleted={handleCommentCountRefresh}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Right Column: Test Execution Result (View Mode vs Edit Mode) */}
-              <div className="space-y-4">
+              <div className="xl:sticky xl:top-0 flex flex-col min-h-[calc(100vh-7.5rem)]">
                 {isEditing ? (
                   // ==================== EDIT MODE FORM ====================
                   <form
                     onSubmit={handleSave}
-                    className="bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800 space-y-4 shadow-sm"
+                    className="bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800 shadow-sm flex flex-col justify-between flex-1 min-h-[calc(100vh-7.5rem)]"
                   >
-                    <div className="flex items-center justify-between pb-2 border-b border-blue-200/60 dark:border-blue-800/60">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-blue-600" />
-                        {selectedExecutionId ? 'Điều chỉnh kết quả kiểm thử' : 'Ghi nhận kết quả kiểm thử mới'}
-                      </h3>
-                      <StatusBadge status={status} size="md" />
-                    </div>
-
-                    {/* Status Selection Buttons */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                        Đánh giá trạng thái (Status) <span className="text-rose-500">*</span>
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
-                        {EXECUTION_STATUS_LIST.map(({ value, label, Icon, active, idle }) => {
-                          const isSelected = status === value;
-                          const disabled = false; // Frontend không chặn chọn trạng thái — Backend kiểm tra quyền khi lưu
-                          return (
-                            <button
-                              key={value}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => setStatus(value)}
-                              className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${isSelected ? active : idle} ${disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
-                            >
-                              <Icon className="w-4 h-4 mb-1" />
-                              {label}
-                            </button>
-                          );
-                        })}
+                    <div className="space-y-4 flex-1">
+                      <div className="flex items-center justify-between pb-2 border-b border-blue-200/60 dark:border-blue-800/60">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-blue-600" />
+                          {selectedExecutionId ? 'Điều chỉnh kết quả kiểm thử' : 'Ghi nhận kết quả kiểm thử mới'}
+                        </h3>
+                        <StatusBadge status={status} size="md" />
                       </div>
-                    </div>
 
-                    {/* Server & OS Row */}
-                    <div className="grid grid-cols-2 gap-4">
+                      {/* Status Selection Buttons */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                          <Server className="w-3.5 h-3.5 text-blue-600" />
-                          Server / Môi trường
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Đánh giá trạng thái (Status) <span className="text-rose-500">*</span>
                         </label>
-                        <select
-                          value={server}
-                          onChange={(e) => setServer(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        >
-                          {server && !availableServers.includes(server) && (
-                            <option value={server}>{server}</option>
-                          )}
-                          {availableServers.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                          <Monitor className="w-3.5 h-3.5 text-indigo-600" />
-                          Hệ điều hành (OS)
-                        </label>
-                        <select
-                          value={os}
-                          onChange={(e) => setOs(e.target.value)}
-                          className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        >
-                          {os && !availableOsList.includes(os) && (
-                            <option value={os}>{os}</option>
-                          )}
-                          {availableOsList.map((o) => (
-                            <option key={o} value={o}>
-                              {o}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Actual Result Input with Rich Text Editor */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
-                        <span className="flex items-center gap-1">
-                          <span>Kết quả thực tế (Actual Result)</span>
-                          {status !== 'UNTESTED' && status !== 'BLOCKED' ? (
-                            <span className="text-rose-500 font-bold">*</span>
-                          ) : (
-                            <span className="text-slate-400 font-normal text-[11px]">(Không bắt buộc)</span>
-                          )}
-                        </span>
-                        <span className="text-[11px] text-blue-600 font-normal">Trình soạn thảo phong phú (Rich Text)</span>
-                      </label>
-                      <ResultEditor
-                        key={currentExecutionId || 'new'}
-                        ref={resultEditorRef}
-                        initialValue={actualResult}
-                        placeholder="Mô tả những gì hệ thống thực tế hiển thị hoặc phản hồi khi bạn thực hiện test..."
-                        minHeight="140px"
-                        isFailed={status === 'FAILED'}
-                        availableImages={images}
-                      />
-                      {validationError && (
-                        <div className="mt-1.5 flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-lg px-3 py-2">
-                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                          <span>{validationError}</span>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2">
+                          {EXECUTION_STATUS_LIST.map(({ value, label, Icon, active, idle }) => {
+                            const isSelected = status === value;
+                            const disabled = false; // Frontend không chặn chọn trạng thái — Backend kiểm tra quyền khi lưu
+                            return (
+                              <button
+                                key={value}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => setStatus(value)}
+                                className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-xs font-bold transition-all ${isSelected ? active : idle} ${disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                              >
+                                <Icon className="w-4 h-4 mb-1" />
+                                {label}
+                              </button>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
+                      </div>
 
-                    {/* Notes / Jira Ticket */}
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                        Ghi chú / Link Bug / Nguyên nhân lỗi
-                      </label>
-                      <textarea
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Ghi chú thêm, mã lỗi HTTP, link ticket Jira..."
-                        rows={2}
-                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                      />
+                      {/* Server & OS Row */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                            <Server className="w-3.5 h-3.5 text-blue-600" />
+                            Server / Môi trường
+                          </label>
+                          <select
+                            value={server}
+                            onChange={(e) => setServer(e.target.value)}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          >
+                            {server && !availableServers.includes(server) && (
+                              <option value={server}>{server}</option>
+                            )}
+                            {availableServers.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
+                            <Monitor className="w-3.5 h-3.5 text-indigo-600" />
+                            Hệ điều hành (OS)
+                          </label>
+                          <select
+                            value={os}
+                            onChange={(e) => setOs(e.target.value)}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          >
+                            {os && !availableOsList.includes(os) && (
+                              <option value={os}>{os}</option>
+                            )}
+                            {availableOsList.map((o) => (
+                              <option key={o} value={o}>
+                                {o}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Actual Result Input with Rich Text Editor */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                          <span className="flex items-center gap-1">
+                            <span>Kết quả thực tế (Actual Result)</span>
+                            {status !== 'UNTESTED' && status !== 'BLOCKED' ? (
+                              <span className="text-rose-500 font-bold">*</span>
+                            ) : (
+                              <span className="text-slate-400 font-normal text-[11px]">(Không bắt buộc)</span>
+                            )}
+                          </span>
+                          <span className="text-[11px] text-blue-600 font-normal">Trình soạn thảo phong phú (Rich Text)</span>
+                        </label>
+                        <ResultEditor
+                          key={currentExecutionId || 'new'}
+                          ref={resultEditorRef}
+                          initialValue={actualResult}
+                          placeholder="Mô tả những gì hệ thống thực tế hiển thị hoặc phản hồi khi bạn thực hiện test..."
+                          minHeight="180px"
+                          isFailed={status === 'FAILED'}
+                          availableImages={images}
+                        />
+                        {validationError && (
+                          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-lg px-3 py-2">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span>{validationError}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Notes / Jira Ticket */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          Ghi chú / Link Bug / Nguyên nhân lỗi
+                        </label>
+                        <textarea
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Ghi chú thêm, mã lỗi HTTP, link ticket Jira..."
+                          rows={2}
+                          className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
                     </div>
 
                     {/* Form actions: Cancel & Save */}
-                    <div className="pt-4 border-t border-blue-200/60 dark:border-blue-800/60 flex items-center justify-between">
+                    <div className="mt-auto pt-4 border-t border-blue-200/60 dark:border-blue-800/60 flex items-center justify-between shrink-0">
                       <button
                         type="button"
                         onClick={handleCancelEdit}
@@ -1725,206 +1847,208 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                   </form>
                 ) : (
                   // ==================== VIEW ONLY MODE ====================
-                  <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5 border border-slate-200 dark:border-slate-700 space-y-5 shadow-sm">
-                    {/* Top Bar: Title & Edit Action Button */}
-                    <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 gap-2 flex-wrap">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-blue-600" />
-                            Chi tiết kết quả kiểm thử
-                          </h3>
-                          {selectedSnapshot && (
-                            <span className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
-                              Bản lịch sử
-                            </span>
+                  <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col justify-between flex-1 min-h-[calc(100vh-7.5rem)]">
+                    <div className="space-y-4 flex-1">
+                      {/* Top Bar: Title & Edit Action Button */}
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700 gap-2 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-blue-600" />
+                              Chi tiết kết quả kiểm thử
+                            </h3>
+                            {selectedSnapshot && (
+                              <span className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800">
+                                Bản lịch sử
+                              </span>
+                            )}
+                          </div>
+                          {selectedSnapshot ? (
+                            <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
+                              <User className="w-3 h-3 text-slate-400" />
+                              <span>
+                                Thực hiện bởi: <strong>{selectedSnapshot.executedBy?.fullName || selectedSnapshot.executedBy?.email || 'Hệ thống'}</strong>
+                              </span>
+                              <span>•</span>
+                              <span className="font-medium text-slate-600 dark:text-slate-300">
+                                {new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).toLocaleString('vi-VN')}
+                              </span>
+                              {selectedSnapshot.beforeExecutedBy && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-amber-600 dark:text-amber-400 font-medium">
+                                    Tiếp nhận từ: {selectedSnapshot.beforeExecutedBy.fullName || selectedSnapshot.beforeExecutedBy.email}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          ) : activeExecution?.executedBy ? (
+                            <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
+                              <User className="w-3 h-3 text-slate-400" />
+                              <span>
+                                Thực hiện bởi: <strong>{activeExecution.executedBy.fullName || activeExecution.executedBy.email}</strong>
+                              </span>
+                              {activeExecution.executedAt && (
+                                <>
+                                  <span>•</span>
+                                  <span className="font-medium text-slate-600 dark:text-slate-300">
+                                    {new Date(activeExecution.executedAt).toLocaleString('vi-VN')}
+                                  </span>
+                                </>
+                              )}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              {selectedExecutionId ? 'Lần chạy được chọn từ timeline' : 'Chưa có lượt thực thi nào'}
+                            </p>
                           )}
                         </div>
+
                         {selectedSnapshot ? (
-                          <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
-                            <User className="w-3 h-3 text-slate-400" />
-                            <span>
-                              Thực hiện bởi: <strong>{selectedSnapshot.executedBy?.fullName || selectedSnapshot.executedBy?.email || 'Hệ thống'}</strong>
-                            </span>
-                            <span>•</span>
-                            <span className="font-medium text-slate-600 dark:text-slate-300">
-                              {new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).toLocaleString('vi-VN')}
-                            </span>
-                            {selectedSnapshot.beforeExecutedBy && (
-                              <>
-                                <span>•</span>
-                                <span className="text-amber-600 dark:text-amber-400 font-medium">
-                                  Tiếp nhận từ: {selectedSnapshot.beforeExecutedBy.fullName || selectedSnapshot.beforeExecutedBy.email}
-                                </span>
-                              </>
-                            )}
-                          </p>
-                        ) : activeExecution?.executedBy ? (
-                          <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
-                            <User className="w-3 h-3 text-slate-400" />
-                            <span>
-                              Thực hiện bởi: <strong>{activeExecution.executedBy.fullName || activeExecution.executedBy.email}</strong>
-                            </span>
-                            {activeExecution.executedAt && (
-                              <>
-                                <span>•</span>
-                                <span className="font-medium text-slate-600 dark:text-slate-300">
-                                  {new Date(activeExecution.executedAt).toLocaleString('vi-VN')}
-                                </span>
-                              </>
-                            )}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSnapshot(null)}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shrink-0"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Quay lại bản hiện tại</span>
+                          </button>
+                        ) : canEditCurrentExecution ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (latestSnapshot?.images && Array.isArray(latestSnapshot.images)) {
+                                setImages(latestSnapshot.images);
+                              }
+                              setIsEditing(true);
+                            }}
+                            className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Điều chỉnh kết quả</span>
+                          </button>
                         ) : (
-                          <p className="text-[11px] text-slate-400 mt-0.5">
-                            {selectedExecutionId ? 'Lần chạy được chọn từ timeline' : 'Chưa có lượt thực thi nào'}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={handleStartNewExecution}
+                            className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
+                            title="Ghi nhận kết quả kiểm thử mới của riêng bạn"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Ghi nhận kết quả của bạn</span>
+                          </button>
                         )}
                       </div>
 
+                      {/* Notice banner for historical snapshot or other user's execution */}
                       {selectedSnapshot ? (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedSnapshot(null)}
-                          className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-all shrink-0"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Quay lại bản hiện tại</span>
-                        </button>
-                      ) : canEditCurrentExecution ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (latestSnapshot?.images && Array.isArray(latestSnapshot.images)) {
-                              setImages(latestSnapshot.images);
-                            }
-                            setIsEditing(true);
-                          }}
-                          className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                          <span>Điều chỉnh kết quả</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={handleStartNewExecution}
-                          className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 hover:scale-105 transition-all shrink-0"
-                          title="Ghi nhận kết quả kiểm thử mới của riêng bạn"
-                        >
-                          <PlusCircle className="w-3.5 h-3.5" />
-                          <span>Ghi nhận kết quả của bạn</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Notice banner for historical snapshot or other user's execution */}
-                    {selectedSnapshot ? (
-                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 text-white shadow-sm">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <History className="w-4 h-4 text-blue-300 shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-xs font-bold truncate">
-                              Đang xem lịch sử giai đoạn lúc {new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).toLocaleString('vi-VN')}
-                            </p>
-                            <p className="text-[11px] text-blue-200/90 mt-0.5">
-                              Người thực thi: <strong>{selectedSnapshot.executedBy?.fullName || selectedSnapshot.executedBy?.email || 'Hệ thống'}</strong>
-                              {selectedSnapshot.beforeExecutedBy && ` • Tiếp nhận từ: ${selectedSnapshot.beforeExecutedBy.fullName || selectedSnapshot.beforeExecutedBy.email}`}
-                              {' • '}Chế độ xem lại lịch sử (Chỉ đọc)
-                            </p>
+                        <div className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-blue-900 via-indigo-900 to-purple-900 text-white shadow-sm">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <History className="w-4 h-4 text-blue-300 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold truncate">
+                                Đang xem lịch sử giai đoạn lúc {new Date(selectedSnapshot.updatedAt || selectedSnapshot.executedAt).toLocaleString('vi-VN')}
+                              </p>
+                              <p className="text-[11px] text-blue-200/90 mt-0.5">
+                                Người thực thi: <strong>{selectedSnapshot.executedBy?.fullName || selectedSnapshot.executedBy?.email || 'Hệ thống'}</strong>
+                                {selectedSnapshot.beforeExecutedBy && ` • Tiếp nhận từ: ${selectedSnapshot.beforeExecutedBy.fullName || selectedSnapshot.beforeExecutedBy.email}`}
+                                {' • '}Chế độ xem lại lịch sử (Chỉ đọc)
+                              </p>
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSnapshot(null)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-blue-900 hover:bg-blue-50 text-xs font-bold shadow transition-all shrink-0 ml-2"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Quay lại</span>
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedSnapshot(null)}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white text-blue-900 hover:bg-blue-50 text-xs font-bold shadow transition-all shrink-0 ml-2"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          <span>Quay lại</span>
-                        </button>
+                      ) : !canEditCurrentExecution && activeExecution && (
+                        <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-xs text-amber-800 dark:text-amber-300">
+                          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                          <span>
+                            Bạn đang xem kết quả của <strong>{activeExecution.executedBy?.fullName || activeExecution.executedBy?.email || 'người khác'}</strong>. Bạn không thể chỉnh sửa kết quả của người khác. Nhấn <strong>"Ghi nhận kết quả của bạn"</strong> để lưu kết quả mới.
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Status Banner */}
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Trạng thái đánh giá:</span>
+                        <StatusBadge status={selectedSnapshot ? selectedSnapshot.status : status} size="md" />
                       </div>
-                    ) : !canEditCurrentExecution && activeExecution && (
-                      <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 rounded-xl text-xs text-amber-800 dark:text-amber-300">
-                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                        <span>
-                          Bạn đang xem kết quả của <strong>{activeExecution.executedBy?.fullName || activeExecution.executedBy?.email || 'người khác'}</strong>. Bạn không thể chỉnh sửa kết quả của người khác. Nhấn <strong>"Ghi nhận kết quả của bạn"</strong> để lưu kết quả mới.
+
+                      {/* Environment Details */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                          <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mb-1">
+                            <Server className="w-3.5 h-3.5 text-blue-600" />
+                            Môi trường (Server)
+                          </span>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
+                            {(selectedSnapshot ? selectedSnapshot.server : server) || '—'}
+                          </p>
+                        </div>
+
+                        <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                          <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mb-1">
+                            <Monitor className="w-3.5 h-3.5 text-indigo-600" />
+                            Hệ điều hành (OS)
+                          </span>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            {(selectedSnapshot ? selectedSnapshot.os : os) || '—'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Actual Result Content */}
+                      <div>
+                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                          Kết quả thực tế (Actual Result):
                         </span>
-                      </div>
-                    )}
-
-                    {/* Status Banner */}
-                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Trạng thái đánh giá:</span>
-                      <StatusBadge status={selectedSnapshot ? selectedSnapshot.status : status} size="md" />
-                    </div>
-
-                    {/* Environment Details */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mb-1">
-                          <Server className="w-3.5 h-3.5 text-blue-600" />
-                          Môi trường (Server)
-                        </span>
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
-                          {(selectedSnapshot ? selectedSnapshot.server : server) || '—'}
-                        </p>
+                        {(selectedSnapshot ? selectedSnapshot.actualResult : actualResult) ? (
+                          <div
+                            className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 rich-text-content overflow-auto min-h-[140px] max-h-[380px]"
+                            dangerouslySetInnerHTML={{ __html: selectedSnapshot ? (selectedSnapshot.actualResult || '') : actualResult }}
+                          />
+                        ) : (
+                          <div className="p-4 text-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-400 italic">
+                            {selectedSnapshot ? 'Không có ghi nhận kết quả thực tế ở giai đoạn này.' : (
+                              <>Chưa ghi nhận kết quả thực tế. Nhấn <strong>"Điều chỉnh kết quả"</strong> để cập nhật.</>
+                            )}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                        <span className="text-[11px] font-semibold text-slate-500 flex items-center gap-1 mb-1">
-                          <Monitor className="w-3.5 h-3.5 text-indigo-600" />
-                          Hệ điều hành (OS)
-                        </span>
-                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                          {(selectedSnapshot ? selectedSnapshot.os : os) || '—'}
-                        </p>
-                      </div>
-                    </div>
+                      {/* Evaluation Content */}
+                      {(selectedSnapshot ? selectedSnapshot.evaluation : evaluation) && (
+                        <div>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                            Đánh giá (Evaluation):
+                          </span>
+                          <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 whitespace-pre-line">
+                            {selectedSnapshot ? selectedSnapshot.evaluation : evaluation}
+                          </p>
+                        </div>
+                      )}
 
-                    {/* Actual Result Content */}
-                    <div>
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                        Kết quả thực tế (Actual Result):
-                      </span>
-                      {(selectedSnapshot ? selectedSnapshot.actualResult : actualResult) ? (
-                        <div
-                          className="text-xs leading-relaxed text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 rich-text-content overflow-auto max-h-60"
-                          dangerouslySetInnerHTML={{ __html: selectedSnapshot ? (selectedSnapshot.actualResult || '') : actualResult }}
-                        />
-                      ) : (
-                        <div className="p-4 text-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-400 italic">
-                          {selectedSnapshot ? 'Không có ghi nhận kết quả thực tế ở giai đoạn này.' : (
-                            <>Chưa ghi nhận kết quả thực tế. Nhấn <strong>"Điều chỉnh kết quả"</strong> để cập nhật.</>
-                          )}
+                      {/* Notes / Bug Link */}
+                      {(selectedSnapshot ? selectedSnapshot.notes : notes) && (
+                        <div>
+                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                            Ghi chú / Link Bug / Nguyên nhân lỗi:
+                          </span>
+                          <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 whitespace-pre-line">
+                            {selectedSnapshot ? selectedSnapshot.notes : notes}
+                          </p>
                         </div>
                       )}
                     </div>
-
-                    {/* Evaluation Content */}
-                    {(selectedSnapshot ? selectedSnapshot.evaluation : evaluation) && (
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                          Đánh giá (Evaluation):
-                        </span>
-                        <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 whitespace-pre-line">
-                          {selectedSnapshot ? selectedSnapshot.evaluation : evaluation}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Notes / Bug Link */}
-                    {(selectedSnapshot ? selectedSnapshot.notes : notes) && (
-                      <div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
-                          Ghi chú / Link Bug / Nguyên nhân lỗi:
-                        </span>
-                        <p className="text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 whitespace-pre-line">
-                          {selectedSnapshot ? selectedSnapshot.notes : notes}
-                        </p>
-                      </div>
-                    )}
 
                     {/* Footer actions in View mode */}
-                    <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div className="mt-auto pt-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between shrink-0">
                       {saveSuccess ? (
                         <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold animate-in fade-in">
                           <CheckCircle2 className="w-4 h-4" />

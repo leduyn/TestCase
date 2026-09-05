@@ -480,11 +480,30 @@ export class ExecutionController {
       if (!execution) {
         return res.status(404).json({ message: 'Không tìm thấy kết quả thực thi' });
       }
-      if (!ExecutionController.canManageWatchers(execution, userId, userRole)) {
-        return res.status(403).json({ message: 'Bạn không có quyền quản lý người theo dõi' });
-      }
-
+      const isManager = ExecutionController.canManageWatchers(execution, userId, userRole);
       const ids = Array.isArray(userIds) ? (userIds as string[]) : [];
+
+      if (!isManager) {
+        // Nếu không phải creator/executor/admin, chỉ cho phép user tự thêm/bỏ chính mình (self-watch)
+        const currentWatchers = await prisma.testExecutionWatcher.findMany({
+          where: { executionId },
+          select: { userId: true },
+        });
+        const currentIds = currentWatchers.map((w) => w.userId);
+
+        const added = ids.filter((id) => !currentIds.includes(id));
+        const removed = currentIds.filter((id) => !ids.includes(id));
+
+        const isSelfToggle =
+          userId &&
+          ((added.length === 1 && added[0] === userId && removed.length === 0) ||
+            (removed.length === 1 && removed[0] === userId && added.length === 0) ||
+            (added.length === 0 && removed.length === 0));
+
+        if (!isSelfToggle) {
+          return res.status(403).json({ message: 'Bạn không có quyền quản lý người theo dõi khác' });
+        }
+      }
       await ExecutionController.replaceWatchers(executionId, ids);
 
       const watchers = await prisma.testExecutionWatcher.findMany({

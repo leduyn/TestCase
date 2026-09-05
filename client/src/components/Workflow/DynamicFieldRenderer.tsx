@@ -28,6 +28,7 @@ export interface DynamicFieldRendererProps {
   error?: string;
   users?: User[];
   allValues?: Record<string, any>;
+  showFieldKey?: boolean;
 }
 
 export const DynamicFieldRenderer: React.FC<DynamicFieldRendererProps> = ({
@@ -39,6 +40,7 @@ export const DynamicFieldRenderer: React.FC<DynamicFieldRendererProps> = ({
   error,
   users = [],
   allValues: _allValues = {},
+  showFieldKey = true,
 }) => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -912,9 +914,9 @@ export const DynamicFieldRenderer: React.FC<DynamicFieldRendererProps> = ({
       <div className="flex items-center justify-between">
         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
           {field.fieldLabel}
-          {field.isRequired && <span className="text-rose-500 ml-1">*</span>}
+          {field.isRequired && !readOnly && <span className="text-rose-500 ml-1">*</span>}
         </label>
-        <span className="text-[10px] font-mono text-slate-400">{field.fieldKey}</span>
+        {showFieldKey && <span className="text-[10px] font-mono text-slate-400">{field.fieldKey}</span>}
       </div>
 
       {field.helpText && (

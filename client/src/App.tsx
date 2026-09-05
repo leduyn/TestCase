@@ -17,6 +17,11 @@ import { WorkflowDashboard } from './pages/Workflow/WorkflowDashboard';
 import { ProcessList } from './pages/Workflow/ProcessList';
 import { TaskList } from './pages/Workflow/TaskList';
 import { TaskDetail } from './pages/Workflow/TaskDetail';
+import { ProposalTypesManagement } from './pages/Proposals/ProposalTypesManagement';
+import { ProposalCreate } from './pages/Proposals/ProposalCreate';
+import { ProposalHub } from './pages/Proposals/ProposalHub';
+import { ProposalDetail } from './pages/Proposals/ProposalDetail';
+import { ProposalReports } from './pages/Proposals/ProposalReports';
 import { setupApi } from './services/api';
 import { Loader2 } from 'lucide-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -145,6 +150,42 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/workflow/tasks/:id" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : <TaskDetail />
+          } />
+          {/* Proposal & Request Management Routes */}
+          <Route path="/proposals" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalHub /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/reports" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalReports /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/types" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalTypesManagement /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/settings" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalTypesManagement /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/new" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalCreate /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/create" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalCreate /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/:id" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalDetail /></ProtectedRoute>
+            )
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

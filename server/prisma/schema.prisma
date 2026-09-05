@@ -64,6 +64,61 @@ enum PermissionEffect {
   DENY
 }
 
+enum ProposalStatus {
+  DRAFT
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum ApprovalWorkflowType {
+  PARALLEL
+  SEQUENTIAL
+  ANY_ONE
+}
+
+enum ApprovalAction {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+  CANCELLED
+}
+
+enum ProposalPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ProposalHistoryType {
+  CREATED
+  SUBMITTED
+  UPDATED
+  APPROVED
+  REJECTED
+  CANCELLED
+  APPROVER_ADDED
+  APPROVER_REMOVED
+  WORKFLOW_STARTED
+  FOLLOWER_ADDED
+  FOLLOWER_REMOVED
+}
+
+enum ProposalNotificationType {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  REMINDER
+  COMMENT
+  WORKFLOW_STARTED
+  FOLLOWER_ADDED
+}
+
 model Permission {
   id          String   @id @default(uuid())
   key         String   @unique
@@ -118,6 +173,10 @@ model User {
   lastLogin         DateTime?         @map("last_login")
   failedLoginAttempts Int             @default(0) @map("failed_login_attempts")
   passwordExpiry    DateTime?         @map("password_expiry")
+  department        String?
+  managerId         String?           @map("manager_id")
+  manager           User?             @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates      User[]            @relation("UserManager")
   
   createdById       String?           @map("created_by")
   createdBy         User?             @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -165,6 +224,28 @@ model User {
   updatedCustomFieldDefinitions CustomFieldDefinition[] @relation("UpdatedCustomFieldDefinitions")
   filledTaskCustomFields        TaskCustomFieldValue[]  @relation("FilledTaskCustomFields")
   updatedTaskCustomFields       TaskCustomFieldValue[]  @relation("UpdatedTaskCustomFields")
+
+  createdProposals              Proposal[]              @relation("CreatedProposals")
+  updatedProposals              Proposal[]              @relation("UpdatedProposals")
+  directManagerProposals        Proposal[]              @relation("DirectManagerProposals")
+  approverApprovals             ProposalApproval[]      @relation("ApproverApprovals")
+  createdProposalApprovals      ProposalApproval[]      @relation("CreatedProposalApprovals")
+  changedProposalHistories      ProposalHistory[]       @relation("ProposalHistoryChangedBy")
+  createdProposalHistories      ProposalHistory[]       @relation("CreatedProposalHistories")
+  userProposalComments          ProposalComment[]       @relation("ProposalCommentUser")
+  createdProposalComments       ProposalComment[]       @relation("CreatedProposalComments")
+  updatedProposalComments       ProposalComment[]       @relation("UpdatedProposalComments")
+  receivedProposalNotifications ProposalNotification[]  @relation("ProposalNotificationRecipient")
+  proposalFollowers             ProposalFollower[]      @relation("ProposalFollowerUser")
+  addedProposalFollowers        ProposalFollower[]      @relation("ProposalFollowerAddedBy")
+  createdProposalTypes          ProposalType[]          @relation("CreatedProposalTypes")
+  updatedProposalTypes          ProposalType[]          @relation("UpdatedProposalTypes")
+  deletedProposalTypes          ProposalType[]          @relation("DeletedProposalTypes")
+  createdFormTemplates          FormTemplate[]          @relation("CreatedFormTemplates")
+  updatedFormTemplates          FormTemplate[]          @relation("UpdatedFormTemplates")
+  createdFormFieldDefinitions   FormFieldDefinition[]   @relation("CreatedFormFieldDefinitions")
+  updatedFormFieldDefinitions   FormFieldDefinition[]   @relation("UpdatedFormFieldDefinitions")
+  executionComments             TestExecutionComment[]  @relation("TestExecutionCommentUser")
 
   @@map("users")
 }
@@ -252,6 +333,7 @@ model TestExecution {
   images       TestExecutionImage[]
   watchers      TestExecutionWatcher[]
   history       TestExecutionHistory[]
+  comments      TestExecutionComment[]
 
   @@map("test_executions")
 }
@@ -322,6 +404,20 @@ model TestExecutionImage {
   @@map("test_execution_images")
 }
 
+model TestExecutionComment {
+  id          String        @id @default(uuid())
+  executionId String        @map("execution_id")
+  execution   TestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  userId      String        @map("user_id")
+  user        User          @relation("TestExecutionCommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  content     String        @db.Text
+  attachments Json?         @default("[]") @map("attachments")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@map("test_execution_comments")
+}
+
 model AiConfig {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
@@ -365,9 +461,10 @@ model Process {
   deletedById String?       @map("deleted_by")
   deletedBy   User?         @relation("DeletedProcesses", fields: [deletedById], references: [id], onDelete: SetNull)
 
-  steps        ProcessStep[]
-  tasks        Task[]
-  customFields CustomFieldDefinition[]
+  steps         ProcessStep[]
+  tasks         Task[]
+  customFields  CustomFieldDefinition[]
+  proposalTypes ProposalType[]
 
   @@map("processes")
 }
@@ -458,6 +555,7 @@ model Task {
   comments           TaskComment[]
   histories          TaskHistory[]
   customFieldValues  TaskCustomFieldValue[]
+  proposals          Proposal[]
 
   @@map("tasks")
 }
@@ -541,5 +639,227 @@ model TaskHistory {
   createdAt         DateTime              @default(now()) @map("created_at")
 
   @@map("task_histories")
+}
+
+model ProposalType {
+  id                     String               @id @default(uuid())
+  name                   String
+  code                   String               @unique
+  description            String?              @db.Text
+  icon                   String?
+  color                  String?
+  defaultApproverIds     Json                 @default("[]") @map("default_approver_ids")
+  isOptionalApprover     Boolean              @default(false) @map("is_optional_approver")
+  optionalApproverConfig Json?                @map("optional_approver_config")
+  approvalWorkflow       ApprovalWorkflowType @default(PARALLEL) @map("approval_workflow")
+  deadlineHours          Int                  @default(0) @map("deadline_hours")
+  creatorIds             Json?                @default("[]") @map("creator_ids")
+  creatorRoles           Json?                @default("[]") @map("creator_roles")
+  creatorDepartments     Json?                @default("[]") @map("creator_departments")
+  useCustomForm          Boolean              @default(false) @map("use_custom_form")
+  formTemplateId         String?              @map("form_template_id")
+  formTemplate           FormTemplate?        @relation("ProposalTypeSelectedFormTemplate", fields: [formTemplateId], references: [id], onDelete: SetNull)
+  linkedProcessId        String?              @map("linked_process_id")
+  linkedProcess          Process?             @relation(fields: [linkedProcessId], references: [id], onDelete: SetNull)
+  autoStartWorkflow      Boolean              @default(false) @map("auto_start_workflow")
+  isActive               Boolean              @default(true) @map("is_active")
+  allowDraft             Boolean              @default(true) @map("allow_draft")
+  allowCancel            Boolean              @default(true) @map("allow_cancel")
+  allowEditAfterSubmit   Boolean              @default(false) @map("allow_edit_after_submit")
+
+  createdById            String?              @map("created_by")
+  createdBy              User?                @relation("CreatedProposalTypes", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedById            String?              @map("updated_by")
+  updatedBy              User?                @relation("UpdatedProposalTypes", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  deletedAt              DateTime?            @map("deleted_at")
+  deletedById            String?              @map("deleted_by")
+  deletedBy              User?                @relation("DeletedProposalTypes", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  proposals              Proposal[]
+  formTemplates          FormTemplate[]       @relation("ProposalTypeFormTemplates")
+
+  @@map("proposal_types")
+}
+
+model FormTemplate {
+  id                     String                @id @default(uuid())
+  name                   String
+  description            String?               @db.Text
+  proposalTypeId         String?               @map("proposal_type_id")
+  proposalType           ProposalType?         @relation("ProposalTypeFormTemplates", fields: [proposalTypeId], references: [id], onDelete: SetNull)
+  isDefault              Boolean               @default(false) @map("is_default")
+  formStructure          Json?                 @default("{}") @map("form_structure")
+
+  createdById            String?               @map("created_by")
+  createdBy              User?                 @relation("CreatedFormTemplates", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedById            String?               @map("updated_by")
+  updatedBy              User?                 @relation("UpdatedFormTemplates", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+
+  fields                 FormFieldDefinition[]
+  selectedByProposalTypes ProposalType[]       @relation("ProposalTypeSelectedFormTemplate")
+
+  @@map("form_templates")
+}
+
+model FormFieldDefinition {
+  id                  String       @id @default(uuid())
+  formTemplateId      String       @map("form_template_id")
+  formTemplate        FormTemplate @relation(fields: [formTemplateId], references: [id], onDelete: Cascade)
+  fieldKey            String       @map("field_key")
+  fieldLabel          String       @map("field_label")
+  fieldType           String       @map("field_type")
+  fieldConfig         Json         @default("{}") @map("field_config")
+  isRequired          Boolean      @default(false) @map("is_required")
+  defaultValue        Json?        @map("default_value")
+  placeholder         String?
+  helpText            String?      @map("help_text")
+  order               Int          @default(0) @map("order")
+  isVisible           Boolean      @default(true) @map("is_visible")
+  visibilityCondition Json?        @map("visibility_condition")
+  validationRules     Json?        @map("validation_rules")
+  sectionId           String?      @map("section_id")
+
+  createdById         String?      @map("created_by")
+  createdBy           User?        @relation("CreatedFormFieldDefinitions", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedById         String?      @map("updated_by")
+  updatedBy           User?        @relation("UpdatedFormFieldDefinitions", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  @@unique([formTemplateId, fieldKey])
+  @@map("form_field_definitions")
+}
+
+model Proposal {
+  id                String           @id @default(uuid())
+  proposalTypeId    String           @map("proposal_type_id")
+  proposalType      ProposalType     @relation(fields: [proposalTypeId], references: [id], onDelete: Restrict)
+  title             String
+  content           String?          @db.Text
+  creatorId         String           @map("creator_id")
+  creator           User             @relation("CreatedProposals", fields: [creatorId], references: [id], onDelete: Restrict)
+  formData          Json?            @map("form_data")
+  defaultApprovers  Json?            @default("[]") @map("default_approvers")
+  optionalApprovers Json?            @default("[]") @map("optional_approvers")
+  directManagerId   String?          @map("direct_manager_id")
+  directManager     User?            @relation("DirectManagerProposals", fields: [directManagerId], references: [id], onDelete: SetNull)
+  approvalList      Json?            @default("[]") @map("approval_list")
+  status            ProposalStatus   @default(DRAFT) @map("status")
+  priority          ProposalPriority @default(NORMAL) @map("priority")
+  deadline          DateTime?        @map("deadline")
+  submittedAt       DateTime?        @map("submitted_at")
+  approvedAt        DateTime?        @map("approved_at")
+  rejectedAt        DateTime?        @map("rejected_at")
+  completedAt       DateTime?        @map("completed_at")
+  linkedTaskId      String?          @map("linked_task_id")
+  linkedTask        Task?            @relation(fields: [linkedTaskId], references: [id], onDelete: SetNull)
+  attachments       Json?            @default("[]") @map("attachments")
+  tags              Json?            @default("[]") @map("tags")
+
+  createdById       String?          @map("created_by")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedById       String?          @map("updated_by")
+  updatedBy         User?            @relation("UpdatedProposals", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  approvals         ProposalApproval[]
+  histories         ProposalHistory[]
+  comments          ProposalComment[]
+  notifications     ProposalNotification[]
+  followers         ProposalFollower[]
+
+  @@map("proposals")
+}
+
+model ProposalApproval {
+  id             String         @id @default(uuid())
+  proposalId     String         @map("proposal_id")
+  proposal       Proposal       @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  approverId     String         @map("approver_id")
+  approver       User           @relation("ApproverApprovals", fields: [approverId], references: [id], onDelete: Restrict)
+  order          Int            @default(1) @map("order")
+  action         ApprovalAction @default(PENDING) @map("action")
+  comment        String?        @db.Text @map("comment")
+  attachments    Json?          @default("[]") @map("attachments")
+  decidedAt      DateTime?      @map("decided_at")
+  reminderSentAt DateTime?      @map("reminder_sent_at")
+  reminderCount  Int            @default(0) @map("reminder_count")
+
+  createdById    String?        @map("created_by")
+  createdBy      User?          @relation("CreatedProposalApprovals", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@map("proposal_approvals")
+}
+
+model ProposalHistory {
+  id                String              @id @default(uuid())
+  proposalId        String              @map("proposal_id")
+  proposal          Proposal            @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  version           Int                 @default(1) @map("version")
+  changedById       String?             @map("changed_by")
+  changedBy         User?               @relation("ProposalHistoryChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+  changeType        ProposalHistoryType @map("change_type")
+  changeDescription String?             @db.Text @map("change_description")
+  snapshot          Json?               @map("snapshot")
+
+  createdById       String?             @map("created_by")
+  createdBy         User?               @relation("CreatedProposalHistories", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  @@map("proposal_histories")
+}
+
+model ProposalComment {
+  id          String   @id @default(uuid())
+  proposalId  String   @map("proposal_id")
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  userId      String   @map("user_id")
+  user        User     @relation("ProposalCommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  content     String   @db.Text
+  attachments Json?    @default("[]") @map("attachments")
+
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedProposalComments", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedProposalComments", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("proposal_comments")
+}
+
+model ProposalNotification {
+  id          String                   @id @default(uuid())
+  proposalId  String                   @map("proposal_id")
+  proposal    Proposal                 @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  recipientId String                   @map("recipient_id")
+  recipient   User                     @relation("ProposalNotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        ProposalNotificationType @map("type")
+  title       String
+  content     String                   @db.Text
+  isRead      Boolean                  @default(false) @map("is_read")
+  readAt      DateTime?                @map("read_at")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+
+  @@map("proposal_notifications")
+}
+
+model ProposalFollower {
+  id          String   @id @default(uuid())
+  proposalId  String   @map("proposal_id")
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  userId      String   @map("user_id")
+  user        User     @relation("ProposalFollowerUser", fields: [userId], references: [id], onDelete: Cascade)
+  addedById   String?  @map("added_by_id")
+  addedBy     User?    @relation("ProposalFollowerAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([proposalId, userId])
+  @@map("proposal_followers")
 }
 

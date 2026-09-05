@@ -1,6 +1,7 @@
 export type Role = 'ADMIN' | 'TESTER' | 'VIEWER' | 'MANAGER' | 'USER';
 
 export * from './workflow';
+export * from './proposal';
 
 export interface User {
   id: string;
@@ -8,6 +9,9 @@ export interface User {
   fullName: string;
   role: Role;
   status?: string;
+  department?: string | null;
+  managerId?: string | null;
+  manager?: User | null;
   createdAt?: string;
   lastLogin?: string;
 }
@@ -53,6 +57,31 @@ export interface TestExecutionWatcher {
   };
 }
 
+export interface ExecutionCommentAttachment {
+  name: string;
+  url: string;
+  storagePath?: string;
+  size?: number;
+  mimeType?: string;
+}
+
+export interface TestExecutionComment {
+  id: string;
+  executionId: string;
+  userId: string;
+  user: {
+    id: string;
+    fullName: string;
+    email: string;
+    role?: Role;
+    department?: string | null;
+  };
+  content: string;
+  attachments?: ExecutionCommentAttachment[] | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TestExecution {
   id: string;
   testCaseId: string;
@@ -74,6 +103,7 @@ export interface TestExecution {
     email: string;
   } | null;
   watchers?: TestExecutionWatcher[];
+  comments?: TestExecutionComment[];
   server?: string | null;
   os?: string | null;
   status: ExecutionStatus;

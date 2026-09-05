@@ -20,6 +20,13 @@ import standaloneTodoRoutes from './routes/standaloneTodoRoutes';
 import standaloneCommentRoutes from './routes/standaloneCommentRoutes';
 import workflowUploadRoutes from './routes/workflowUploadRoutes';
 import workflowReportRoutes from './routes/workflowReportRoutes';
+import proposalTypeRoutes from './routes/proposalTypeRoutes';
+import formTemplateRoutes from './routes/formTemplateRoutes';
+import formFieldRoutes from './routes/formFieldRoutes';
+import proposalRoutes from './routes/proposalRoutes';
+import myProposalRoutes from './routes/myProposalRoutes';
+import proposalReportRoutes from './routes/proposalReportRoutes';
+import proposalNotificationRoutes from './routes/proposalNotificationRoutes';
 import { checkDatabaseConnection } from './config/database';
 import { dbCheckMiddleware } from './controllers/setupController';
 
@@ -79,6 +86,16 @@ app.use('/api/workflow/upload', workflowUploadRoutes);
 app.use('/api/upload', workflowUploadRoutes);
 app.use('/api/reports', workflowReportRoutes);
 app.use('/api/workflow/reports', workflowReportRoutes);
+
+// Proposal / Request Management Routes
+app.use('/api/proposal-types', proposalTypeRoutes);
+app.use('/api/form-templates', formTemplateRoutes);
+app.use('/api/form-fields', formFieldRoutes);
+app.use('/api/proposals', proposalRoutes);
+app.use('/api/my', myProposalRoutes);
+app.use('/api/reports', proposalReportRoutes);
+app.use('/api/proposal-reports', proposalReportRoutes);
+app.use('/api/proposal-notifications', proposalNotificationRoutes);
 
 // Static uploads serving
 app.use('/uploads', express.static(path.resolve('./uploads')));
