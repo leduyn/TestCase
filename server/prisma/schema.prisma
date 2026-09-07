@@ -173,6 +173,8 @@ model User {
   lastLogin         DateTime?         @map("last_login")
   failedLoginAttempts Int             @default(0) @map("failed_login_attempts")
   passwordExpiry    DateTime?         @map("password_expiry")
+  resetPasswordToken   String?           @map("reset_password_token")
+  resetPasswordExpires DateTime?         @map("reset_password_expires")
   department        String?
   managerId         String?           @map("manager_id")
   manager           User?             @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)

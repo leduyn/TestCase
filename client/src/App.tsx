@@ -9,6 +9,8 @@ import { SuiteDetail } from './pages/SuiteDetail';
 import { TestCaseDetail } from './pages/TestCaseDetail';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { Settings } from './pages/Settings';
 import UserManagement from './pages/UserManagement';
 import { TestCaseManagement } from './pages/TestCaseManagement';
@@ -56,7 +58,12 @@ const AppContent: React.FC = () => {
             if (location.pathname === '/setup') {
               navigate('/', { replace: true });
             }
-            if (location.pathname !== '/login' && location.pathname !== '/register') {
+            if (
+              location.pathname !== '/login' &&
+              location.pathname !== '/register' &&
+              location.pathname !== '/forgot-password' &&
+              location.pathname !== '/reset-password'
+            ) {
               navigate('/login', { replace: true });
             }
           }
@@ -87,7 +94,14 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (checkingSetup && location.pathname !== '/setup' && location.pathname !== '/login' && location.pathname !== '/register') {
+  if (
+    checkingSetup &&
+    location.pathname !== '/setup' &&
+    location.pathname !== '/login' &&
+    location.pathname !== '/register' &&
+    location.pathname !== '/forgot-password' &&
+    location.pathname !== '/reset-password'
+  ) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
         <div className="flex flex-col items-center gap-3">
@@ -127,6 +141,8 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/login" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Login />} />
           <Route path="/register" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Register />} />
+          <Route path="/forgot-password" element={isSetupRequired ? <Navigate to="/setup" replace /> : <ForgotPassword />} />
+          <Route path="/reset-password" element={isSetupRequired ? <Navigate to="/setup" replace /> : <ResetPassword />} />
           <Route path="/settings" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : (
               <ProtectedRoute permissions={['settings:ai:read', 'settings:prompt:read', 'settings:env:read']} mode="any"><Settings /></ProtectedRoute>

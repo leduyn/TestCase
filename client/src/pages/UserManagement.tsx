@@ -19,6 +19,13 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  KeyRound,
+  Copy,
+  Check,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  Sparkles,
 } from 'lucide-react';
 
 interface ModalState {
@@ -70,6 +77,33 @@ const UserManagement: React.FC = () => {
   const [statusModal, setStatusModal] = useState<{ open: boolean; user?: User | null }>({
     open: false,
     user: null,
+  });
+
+  // Admin Reset Password Modal
+  const [resetPasswordModal, setResetPasswordModal] = useState<{
+    open: boolean;
+    user: User | null;
+    activeTab: 'manual' | 'link';
+    newPassword: string;
+    showPassword: boolean;
+    generatedLink: string | null;
+    submitting: boolean;
+    copiedPassword: boolean;
+    copiedLink: boolean;
+    error: string | null;
+    success: string | null;
+  }>({
+    open: false,
+    user: null,
+    activeTab: 'manual',
+    newPassword: '',
+    showPassword: true,
+    generatedLink: null,
+    submitting: false,
+    copiedPassword: false,
+    copiedLink: false,
+    error: null,
+    success: null,
   });
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -198,6 +232,122 @@ const UserManagement: React.FC = () => {
     } finally {
       setStatusModal({ open: false, user: null });
     }
+  };
+
+  const openResetPasswordModal = (targetUser: User) => {
+    setResetPasswordModal({
+      open: true,
+      user: targetUser,
+      activeTab: 'manual',
+      newPassword: '',
+      showPassword: true,
+      generatedLink: null,
+      submitting: false,
+      copiedPassword: false,
+      copiedLink: false,
+      error: null,
+      success: null,
+    });
+  };
+
+  const closeResetPasswordModal = () => {
+    setResetPasswordModal((prev) => ({ ...prev, open: false, user: null }));
+  };
+
+  const generateRandomPassword = () => {
+    const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lowercase = 'abcdefghjkmnpqrstuvwxyz';
+    const numbers = '23456789';
+    const symbols = '!@#$%^&*';
+    const all = uppercase + lowercase + numbers + symbols;
+
+    let res = '';
+    res += uppercase[Math.floor(Math.random() * uppercase.length)];
+    res += lowercase[Math.floor(Math.random() * lowercase.length)];
+    res += numbers[Math.floor(Math.random() * numbers.length)];
+    res += symbols[Math.floor(Math.random() * symbols.length)];
+
+    for (let i = 4; i < 10; i++) {
+      res += all[Math.floor(Math.random() * all.length)];
+    }
+
+    const shuffled = res.split('').sort(() => 0.5 - Math.random()).join('');
+    setResetPasswordModal((prev) => ({
+      ...prev,
+      newPassword: shuffled,
+      error: null,
+    }));
+  };
+
+  const handleAdminResetPasswordDirect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPasswordModal.user) return;
+    if (!resetPasswordModal.newPassword || resetPasswordModal.newPassword.length < 6) {
+      setResetPasswordModal((prev) => ({
+        ...prev,
+        error: 'Mật khẩu mới phải có tối thiểu 6 ký tự',
+      }));
+      return;
+    }
+
+    setResetPasswordModal((prev) => ({ ...prev, submitting: true, error: null, success: null }));
+    try {
+      const res = await userApi.adminResetPassword(resetPasswordModal.user.id, {
+        newPassword: resetPasswordModal.newPassword,
+      });
+      showToast(res.data.message || 'Đặt lại mật khẩu thành công', 'success');
+      setResetPasswordModal((prev) => ({
+        ...prev,
+        submitting: false,
+        success: 'Đặt lại mật khẩu thành công! Người dùng có thể đăng nhập bằng mật khẩu này.',
+      }));
+    } catch (err: any) {
+      setResetPasswordModal((prev) => ({
+        ...prev,
+        submitting: false,
+        error: err.response?.data?.message || 'Có lỗi xảy ra khi đặt lại mật khẩu',
+      }));
+    }
+  };
+
+  const handleAdminGenerateResetLink = async () => {
+    if (!resetPasswordModal.user) return;
+    setResetPasswordModal((prev) => ({ ...prev, submitting: true, error: null, success: null }));
+    try {
+      const res = await userApi.adminResetPassword(resetPasswordModal.user.id, {
+        type: 'generate_link',
+      });
+      setResetPasswordModal((prev) => ({
+        ...prev,
+        submitting: false,
+        generatedLink: res.data.resetUrl || null,
+        success: 'Tạo liên kết đặt lại mật khẩu thành công! Bạn có thể sao chép và gửi cho người dùng.',
+      }));
+    } catch (err: any) {
+      setResetPasswordModal((prev) => ({
+        ...prev,
+        submitting: false,
+        error: err.response?.data?.message || 'Có lỗi xảy ra khi tạo liên kết',
+      }));
+    }
+  };
+
+  const handleCopyGeneratedPassword = () => {
+    if (!resetPasswordModal.newPassword) return;
+    navigator.clipboard.writeText(resetPasswordModal.newPassword);
+    setResetPasswordModal((prev) => ({ ...prev, copiedPassword: true }));
+    setTimeout(() => {
+      setResetPasswordModal((prev) => ({ ...prev, copiedPassword: false }));
+    }, 2000);
+  };
+
+  const handleCopyGeneratedLink = () => {
+    if (!resetPasswordModal.generatedLink) return;
+    navigator.clipboard.writeText(resetPasswordModal.generatedLink);
+    setResetPasswordModal((prev) => ({ ...prev, copiedLink: true }));
+    setTimeout(() => {
+      setResetPasswordModal((prev) => ({ ...prev, copiedLink: false }));
+    }, 2000);
   };
 
   if (!currentUser) {
@@ -383,6 +533,15 @@ const UserManagement: React.FC = () => {
                             title="Sửa"
                           >
                             <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canUpdateUser && (
+                          <button
+                            onClick={() => openResetPasswordModal(u)}
+                            className="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+                            title="Đặt lại mật khẩu"
+                          >
+                            <KeyRound className="w-4 h-4" />
                           </button>
                         )}
                         {canToggleStatus && (
@@ -627,6 +786,268 @@ const UserManagement: React.FC = () => {
                   ? 'Khóa tài khoản'
                   : 'Mở khóa'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Reset Password Modal */}
+      {resetPasswordModal.open && resetPasswordModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-100 w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Đặt lại mật khẩu</h3>
+                  <p className="text-xs text-slate-500">
+                    Người dùng: <span className="font-semibold text-slate-700">{resetPasswordModal.user.fullName}</span> ({resetPasswordModal.user.email})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeResetPasswordModal}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg transition-colors hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200 px-6 pt-2 bg-slate-50/30">
+              <button
+                type="button"
+                onClick={() =>
+                  setResetPasswordModal((prev) => ({
+                    ...prev,
+                    activeTab: 'manual',
+                    error: null,
+                    success: null,
+                  }))
+                }
+                className={`py-2.5 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+                  resetPasswordModal.activeTab === 'manual'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Đặt mật khẩu trực tiếp
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setResetPasswordModal((prev) => ({
+                    ...prev,
+                    activeTab: 'link',
+                    error: null,
+                    success: null,
+                  }))
+                }
+                className={`py-2.5 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+                  resetPasswordModal.activeTab === 'link'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Cấp link đặt lại mật khẩu
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {resetPasswordModal.error && (
+                <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl flex items-start gap-2.5 text-xs text-rose-800">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{resetPasswordModal.error}</span>
+                </div>
+              )}
+
+              {resetPasswordModal.success && (
+                <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl flex items-start gap-2.5 text-xs text-emerald-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>{resetPasswordModal.success}</span>
+                </div>
+              )}
+
+              {resetPasswordModal.activeTab === 'manual' ? (
+                <form onSubmit={handleAdminResetPasswordDirect} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Mật khẩu mới <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type={resetPasswordModal.showPassword ? 'text' : 'password'}
+                        value={resetPasswordModal.newPassword}
+                        onChange={(e) =>
+                          setResetPasswordModal((prev) => ({
+                            ...prev,
+                            newPassword: e.target.value,
+                            error: null,
+                          }))
+                        }
+                        placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                        className="w-full pl-9 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setResetPasswordModal((prev) => ({
+                            ...prev,
+                            showPassword: !prev.showPassword,
+                          }))
+                        }
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                        tabIndex={-1}
+                      >
+                        {resetPasswordModal.showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions for password */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={generateRandomPassword}
+                      className="py-1.5 px-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      Tạo mật khẩu ngẫu nhiên
+                    </button>
+                    {resetPasswordModal.newPassword && (
+                      <button
+                        type="button"
+                        onClick={handleCopyGeneratedPassword}
+                        className="py-1.5 px-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                      >
+                        {resetPasswordModal.copiedPassword ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        {resetPasswordModal.copiedPassword ? 'Đã chép mật khẩu!' : 'Sao chép'}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/70 text-xs text-amber-800 space-y-1">
+                    <p className="font-semibold flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600" /> Lưu ý:
+                    </p>
+                    <p className="text-amber-700">
+                      Mật khẩu sẽ có hiệu lực ngay lập tức. Nếu tài khoản trước đó bị tạm khóa do nhập sai nhiều lần, hệ thống sẽ tự động mở khóa và reset số lần đăng nhập sai.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={closeResetPasswordModal}
+                      className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    >
+                      Đóng
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={
+                        resetPasswordModal.submitting ||
+                        !resetPasswordModal.newPassword ||
+                        resetPasswordModal.newPassword.length < 6
+                      }
+                      className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      {resetPasswordModal.submitting ? 'Đang cập nhật...' : 'Xác nhận đặt lại'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Hệ thống sẽ tạo ra một liên kết đặt lại mật khẩu an toàn (có hiệu lực trong <strong>24 giờ</strong>). Bạn có thể sao chép liên kết này để gửi qua Chat, Zalo hoặc Email cho nhân viên tự tạo mật khẩu mới.
+                  </p>
+
+                  {!resetPasswordModal.generatedLink ? (
+                    <div className="py-4 text-center">
+                      <button
+                        type="button"
+                        onClick={handleAdminGenerateResetLink}
+                        disabled={resetPasswordModal.submitting}
+                        className="py-2.5 px-5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 transition-all disabled:opacity-60 inline-flex items-center gap-2"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        {resetPasswordModal.submitting
+                          ? 'Đang tạo liên kết...'
+                          : 'Tạo liên kết đặt lại mật khẩu'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                          <span>Liên kết đặt lại mật khẩu:</span>
+                          <span className="text-emerald-600 font-medium">Hạn sử dụng: 24 giờ</span>
+                        </div>
+                        <div className="p-2 bg-white rounded border border-slate-200 text-xs font-mono break-all text-blue-600 select-all">
+                          {resetPasswordModal.generatedLink}
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={handleCopyGeneratedLink}
+                            className="flex-1 py-1.5 px-3 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            {resetPasswordModal.copiedLink ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            {resetPasswordModal.copiedLink ? 'Đã sao chép!' : 'Sao chép liên kết'}
+                          </button>
+                          <a
+                            href={resetPasswordModal.generatedLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="py-1.5 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium text-xs flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Mở liên kết
+                          </a>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2">
+                        <button
+                          type="button"
+                          onClick={handleAdminGenerateResetLink}
+                          disabled={resetPasswordModal.submitting}
+                          className="text-xs text-slate-500 hover:text-slate-800 underline"
+                        >
+                          Tạo lại liên kết mới
+                        </button>
+                        <button
+                          type="button"
+                          onClick={closeResetPasswordModal}
+                          className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                        >
+                          Đóng
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

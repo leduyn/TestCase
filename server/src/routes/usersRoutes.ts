@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { UserStatus } from '@prisma/client';
 import prisma from '../config/database';
 import { authenticate } from '../middleware/auth';
@@ -205,6 +206,67 @@ router.post('/:id/toggle-status', authenticate, requirePermission('users:status'
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/users/:id/reset-password - Admin đặt lại mật khẩu hoặc tạo link đặt lại mật khẩu cho người dùng
+router.post('/:id/reset-password', authenticate, requirePermission('users:update'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword, type } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+    }
+
+    // Cách 2: Cấp link reset cho User (hạn 24h)
+    if (type === 'generate_link') {
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const resetPasswordExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 giờ
+
+      await prisma.user.update({
+        where: { id },
+        data: {
+          resetPasswordToken: resetToken,
+          resetPasswordExpires,
+        },
+      });
+
+      const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+      const resetUrl = `${origin}/reset-password?token=${resetToken}`;
+
+      return res.json({
+        message: 'Tạo liên kết đặt lại mật khẩu thành công (hạn sử dụng 24 giờ)',
+        resetToken,
+        resetUrl,
+      });
+    }
+
+    // Cách 1: Đặt mật khẩu trực tiếp
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: 'Mật khẩu mới phải có tối thiểu 6 ký tự' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id },
+      data: {
+        passwordHash,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+        failedLoginAttempts: 0,
+        status: user.status === 'INACTIVE' ? 'ACTIVE' : user.status,
+      },
+    });
+
+    return res.json({
+      message: `Đặt lại mật khẩu cho người dùng ${user.fullName} (${user.email}) thành công`,
+    });
+  } catch (error: any) {
+    console.error('Admin reset password error:', error);
+    return res.status(500).json({ message: error.message || 'Lỗi máy chủ khi đặt lại mật khẩu' });
   }
 });
 

@@ -102,6 +102,14 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     api.post<{ message: string; token: string; user: User }>('/auth/login', data),
   getMe: () => api.get<{ user: User }>('/auth/me'),
+  forgotPassword: (data: { email: string }) =>
+    api.post<{ message: string; resetUrl?: string; token?: string }>('/auth/forgot-password', data),
+  verifyResetToken: (token: string) =>
+    api.get<{ valid: boolean; email?: string; fullName?: string; message?: string }>('/auth/verify-reset-token', {
+      params: { token },
+    }),
+  resetPassword: (data: { token: string; newPassword: string }) =>
+    api.post<{ message: string }>('/auth/reset-password', data),
 };
 
 // AI API
@@ -372,6 +380,14 @@ export const userApi = {
     api.put<User>(`/users/${id}`, data),
   deleteUser: (id: string) => api.delete<{ message: string }>(`/users/${id}`),
   toggleStatus: (id: string) => api.post<{ message: string; user: User }>(`/users/${id}/toggle-status`),
+  adminResetPassword: (
+    id: string,
+    data: { newPassword?: string; type?: 'manual' | 'generate_link' }
+  ) =>
+    api.post<{ message: string; resetUrl?: string; resetToken?: string }>(
+      `/users/${id}/reset-password`,
+      data
+    ),
 };
 
 // Permission API
