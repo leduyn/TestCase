@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import prisma from '../config/database';
+import { NotificationService } from '../services/notificationService';
 
 export class ExecutionCommentController {
   /**
@@ -108,6 +109,11 @@ export class ExecutionCommentController {
           },
         },
       });
+
+      // Gửi thông báo realtime bình luận thực thi
+      NotificationService.onExecutionCommentCreated(executionId, userId, content.trim()).catch((err) =>
+        console.error('Error sending onExecutionCommentCreated notification:', err)
+      );
 
       return res.status(201).json({ message: 'Thêm bình luận thành công', comment });
     } catch (error: any) {

@@ -1,5 +1,19 @@
 import prisma from '../config/database';
-import { ProposalNotificationType } from '@prisma/client';
+import { ProposalNotificationType, NotificationType } from '@prisma/client';
+import { NotificationService } from './notificationService';
+
+function mapToUnifiedType(type: ProposalNotificationType): NotificationType {
+  const map: Record<ProposalNotificationType, NotificationType> = {
+    SUBMITTED: 'PROPOSAL_SUBMITTED',
+    APPROVED: 'PROPOSAL_APPROVED',
+    REJECTED: 'PROPOSAL_REJECTED',
+    REMINDER: 'PROPOSAL_REMINDER',
+    COMMENT: 'PROPOSAL_COMMENT',
+    WORKFLOW_STARTED: 'PROPOSAL_WORKFLOW_STARTED',
+    FOLLOWER_ADDED: 'PROPOSAL_FOLLOWER_ADDED',
+  };
+  return map[type] || 'PROPOSAL_COMMENT';
+}
 
 /**
  * ProposalNotificationService - Quản lý thông báo và kiểm tra hạn chót (Scheduler) cho module đề xuất.
@@ -92,7 +106,7 @@ export class ProposalNotificationService {
     title: string;
     content: string;
   }) {
-    return prisma.proposalNotification.create({
+    const created = await prisma.proposalNotification.create({
       data: {
         proposalId: data.proposalId,
         recipientId: data.recipientId,
@@ -101,6 +115,17 @@ export class ProposalNotificationService {
         content: data.content,
       },
     });
+
+    // Đồng bộ sang bảng Notification hợp nhất & bắn socket realtime
+    NotificationService.createNotification({
+      recipientId: data.recipientId,
+      type: mapToUnifiedType(data.type),
+      title: data.title,
+      content: data.content,
+      proposalId: data.proposalId,
+    }).catch((err) => console.error('Error syncing proposal notification to unified:', err));
+
+    return created;
   }
 
   /**
@@ -132,6 +157,15 @@ export class ProposalNotificationService {
         },
       }),
     ]);
+
+    // Đồng bộ reminder sang bảng Notification hợp nhất & bắn socket realtime
+    NotificationService.createNotification({
+      recipientId: approverId,
+      type: 'PROPOSAL_REMINDER',
+      title: `Nhắc nhở: Đề xuất "${proposal.title}" cần phê duyệt`,
+      content: message,
+      proposalId,
+    }).catch((err) => console.error('Error syncing reminder to unified notification:', err));
   }
 
   /**

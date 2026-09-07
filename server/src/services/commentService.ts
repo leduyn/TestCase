@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { NotificationService } from './notificationService';
 
 export interface CreateCommentDto {
   content: string;
@@ -18,7 +19,7 @@ export class CommentService {
       throw new Error('Không tìm thấy nhiệm vụ');
     }
 
-    return await prisma.taskComment.create({
+    const comment = await prisma.taskComment.create({
       data: {
         taskId,
         userId,
@@ -33,6 +34,13 @@ export class CommentService {
         },
       },
     });
+
+    // Gửi thông báo realtime bình luận nhiệm vụ
+    NotificationService.onTaskCommentCreated(taskId, userId, data.content).catch((err) =>
+      console.error('Error sending onTaskCommentCreated notification:', err)
+    );
+
+    return comment;
   }
 
   /**

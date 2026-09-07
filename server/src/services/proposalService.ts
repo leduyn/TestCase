@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { ProposalStatus, ProposalPriority, Prisma } from '@prisma/client';
 import { ProposalWorkflowService } from './proposalWorkflowService';
+import { NotificationService } from './notificationService';
 
 export interface CreateProposalDto {
   proposalTypeId: string;
@@ -449,6 +450,11 @@ export class ProposalService {
             },
           })
         )
+      );
+
+      // Gửi thông báo realtime hợp nhất cho đề xuất
+      NotificationService.onProposalCommentCreated(proposalId, userId, content.trim()).catch((err) =>
+        console.error('Error sending onProposalCommentCreated notification:', err)
       );
 
       return comment;

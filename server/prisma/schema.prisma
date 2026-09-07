@@ -246,6 +246,7 @@ model User {
   createdFormFieldDefinitions   FormFieldDefinition[]   @relation("CreatedFormFieldDefinitions")
   updatedFormFieldDefinitions   FormFieldDefinition[]   @relation("UpdatedFormFieldDefinitions")
   executionComments             TestExecutionComment[]  @relation("TestExecutionCommentUser")
+  receivedNotifications         Notification[]          @relation("NotificationRecipient")
 
   @@map("users")
 }
@@ -303,6 +304,7 @@ model TestCase {
   updatedAt      DateTime        @updatedAt @map("updated_at")
 
   executions     TestExecution[]
+  notifications  Notification[]  @relation("TestCaseNotifications")
 
   @@map("test_cases")
 }
@@ -334,6 +336,7 @@ model TestExecution {
   watchers      TestExecutionWatcher[]
   history       TestExecutionHistory[]
   comments      TestExecutionComment[]
+  notifications Notification[]  @relation("ExecutionNotifications")
 
   @@map("test_executions")
 }
@@ -556,6 +559,7 @@ model Task {
   histories          TaskHistory[]
   customFieldValues  TaskCustomFieldValue[]
   proposals          Proposal[]
+  notifications      Notification[]  @relation("TaskNotifications")
 
   @@map("tasks")
 }
@@ -771,6 +775,7 @@ model Proposal {
   comments          ProposalComment[]
   notifications     ProposalNotification[]
   followers         ProposalFollower[]
+  unifiedNotifications Notification[] @relation("ProposalNotifications")
 
   @@map("proposals")
 }
@@ -861,5 +866,61 @@ model ProposalFollower {
 
   @@unique([proposalId, userId])
   @@map("proposal_followers")
+}
+
+enum NotificationType {
+  // Test Case & Test Execution
+  TESTCASE_UPDATED
+  TESTCASE_REVIEWED
+  EXECUTION_COMMENT
+  EXECUTION_STATUS_CHANGED
+  EXECUTION_ASSIGNED
+
+  // Task (Workflow)
+  TASK_COMMENT
+  TASK_STATUS_CHANGED
+  TASK_STEP_CHANGED
+  TASK_ASSIGNED
+  TASK_OVERDUE
+
+  // Proposal
+  PROPOSAL_COMMENT
+  PROPOSAL_SUBMITTED
+  PROPOSAL_APPROVED
+  PROPOSAL_REJECTED
+  PROPOSAL_REMINDER
+  PROPOSAL_WORKFLOW_STARTED
+  PROPOSAL_FOLLOWER_ADDED
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String           @map("recipient_id")
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  type        NotificationType @map("type")
+  title       String
+  content     String           @db.Text
+  isRead      Boolean          @default(false) @map("is_read")
+  readAt      DateTime?        @map("read_at")
+
+  // Polymorphic References
+  testCaseId  String?          @map("test_case_id")
+  testCase    TestCase?        @relation("TestCaseNotifications", fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  executionId String?          @map("execution_id")
+  execution   TestExecution?   @relation("ExecutionNotifications", fields: [executionId], references: [id], onDelete: Cascade)
+
+  taskId      String?          @map("task_id")
+  task        Task?            @relation("TaskNotifications", fields: [taskId], references: [id], onDelete: Cascade)
+
+  proposalId  String?          @map("proposal_id")
+  proposal    Proposal?        @relation("ProposalNotifications", fields: [proposalId], references: [id], onDelete: Cascade)
+
+  metadata    Json?            @default("{}")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([recipientId, isRead])
+  @@index([recipientId, createdAt])
+  @@map("notifications")
 }
 

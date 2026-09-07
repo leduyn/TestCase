@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { TestExecutionStatus } from '@prisma/client';
 import { canViewAllExecutionHistory } from '../services/permissionService';
 import { isStatusHandler } from '../services/statusHandlerService';
+import { NotificationService } from '../services/notificationService';
 
 const STATUS_PERMISSION_PREFIX = 'execution:set-';
 
@@ -142,6 +143,17 @@ export class ExecutionController {
           images: { orderBy: { uploadedAt: 'asc' } },
         },
       });
+
+      // Gửi thông báo realtime kết quả thực thi
+      if (req.user?.id) {
+        NotificationService.onExecutionStatusChanged(
+          execution.id,
+          req.user.id,
+          executionStatus,
+          evaluation || notes || actualResult,
+          targetHandlerId
+        ).catch((err) => console.error('Error sending onExecutionStatusChanged notification:', err));
+      }
 
       return res.json({
         message: ownExecution ? 'Cập nhật kết quả kiểm thử thành công' : 'Lưu kết quả kiểm thử thành công',
@@ -333,6 +345,17 @@ export class ExecutionController {
           images: { orderBy: { uploadedAt: 'asc' } },
         },
       });
+
+      // Gửi thông báo realtime kết quả thực thi
+      if (userId) {
+        NotificationService.onExecutionStatusChanged(
+          executionId,
+          userId,
+          executionStatus,
+          evaluation || notes || actualResult,
+          targetHandlerId
+        ).catch((err) => console.error('Error sending onExecutionStatusChanged notification:', err));
+      }
 
       return res.json({
         message: 'Cập nhật kết quả kiểm thử thành công',

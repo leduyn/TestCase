@@ -1,6 +1,8 @@
 import express from 'express';
+import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { initSocket } from './socket';
 import path from 'path';
 import authRoutes from './routes/authRoutes';
 import usersRoutes from './routes/usersRoutes';
@@ -27,6 +29,7 @@ import proposalRoutes from './routes/proposalRoutes';
 import myProposalRoutes from './routes/myProposalRoutes';
 import proposalReportRoutes from './routes/proposalReportRoutes';
 import proposalNotificationRoutes from './routes/proposalNotificationRoutes';
+import notificationRoutes from './routes/notificationRoutes';
 import { checkDatabaseConnection } from './config/database';
 import { dbCheckMiddleware } from './controllers/setupController';
 
@@ -36,7 +39,11 @@ import { CronService } from './services/cronService';
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
+
+// Khởi tạo Socket.IO Server
+initSocket(server);
 
 // Middlewares
 app.use(
@@ -97,6 +104,9 @@ app.use('/api/reports', proposalReportRoutes);
 app.use('/api/proposal-reports', proposalReportRoutes);
 app.use('/api/proposal-notifications', proposalNotificationRoutes);
 
+// Unified Realtime Notifications Route
+app.use('/api/notifications', notificationRoutes);
+
 // Static uploads serving
 app.use('/uploads', express.static(path.resolve('./uploads')));
 
@@ -111,7 +121,7 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 });
 
 // Start server and check DB
-app.listen(PORT, async () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
 

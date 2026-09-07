@@ -58,6 +58,7 @@ interface ExecutionDrawerProps {
   initialEditing?: boolean;
   initialExecution?: TestExecution | null;
   isNewExecution?: boolean;
+  highlightExecutionId?: string;
   onClose: () => void;
   onSaved: (updatedTestCase: TestCase) => void;
   onEditTestCase?: (testCase: TestCase) => void;
@@ -105,6 +106,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   initialEditing = false,
   initialExecution = null,
   isNewExecution = false,
+  highlightExecutionId,
   onClose,
   onSaved,
   onEditTestCase,
@@ -353,6 +355,17 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       setAllExecutions(execs);
 
       // Determine initial user & execution to display
+      if (highlightExecutionId) {
+        const targetExec = execs.find((e) => e.id === highlightExecutionId);
+        if (targetExec) {
+          const uKey = getUserKey(targetExec);
+          setSelectedUserId(uKey);
+          loadExecutionData(targetExec);
+          setIsEditing(false);
+          return;
+        }
+      }
+
       if (isNewExecution) {
         const targetUserId = currentUser?.id;
         if (targetUserId) {
@@ -444,7 +457,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     };
 
     initData();
-  }, [isOpen, testCase?.id, initialEditing, initialExecution, isNewExecution]);
+  }, [isOpen, testCase?.id, initialEditing, initialExecution, isNewExecution, highlightExecutionId]);
 
   // Executions of the currently selected user
   const userExecutions = useMemo(() => {
