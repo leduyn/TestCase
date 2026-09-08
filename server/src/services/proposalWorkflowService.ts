@@ -8,6 +8,7 @@ import {
   TaskStatus,
   TaskHistoryChangeType,
 } from '@prisma/client';
+import { ProposalNotificationService } from './proposalNotificationService';
 
 /**
  * ProposalWorkflowService - Core engine xử lý quy trình phê duyệt đề xuất.
@@ -114,28 +115,27 @@ export class ProposalWorkflowService {
         },
       });
 
-      // Gửi thông báo cho approvers
+      // Gửi thông báo cho approvers (sau transaction để sync unified notification)
       const notifyApproverIds =
         workflowType === 'SEQUENTIAL'
           ? [allApproverIds[0]] // Chỉ notify người đầu tiên
           : allApproverIds; // PARALLEL & ANY_ONE: notify tất cả
 
-      await Promise.all(
-        notifyApproverIds.map((approverId) =>
-          tx.proposalNotification.create({
-            data: {
-              proposalId,
-              recipientId: approverId,
-              type: 'SUBMITTED',
-              title: `Đề xuất mới cần phê duyệt: ${updatedProposal.title}`,
-              content: `Bạn có một đề xuất mới cần phê duyệt từ hệ thống.`,
-            },
-          })
-        )
-      );
-
-      return { proposal: updatedProposal, approvals };
+      return { proposal: updatedProposal, approvals, notifyApproverIds };
     });
+
+    // Gửi notification qua unified system & Socket.IO
+    await Promise.all(
+      result.notifyApproverIds.map((approverId) =>
+        ProposalNotificationService.createNotification({
+          proposalId: result.proposal.id,
+          recipientId: approverId,
+          type: 'SUBMITTED',
+          title: `Đề xuất mới cần phê duyệt: ${result.proposal.title}`,
+          content: `Bạn có một đề xuất mới cần phê duyệt từ hệ thống.`,
+        })
+      )
+    );
 
     return result;
   }
@@ -265,41 +265,43 @@ export class ProposalWorkflowService {
         },
       });
 
-      // Thông báo cho người tạo nếu đề xuất kết thúc
-      if (newStatus === 'APPROVED' || newStatus === 'REJECTED') {
-        await tx.proposalNotification.create({
-          data: {
-            proposalId,
-            recipientId: proposal.creatorId,
-            type: newStatus === 'APPROVED' ? 'APPROVED' : 'REJECTED',
-            title: `Đề xuất "${proposal.title}" đã ${newStatus === 'APPROVED' ? 'được phê duyệt' : 'bị từ chối'}`,
-            content: comment || `Đề xuất của bạn đã ${newStatus === 'APPROVED' ? 'được phê duyệt' : 'bị từ chối'}.`,
-          },
-        });
-      }
-
-      // Thông báo cho approver tiếp theo (SEQUENTIAL)
-      if (shouldNotifyNext && nextApproverId) {
-        await tx.proposalNotification.create({
-          data: {
-            proposalId,
-            recipientId: nextApproverId,
-            type: 'SUBMITTED',
-            title: `Đề xuất cần phê duyệt: ${proposal.title}`,
-            content: `Bạn có đề xuất mới cần phê duyệt (lượt duyệt tiếp theo).`,
-          },
-        });
-      }
-
-      // Tự động kích hoạt Workflow nếu APPROVED + autoStartWorkflow
-      if (newStatus === 'APPROVED' && proposal.proposalType.autoStartWorkflow) {
-        await this.triggerLinkedWorkflow(tx, updatedProposal, approverId);
-      }
-
-      return updatedProposal;
+      return {
+        updatedProposal,
+        newStatus,
+        shouldNotifyNext,
+        nextApproverId,
+        autoStartWorkflow: proposal.proposalType.autoStartWorkflow,
+      };
     });
 
-    return result;
+    // Thông báo cho người tạo nếu đề xuất kết thúc
+    if (result.newStatus === 'APPROVED' || result.newStatus === 'REJECTED') {
+      await ProposalNotificationService.createNotification({
+        proposalId,
+        recipientId: proposal.creatorId,
+        type: result.newStatus === 'APPROVED' ? 'APPROVED' : 'REJECTED',
+        title: `Đề xuất "${proposal.title}" đã ${result.newStatus === 'APPROVED' ? 'được phê duyệt' : 'bị từ chối'}`,
+        content: comment || `Đề xuất của bạn đã ${result.newStatus === 'APPROVED' ? 'được phê duyệt' : 'bị từ chối'}.`,
+      });
+    }
+
+    // Thông báo cho approver tiếp theo (SEQUENTIAL)
+    if (result.shouldNotifyNext && result.nextApproverId) {
+      await ProposalNotificationService.createNotification({
+        proposalId,
+        recipientId: result.nextApproverId,
+        type: 'SUBMITTED',
+        title: `Đề xuất cần phê duyệt: ${proposal.title}`,
+        content: `Bạn có đề xuất mới cần phê duyệt (lượt duyệt tiếp theo).`,
+      });
+    }
+
+    // Tự động kích hoạt Workflow nếu APPROVED + autoStartWorkflow
+    if (result.newStatus === 'APPROVED' && result.autoStartWorkflow) {
+      await this.triggerLinkedWorkflow(proposal, approverId);
+    }
+
+    return result.updatedProposal;
   }
 
   /**
@@ -405,14 +407,14 @@ export class ProposalWorkflowService {
    * Kích hoạt Workflow liên kết: Tạo Task mới trong Process khi đề xuất được APPROVED.
    * Ánh xạ formData sang customFields của Task và tạo các bản ghi TaskCustomFieldValue, TaskHistory.
    */
-  private static async triggerLinkedWorkflow(tx: any, proposal: any, userId: string) {
-    const proposalType = await tx.proposalType.findUnique({
+  private static async triggerLinkedWorkflow(proposal: any, userId: string) {
+    const proposalType = await prisma.proposalType.findUnique({
       where: { id: proposal.proposalTypeId },
     });
 
     if (!proposalType?.linkedProcessId) return;
 
-    const process = await tx.process.findFirst({
+    const process = await prisma.process.findFirst({
       where: { id: proposalType.linkedProcessId, deletedAt: null },
       include: {
         steps: { orderBy: { order: 'asc' } },
@@ -438,7 +440,7 @@ export class ProposalWorkflowService {
       const deadline = new Date();
       deadline.setHours(deadline.getHours() + (firstStep?.timeLimitHours || 24));
 
-      const task = await tx.task.create({
+      const task = await prisma.task.create({
         data: {
           processId: process.id,
           name: `[Đề xuất] ${proposal.title}`,
@@ -460,7 +462,7 @@ export class ProposalWorkflowService {
       for (const def of process.customFields) {
         const val = mappedCustomFields[def.fieldKey];
         if (val !== undefined && val !== null) {
-          await tx.taskCustomFieldValue.create({
+          await prisma.taskCustomFieldValue.create({
             data: {
               taskId: task.id,
               fieldDefinitionId: def.id,
@@ -475,7 +477,7 @@ export class ProposalWorkflowService {
       }
 
       // Tạo TaskHistory
-      await tx.taskHistory.create({
+      await prisma.taskHistory.create({
         data: {
           taskId: task.id,
           version: 1,
@@ -491,13 +493,13 @@ export class ProposalWorkflowService {
       });
 
       // Cập nhật linkedTaskId trên Proposal
-      await tx.proposal.update({
+      await prisma.proposal.update({
         where: { id: proposal.id },
         data: { linkedTaskId: task.id },
       });
 
       // Ghi lịch sử đề xuất
-      await tx.proposalHistory.create({
+      await prisma.proposalHistory.create({
         data: {
           proposalId: proposal.id,
           version: 0,
@@ -509,15 +511,13 @@ export class ProposalWorkflowService {
         },
       });
 
-      // Thông báo cho người tạo
-      await tx.proposalNotification.create({
-        data: {
-          proposalId: proposal.id,
-          recipientId: proposal.creatorId,
-          type: 'WORKFLOW_STARTED',
-          title: `Quy trình "${process.name}" đã được khởi chạy`,
-          content: `Đề xuất "${proposal.title}" đã được duyệt và quy trình liên kết đã tự động bắt đầu.`,
-        },
+      // Thông báo cho người tạo qua unified notification
+      await ProposalNotificationService.createNotification({
+        proposalId: proposal.id,
+        recipientId: proposal.creatorId,
+        type: 'WORKFLOW_STARTED',
+        title: `Quy trình "${process.name}" đã được khởi chạy`,
+        content: `Đề xuất "${proposal.title}" đã được duyệt và quy trình liên kết đã tự động bắt đầu.`,
       });
     } catch (error) {
       console.error('Error triggering linked workflow:', error);
@@ -545,19 +545,16 @@ export class ProposalWorkflowService {
       throw new Error('Loại đề xuất không được liên kết với quy trình nào');
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      await this.triggerLinkedWorkflow(tx, proposal, userId);
-      return prisma.proposal.findUnique({
-        where: { id: proposalId },
-        include: {
-          proposalType: true,
-          approvals: { orderBy: { order: 'asc' } },
-          linkedTask: true,
-        },
-      });
-    });
+    await this.triggerLinkedWorkflow(proposal, userId);
 
-    return result;
+    return prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: {
+        proposalType: true,
+        approvals: { orderBy: { order: 'asc' } },
+        linkedTask: true,
+      },
+    });
   }
 
   /**
@@ -669,30 +666,30 @@ export class ProposalWorkflowService {
         },
       });
 
-      // Thông báo cho approvers nếu đã gửi duyệt
-      if (proposal.status !== 'DRAFT') {
-        const approverIds = proposal.approvals
-          .filter((a) => a.action === 'PENDING')
-          .map((a) => a.approverId);
-
-        await Promise.all(
-          approverIds.map((approverId) =>
-            tx.proposalNotification.create({
-              data: {
-                proposalId,
-                recipientId: approverId,
-                type: 'SUBMITTED',
-                title: `Đề xuất đã bị hủy: ${proposal.title}`,
-                content: `Người tạo đã hủy đề xuất "${proposal.title}"${reason ? `. Lý do: ${reason}` : ''}.`,
-              },
-            })
-          )
-        );
-      }
-
-      return updated;
+      return {
+        updated,
+        shouldNotifyApprovers: proposal.status !== 'DRAFT',
+        approverIds: proposal.status !== 'DRAFT'
+          ? proposal.approvals.filter((a: any) => a.action === 'PENDING').map((a: any) => a.approverId)
+          : [],
+      };
     });
 
-    return result;
+    // Thông báo cho approvers nếu đã gửi duyệt
+    if (result.shouldNotifyApprovers) {
+      await Promise.all(
+        result.approverIds.map((approverId: string) =>
+          ProposalNotificationService.createNotification({
+            proposalId,
+            recipientId: approverId,
+            type: 'SUBMITTED',
+            title: `Đề xuất đã bị hủy: ${proposal.title}`,
+            content: `Người tạo đã hủy đề xuất "${proposal.title}"${reason ? `. Lý do: ${reason}` : ''}.`,
+          })
+        )
+      );
+    }
+
+    return result.updated;
   }
 }

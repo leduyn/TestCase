@@ -48,14 +48,16 @@ export const Navbar: React.FC = () => {
   const isActive = (path: string) =>
     location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
 
-  const canAccessGenerate = hasPermission('testcase:generate');
-  const canAccessImport = hasPermission('testcase:import');
+  const canAccessGenerate = hasPermission('testcase:read');
+  const canAccessImport = hasPermission('testcase:read');
   const canAccessSettings =
     hasPermission('settings:ai:read') ||
     hasPermission('settings:prompt:read') ||
     hasPermission('settings:env:read');
   const canAccessUserManagement = hasPermission('users:read');
-  const canAccessReview = hasPermission('testcase:review');
+  const canAccessReview = hasPermission('testcase:read');
+  const canAccessWorkflow = hasPermission('workflow:process:read');
+  const canAccessProposal = hasPermission('proposal:read');
 
   // Proposal pending approvals count & unified unread notifications count
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
@@ -111,6 +113,7 @@ export const Navbar: React.FC = () => {
       sendBrowserNotification(newNotif.title, {
         body: newNotif.content,
         tag: newNotif.id,
+        onlyWhenHidden: false,
         onClick: () => {
           navigate(meta.url);
         },
@@ -282,6 +285,7 @@ export const Navbar: React.FC = () => {
             Dashboard
           </Link>
 
+          {canAccessWorkflow && (
           <Link
             to="/workflow"
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -293,37 +297,42 @@ export const Navbar: React.FC = () => {
             <Layers className="w-4 h-4 text-indigo-500" />
             Quy trình
           </Link>
+        )}
 
-          {/* Proposal Hub with Pending Approvals Badge */}
-          <Link
-            to="/proposals"
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${
-              isActive('/proposals') && !isActive('/proposals/reports')
-                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-            <span>Đề xuất</span>
-            {pendingApprovalsCount > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-white animate-pulse shadow-sm">
-                {pendingApprovalsCount}
-              </span>
-            )}
-          </Link>
+        {canAccessProposal && (
+          <>
+            {/* Proposal Hub with Pending Approvals Badge */}
+            <Link
+              to="/proposals"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${
+                isActive('/proposals') && !isActive('/proposals/reports')
+                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
+              }`}
+            >
+              <FileText className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Đề xuất</span>
+              {pendingApprovalsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-amber-500 text-white animate-pulse shadow-sm">
+                  {pendingApprovalsCount}
+                </span>
+              )}
+            </Link>
 
-          {/* Proposal Reports Link */}
-          <Link
-            to="/proposals/reports"
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-              isActive('/proposals/reports')
-                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
-            }`}
-          >
-            <BarChart3 className="w-4 h-4 text-blue-500" />
-            <span>Báo cáo</span>
-          </Link>
+            {/* Proposal Reports Link */}
+            <Link
+              to="/proposals/reports"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isActive('/proposals/reports')
+                  ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4 text-blue-500" />
+              <span>Báo cáo</span>
+            </Link>
+          </>
+        )}
 
           {canAccessGenerate && (
             <Link
