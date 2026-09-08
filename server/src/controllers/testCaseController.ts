@@ -7,22 +7,22 @@ import { canViewAllExecutionHistory, canViewAllUserTestStats, canViewUserTestSta
 import { NotificationService } from '../services/notificationService';
 
 // Resolve the "latest execution" to display for a test case based on the viewer's permission:
-// - read-all (canViewAll): overall latest execution (most recent across all users)
-// - read-own: the viewer's own latest execution
+// - Always prioritize the viewer's own latest execution (if logged in)
+// - Fallback to overall latest execution across the team if canViewAll is true
 function pickLatestExecution(
   executions: any[],
   currentUserId?: string | null,
   canViewAll?: boolean
 ): any | null {
   if (!executions || executions.length === 0) return null;
-  if (canViewAll) return executions[0];
   if (currentUserId) {
     const own = executions.find(
       (e: any) => e.createdById === currentUserId || e.executedById === currentUserId
     );
-    return own || null;
+    if (own) return own;
   }
-  return executions[0];
+  if (canViewAll) return executions[0];
+  return null;
 }
 
 // Giống pickLatestExecution nhưng cũng tính người được theo dõi (watchers)
@@ -32,7 +32,6 @@ function pickLatestVisibleExecution(
   canViewAll?: boolean
 ): any | null {
   if (!executions || executions.length === 0) return null;
-  if (canViewAll) return executions[0];
   if (currentUserId) {
     const own = executions.find(
       (e: any) =>
@@ -40,9 +39,10 @@ function pickLatestVisibleExecution(
         e.executedById === currentUserId ||
         (Array.isArray(e.watchers) && e.watchers.some((w: any) => w.userId === currentUserId))
     );
-    return own || null;
+    if (own) return own;
   }
-  return executions[0];
+  if (canViewAll) return executions[0];
+  return null;
 }
 
 // Điều kiện execution có thể xem bởi user hiện tại (tạo / thực thi / theo dõi)
@@ -539,15 +539,22 @@ export class TestCaseController {
     }
   }
 
-  // Tạo bộ execution UNTESTED cho user hiện tại với các Test Case (REVIEWED) trong suite
-  // mà user chưa test (chưa có execution do chính user tạo hoặc thực thi).
-  // Hỗ trợ lọc theo nhóm chức năng (module) hoặc danh sách testCaseIds cụ thể.
+  // Tạo bộ execution UNTESTED cho user hiện tại với các Test Case (REVIEWED) trong suite.
+  // - Nếu newRound = true: Tạo một lượt kiểm thử mới hoàn toàn (thêm số lần test) cho toàn bộ hoặc nhóm chức năng.
+  // - Nếu newRound = false/undefined: Cấp phát các test case mà user chưa từng nhận.
+  // - Độc lập hoàn toàn (beforeExecutedId = null), không nhận lại hay kế thừa từ người khác.
+  // - Hỗ trợ gán danh sách người theo dõi mặc định (watcherIds) ngay khi khởi tạo.
   static async provisionExecutions(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
       const currentUserId = req.user?.id;
-      const body = (req.body || {}) as { module?: string; testCaseIds?: string[] };
-      const { module, testCaseIds } = body;
+      const body = (req.body || {}) as {
+        module?: string;
+        testCaseIds?: string[];
+        newRound?: boolean;
+        watcherIds?: string[];
+      };
+      const { module, testCaseIds, newRound, watcherIds } = body;
       if (!currentUserId) {
         return res.status(401).json({ message: 'Chưa xác thực' });
       }
@@ -579,83 +586,105 @@ export class TestCaseController {
         return res.json({ message: 'Không có Test Case nào thỏa mãn để nhận', created: 0, testCaseIds: [] });
       }
 
-      // Test case user đã có execution (do user tạo hoặc user thực thi)
-      const existing = await prisma.testExecution.findMany({
-        where: {
-          testCaseId: { in: caseIds },
-          OR: [{ createdById: currentUserId }, { executedById: currentUserId }],
-        },
-        select: { testCaseId: true },
-      });
-      const existingIds = new Set(existing.map((e) => e.testCaseId));
-      const missing = caseIds.filter((cid) => !existingIds.has(cid));
+      let targetCaseIds: string[] = [];
+
+      if (newRound) {
+        // Tạo lượt kiểm thử mới cho tất cả các case trong phạm vi
+        targetCaseIds = caseIds;
+      } else {
+        // Test case user đã có execution (do user tạo hoặc user thực thi)
+        const existing = await prisma.testExecution.findMany({
+          where: {
+            testCaseId: { in: caseIds },
+            OR: [{ createdById: currentUserId }, { executedById: currentUserId }],
+          },
+          select: { testCaseId: true },
+        });
+        const existingIds = new Set(existing.map((e) => e.testCaseId));
+        targetCaseIds = caseIds.filter((cid) => !existingIds.has(cid));
+      }
 
       let created = 0;
-      if (missing.length > 0) {
-        // Tìm execution gần nhất của user khác (nếu có) để kế thừa beforeExecutedId (tiếp nhận từ ai)
-        const prevExecutions = await prisma.testExecution.findMany({
-          where: {
-            testCaseId: { in: missing },
-            NOT: { createdById: currentUserId },
-          },
-          orderBy: { executedAt: 'desc' },
-          select: { testCaseId: true, executedById: true },
-        });
-
-        const prevMap = new Map<string, string>();
-        for (const pe of prevExecutions) {
-          if (!prevMap.has(pe.testCaseId) && pe.executedById) {
-            prevMap.set(pe.testCaseId, pe.executedById);
-          }
-        }
-
+      if (targetCaseIds.length > 0) {
+        // Tạo mới bộ execution UNTESTED độc lập cho user hiện tại (không lấy lại từ người khác)
         await prisma.testExecution.createMany({
-          data: missing.map((cid) => ({
+          data: targetCaseIds.map((cid) => ({
             testCaseId: cid,
             status: 'UNTESTED',
             createdById: currentUserId,
             executedById: currentUserId,
-            beforeExecutedId: prevMap.get(cid) || null,
+            beforeExecutedId: null,
           })),
         });
-        created = missing.length;
+        created = targetCaseIds.length;
 
-        // Ghi nhận snapshot lịch sử ban đầu cho các execution vừa nhận
-        const newExecutions = await prisma.testExecution.findMany({
+        // Lấy danh sách execution vừa tạo (mới nhất theo thời gian cho từng testCaseId của user hiện tại)
+        const recentExecutions = await prisma.testExecution.findMany({
           where: {
-            testCaseId: { in: missing },
+            testCaseId: { in: targetCaseIds },
             createdById: currentUserId,
           },
+          orderBy: { executedAt: 'desc' },
         });
 
+        const newestMap = new Map<string, typeof recentExecutions[0]>();
+        for (const exec of recentExecutions) {
+          if (!newestMap.has(exec.testCaseId)) {
+            newestMap.set(exec.testCaseId, exec);
+          }
+        }
+        const newExecutions = Array.from(newestMap.values());
+
+        // Ghi nhận snapshot lịch sử ban đầu cho các execution vừa nhận
         if (newExecutions.length > 0) {
           await prisma.testExecutionHistory.createMany({
             data: newExecutions.map((exec) => ({
               executionId: exec.id,
               testCaseId: exec.testCaseId,
               executedById: exec.executedById,
-              beforeExecutedId: exec.beforeExecutedId,
+              beforeExecutedId: null,
               createdById: exec.createdById,
               server: exec.server,
               os: exec.os,
               status: exec.status,
               actualResult: exec.actualResult,
               evaluation: exec.evaluation,
-              notes: exec.notes || 'Nhận test case để bắt đầu thực hiện',
+              notes: newRound ? 'Nhận lượt kiểm thử mới để bắt đầu thực hiện' : 'Nhận test case để bắt đầu thực hiện',
               executedAt: exec.executedAt,
               updatedAt: exec.updatedAt,
             })),
           });
+
+          // Gán người theo dõi mặc định nếu có truyền danh sách watcherIds
+          if (Array.isArray(watcherIds) && watcherIds.length > 0) {
+            const validWatcherIds = Array.from(
+              new Set(watcherIds.filter((wId) => typeof wId === 'string' && wId.trim()))
+            );
+            if (validWatcherIds.length > 0) {
+              const watcherData: { executionId: string; userId: string }[] = [];
+              for (const exec of newExecutions) {
+                for (const wId of validWatcherIds) {
+                  watcherData.push({ executionId: exec.id, userId: wId });
+                }
+              }
+              await prisma.testExecutionWatcher.createMany({
+                data: watcherData,
+                skipDuplicates: true,
+              });
+            }
+          }
         }
       }
 
       return res.json({
         message:
           created > 0
-            ? `Đã lấy ${created} Test Case để thực hiện`
-            : 'Bạn đã nhận đủ các Test Case này',
+            ? newRound
+              ? `Đã nhận lượt kiểm thử mới cho ${created} Test Case`
+              : `Đã lấy ${created} Test Case để thực hiện`
+            : 'Bạn đã nhận đủ các Test Case này. Hãy chọn "Nhận lượt test mới" nếu muốn tạo lượt kiểm thử tiếp theo.',
         created,
-        testCaseIds: missing,
+        testCaseIds: targetCaseIds,
       });
     } catch (error: any) {
       console.error('Provision executions error:', error);
