@@ -1,32 +1,30 @@
-# Custom Fields - Task Checklist
+# Task List - Cải tiến "Nhận & Bắt đầu" Test Execution
 
-## Giai đoạn 1: Database Schema
-- [x] Thêm `CustomFieldDefinition` model vào schema.prisma
-- [x] Thêm `TaskCustomFieldValue` model vào schema.prisma
-- [x] Thêm enum `FIELD_UPDATED` vào `TaskHistoryChangeType`
-- [x] Cập nhật quan hệ User, Process, ProcessStep, Task
-- [x] Chạy `prisma db push` đồng bộ database
+## Bước 1 (Backend - Core Query) ✅
+- [x] Sửa `pickLatestExecution` ưu tiên `currentUserId`
+- [x] Sửa `pickLatestVisibleExecution` ưu tiên `currentUserId`
 
-## Giai đoạn 2: Backend API & Services
-- [x] Tạo `customFieldService.ts` (CRUD Custom Field Definitions)
-- [x] Tạo `customFieldController.ts` (REST endpoints)
-- [x] Tạo `taskCustomFieldService.ts` (Lưu/đọc giá trị)
-- [x] Tạo `taskCustomFieldController.ts` (Task field values endpoints)
-- [x] Đăng ký routes
-- [x] Kiểm tra TypeScript (`tsc --noEmit`)
+## Bước 2 (Backend - Provisioning) ✅
+- [x] Cải tiến `provisionExecutions`: `beforeExecutedId = null`, hỗ trợ `newRound`, `watcherIds`
 
-## Giai đoạn 3: Frontend Custom Field Builder
-- [x] Tạo `CustomFieldList.tsx` (Danh sách fields theo process/step)
-- [x] Tạo `CustomFieldEditorModal.tsx` (Tạo/sửa field)
-- [x] Tích hợp vào `ProcessModal.tsx`
-- [x] Tạo `workflowApi.ts` endpoints cho custom fields
+## Bước 3 (Client - API Service) ✅
+- [x] Cập nhật `takeTestCases` hỗ trợ `newRound`, `watcherIds`
 
-## Giai đoạn 4: Frontend Dynamic Form Renderer
-- [x] Tạo `DynamicFieldRenderer.tsx` (Render 1 field theo type)
-- [x] Tạo `DynamicFormRenderer.tsx` (Render form nhiều fields)
-- [x] Tích hợp vào `TaskDetail.tsx`
-- [x] Kiểm tra TypeScript client
+## Bước 4 (Client - Modal UI) ✅
+- [x] Tạo `ReceiveTestCasesModal.tsx` cho chọn watchers và xác nhận
 
-## Giai đoạn 5: Seed Data & Testing
-- [x] Bổ sung seed data custom fields
-- [x] Kiểm thử tổng thể
+## Bước 5 (Client - SuiteDetail Integration)
+- [x] Import `ReceiveTestCasesModal` (đã có)
+- [x] Thêm state `receiveModalConfig` (đã có)
+- [x] Thêm `handleOpenTakeModal`, `handleOpenNewRoundModal`, `handleOpenReceiveModuleModal` (đã có)
+- [x] Thêm `handleConfirmReceive` (đã có)
+- [x] Thêm nút "Nhận lượt test mới" trên Toolbar (đã có)
+- [ ] **Render `<ReceiveTestCasesModal>` trong JSX** (THIẾU)
+- [ ] **Sửa `handleReceiveModule` → dùng `handleOpenReceiveModuleModal`** (BUG)
+
+## Bước 6 (Client - Execution Drawer)
+- [ ] Kiểm tra hiển thị lượt test và watchers
+
+## Bước 7 (Verification & Build)
+- [ ] Chạy TypeScript compile check server
+- [ ] Chạy TypeScript compile check client

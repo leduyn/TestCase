@@ -210,17 +210,15 @@ export class ProposalNotificationService {
               snapshot: { reason: 'EXPIRED', deadline: proposal.deadline },
             },
           });
+        });
 
-          // Thông báo cho người tạo
-          await tx.proposalNotification.create({
-            data: {
-              proposalId: proposal.id,
-              recipientId: proposal.creatorId,
-              type: 'REMINDER',
-              title: `Đề xuất "${proposal.title}" đã quá hạn`,
-              content: 'Đề xuất của bạn đã quá thời hạn phê duyệt và tự động chuyển sang trạng thái Hết hạn.',
-            },
-          });
+        // Thông báo cho người tạo qua unified notification & Socket.IO
+        await ProposalNotificationService.createNotification({
+          proposalId: proposal.id,
+          recipientId: proposal.creatorId,
+          type: 'REMINDER',
+          title: `Đề xuất "${proposal.title}" đã quá hạn`,
+          content: 'Đề xuất của bạn đã quá thời hạn phê duyệt và tự động chuyển sang trạng thái Hết hạn.',
         });
       } catch (error) {
         console.error(`Error processing expired proposal ${proposal.id}:`, error);

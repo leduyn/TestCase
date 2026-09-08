@@ -108,6 +108,12 @@ export const PERMISSIONS = [
   { key: 'workflow:task:read', name: 'Xem Nhiệm vụ', category: 'WORKFLOW', description: 'Xem danh sách và chi tiết nhiệm vụ quy trình' },
   { key: 'workflow:task:write', name: 'Quản lý Nhiệm vụ', category: 'WORKFLOW', description: 'Tạo mới, cập nhật, chuyển bước, hoàn thành, hủy nhiệm vụ' },
   { key: 'workflow:report:read', name: 'Xem Báo cáo Workflow', category: 'WORKFLOW', description: 'Xem biểu đồ và thống kê hiệu suất quy trình & nhiệm vụ' },
+
+  // PROPOSAL
+  { key: 'proposal:read', name: 'Xem Đề xuất', category: 'PROPOSAL', description: 'Xem danh sách và chi tiết đề xuất' },
+  { key: 'proposal:create', name: 'Tạo Đề xuất', category: 'PROPOSAL', description: 'Tạo đề xuất mới' },
+  { key: 'proposal:approve', name: 'Duyệt Đề xuất', category: 'PROPOSAL', description: 'Duyệt đề xuất chuyển sang trạng thái APPROVED' },
+  { key: 'proposal:reject', name: 'Từ chối Đề xuất', category: 'PROPOSAL', description: 'Từ chối đề xuất chuyển sang trạng thái REJECTED' },
 ];
 
 export const ROLE_PERMISSIONS: Record<string, string[]> = {

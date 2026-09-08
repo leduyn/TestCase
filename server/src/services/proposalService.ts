@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { ProposalStatus, ProposalPriority, Prisma } from '@prisma/client';
 import { ProposalWorkflowService } from './proposalWorkflowService';
+import { ProposalNotificationService } from './proposalNotificationService';
 import { NotificationService } from './notificationService';
 
 export interface CreateProposalDto {
@@ -405,60 +406,57 @@ export class ProposalService {
 
     if (!proposal) throw new Error('Không tìm thấy đề xuất');
 
-    return prisma.$transaction(async (tx) => {
-      const comment = await tx.proposalComment.create({
-        data: {
-          proposalId,
-          userId,
-          content: content.trim(),
-          attachments: attachments || [],
-          createdById: userId,
-          updatedById: userId,
+    const comment = await prisma.proposalComment.create({
+      data: {
+        proposalId,
+        userId,
+        content: content.trim(),
+        attachments: attachments || [],
+        createdById: userId,
+        updatedById: userId,
+      },
+      include: {
+        user: {
+          select: { id: true, fullName: true, email: true },
         },
-        include: {
-          user: {
-            select: { id: true, fullName: true, email: true },
-          },
-        },
-      });
-
-      // Thông báo bình luận đến người tạo, approvers và người theo dõi (trừ người gửi bình luận)
-      const notifyIds = new Set<string>();
-      if (proposal.creatorId !== userId) notifyIds.add(proposal.creatorId);
-      for (const a of proposal.approvals) {
-        if (a.approverId !== userId) notifyIds.add(a.approverId);
-      }
-
-      // Lấy danh sách người theo dõi để gửi thông báo
-      const followers = await tx.proposalFollower.findMany({
-        where: { proposalId },
-        select: { userId: true },
-      });
-      for (const f of followers) {
-        if (f.userId !== userId) notifyIds.add(f.userId);
-      }
-
-      await Promise.all(
-        Array.from(notifyIds).map((recipientId) =>
-          tx.proposalNotification.create({
-            data: {
-              proposalId,
-              recipientId,
-              type: 'COMMENT',
-              title: `Bình luận mới trên đề xuất "${proposal.title}"`,
-              content: `${comment.user.fullName}: "${content.length > 60 ? content.substring(0, 60) + '...' : content}"`,
-            },
-          })
-        )
-      );
-
-      // Gửi thông báo realtime hợp nhất cho đề xuất
-      NotificationService.onProposalCommentCreated(proposalId, userId, content.trim()).catch((err) =>
-        console.error('Error sending onProposalCommentCreated notification:', err)
-      );
-
-      return comment;
+      },
     });
+
+    // Thông báo bình luận đến người tạo, approvers và người theo dõi (trừ người gửi bình luận)
+    const notifyIds = new Set<string>();
+    if (proposal.creatorId !== userId) notifyIds.add(proposal.creatorId);
+    for (const a of proposal.approvals) {
+      if (a.approverId !== userId) notifyIds.add(a.approverId);
+    }
+
+    // Lấy danh sách người theo dõi để gửi thông báo
+    const followers = await prisma.proposalFollower.findMany({
+      where: { proposalId },
+      select: { userId: true },
+    });
+    for (const f of followers) {
+      if (f.userId !== userId) notifyIds.add(f.userId);
+    }
+
+    // Gửi thông báo qua unified notification & Socket.IO
+    await Promise.all(
+      Array.from(notifyIds).map((recipientId) =>
+        ProposalNotificationService.createNotification({
+          proposalId,
+          recipientId,
+          type: 'COMMENT',
+          title: `Bình luận mới trên đề xuất "${proposal.title}"`,
+          content: `${comment.user.fullName}: "${content.length > 60 ? content.substring(0, 60) + '...' : content}"`,
+        })
+      )
+    );
+
+    // Gửi thông báo realtime hợp nhất cho đề xuất
+    NotificationService.onProposalCommentCreated(proposalId, userId, content.trim()).catch((err) =>
+      console.error('Error sending onProposalCommentCreated notification:', err)
+    );
+
+    return comment;
   }
 
   /**
@@ -535,40 +533,38 @@ export class ProposalService {
           })
         )
       );
+    });
 
-      // 2. Gửi thông báo đến những người được thêm (nếu không phải tự thêm chính mình)
-      const notifyUsers = newUsers.filter((u) => u.id !== actorId);
-      if (notifyUsers.length > 0) {
-        await Promise.all(
-          notifyUsers.map((u) =>
-            tx.proposalNotification.create({
-              data: {
-                proposalId,
-                recipientId: u.id,
-                type: 'FOLLOWER_ADDED',
-                title: `Bạn được thêm vào theo dõi đề xuất "${proposal.title}"`,
-                content: `${actor.fullName} đã thêm bạn vào danh sách người theo dõi. Bạn có thể xem thông tin chi tiết và tham gia thảo luận trong đề xuất.`,
-              },
-            })
-          )
-        );
-      }
+    // 2. Gửi thông báo qua unified notification & Socket.IO
+    const notifyUsers = newUsers.filter((u) => u.id !== actorId);
+    if (notifyUsers.length > 0) {
+      await Promise.all(
+        notifyUsers.map((u) =>
+          ProposalNotificationService.createNotification({
+            proposalId,
+            recipientId: u.id,
+            type: 'FOLLOWER_ADDED',
+            title: `Bạn được thêm vào theo dõi đề xuất "${proposal.title}"`,
+            content: `${actor.fullName} đã thêm bạn vào danh sách người theo dõi. Bạn có thể xem thông tin chi tiết và tham gia thảo luận trong đề xuất.`,
+          })
+        )
+      );
+    }
 
-      // 3. Ghi lại lịch sử đề xuất
-      const addedNames = newUsers.map((u) => u.fullName).join(', ');
-      await tx.proposalHistory.create({
-        data: {
-          proposalId,
-          changedById: actorId,
-          changeType: 'FOLLOWER_ADDED',
-          changeDescription:
-            toAddUserIds.length === 1 && toAddUserIds[0] === actorId
-              ? `${actor.fullName} đã tự theo dõi đề xuất`
-              : `${actor.fullName} đã thêm người theo dõi: ${addedNames}`,
-          snapshot: { addedUserIds: toAddUserIds, addedNames },
-          createdById: actorId,
-        },
-      });
+    // 3. Ghi lại lịch sử đề xuất
+    const addedNames = newUsers.map((u) => u.fullName).join(', ');
+    await prisma.proposalHistory.create({
+      data: {
+        proposalId,
+        changedById: actorId,
+        changeType: 'FOLLOWER_ADDED',
+        changeDescription:
+          toAddUserIds.length === 1 && toAddUserIds[0] === actorId
+            ? `${actor.fullName} đã tự theo dõi đề xuất`
+            : `${actor.fullName} đã thêm người theo dõi: ${addedNames}`,
+        snapshot: { addedUserIds: toAddUserIds, addedNames },
+        createdById: actorId,
+      },
     });
 
     return this.getFollowers(proposalId);

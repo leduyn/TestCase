@@ -96,12 +96,12 @@ export const PermissionManagement: React.FC<PermissionManagementProps> = ({ canM
 
     return (
       <div key={role} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setExpandedRole(isExpanded ? null : role)}
-          className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between gap-4 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        >
-          <div className="flex items-center gap-3">
+        <div className="w-full p-4 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between gap-4 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+          <button
+            type="button"
+            onClick={() => setExpandedRole(isExpanded ? null : role)}
+            className="flex items-center gap-3 flex-1 min-w-0 text-left"
+          >
             <div
               className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs uppercase shrink-0 ${roleColors[role as keyof typeof roleColors]}`}
             >
@@ -113,15 +113,12 @@ export const PermissionManagement: React.FC<PermissionManagementProps> = ({ canM
                 {rolePermissions[role]?.length || 0} quyền
               </p>
             </div>
-          </div>
+          </button>
           <div className="flex items-center gap-2">
             {role !== 'ADMIN' && (
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSaveRolePermissions(role);
-                }}
+                onClick={() => handleSaveRolePermissions(role)}
                 disabled={savingPermissions === role}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
               >
@@ -129,11 +126,15 @@ export const PermissionManagement: React.FC<PermissionManagementProps> = ({ canM
                 <span className="hidden sm:inline">Lưu</span>
               </button>
             )}
-            <span className={expandedRole === role ? 'text-blue-600' : 'text-slate-400'}>
+            <button
+              type="button"
+              onClick={() => setExpandedRole(isExpanded ? null : role)}
+              className={expandedRole === role ? 'text-blue-600' : 'text-slate-400'}
+            >
               {expandedRole === role ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-            </span>
+            </button>
           </div>
-        </button>
+        </div>
 
         {expandedRole === role && (
           <div className="p-4 bg-slate-50/50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-700 space-y-4">
