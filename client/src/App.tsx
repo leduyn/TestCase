@@ -121,12 +121,12 @@ const AppContent: React.FC = () => {
           <Route path="/" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Dashboard />} />
           <Route path="/generate" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : (
-              <ProtectedRoute permission="testcase:generate"><Generate /></ProtectedRoute>
+              <ProtectedRoute permission="testcase:read"><Generate /></ProtectedRoute>
             )
           } />
           <Route path="/import" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : (
-              <ProtectedRoute permission="testcase:import"><Import /></ProtectedRoute>
+              <ProtectedRoute permission="testcase:read"><Import /></ProtectedRoute>
             )
           } />
           <Route path="/suites/:id" element={
@@ -152,30 +152,38 @@ const AppContent: React.FC = () => {
             <ProtectedRoute permission="users:read"><UserManagement /></ProtectedRoute>
           } />
           <Route path="/testcase-management" element={
-            <ProtectedRoute permission="testcase:review"><TestCaseManagement /></ProtectedRoute>
+            <ProtectedRoute permission="testcase:read"><TestCaseManagement /></ProtectedRoute>
           } />
           {/* Workflow & Task Management Routes */}
           <Route path="/workflow" element={
-            isSetupRequired ? <Navigate to="/setup" replace /> : <WorkflowDashboard />
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="workflow:process:read"><WorkflowDashboard /></ProtectedRoute>
+            )
           } />
           <Route path="/workflow/processes" element={
-            isSetupRequired ? <Navigate to="/setup" replace /> : <ProcessList />
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="workflow:process:read"><ProcessList /></ProtectedRoute>
+            )
           } />
           <Route path="/workflow/tasks" element={
-            isSetupRequired ? <Navigate to="/setup" replace /> : <TaskList />
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="workflow:task:read"><TaskList /></ProtectedRoute>
+            )
           } />
           <Route path="/workflow/tasks/:id" element={
-            isSetupRequired ? <Navigate to="/setup" replace /> : <TaskDetail />
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute permission="workflow:task:read"><TaskDetail /></ProtectedRoute>
+            )
           } />
           {/* Proposal & Request Management Routes */}
           <Route path="/proposals" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : (
-              <ProtectedRoute><ProposalHub /></ProtectedRoute>
+              <ProtectedRoute permission="proposal:read"><ProposalHub /></ProtectedRoute>
             )
           } />
           <Route path="/proposals/reports" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : (
-              <ProtectedRoute><ProposalReports /></ProtectedRoute>
+              <ProtectedRoute permission="proposal:read"><ProposalReports /></ProtectedRoute>
             )
           } />
           <Route path="/proposals/types" element={

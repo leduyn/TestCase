@@ -165,7 +165,10 @@ export const testCaseApi = {
   getSuites: () => api.get<{ suites: TestSuite[] }>('/testcases/suites'),
   getSuiteById: (id: string) =>
     api.get<SuiteDetailResponse>(`/testcases/suites/${id}`),
-  takeTestCases: (id: string, data?: { module?: string; testCaseIds?: string[] }) =>
+  takeTestCases: (
+    id: string,
+    data?: { module?: string; testCaseIds?: string[]; newRound?: boolean; watcherIds?: string[] }
+  ) =>
     api.post<{ message: string; created: number; testCaseIds: string[] }>(
       `/testcases/suites/${id}/provision`,
       data || {}

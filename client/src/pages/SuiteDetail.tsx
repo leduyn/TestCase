@@ -35,6 +35,7 @@ import { TestCaseModal } from '../components/TestCaseModal';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { TestCaseEvidenceModal } from '../components/TestCaseEvidenceModal';
 import { TestCaseKanbanBoard } from '../components/kanban/TestCaseKanbanBoard';
+import { ReceiveTestCasesModal } from '../components/ReceiveTestCasesModal';
 import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { normalizeSearch } from '../utils/diacritics';
@@ -188,17 +189,78 @@ export const SuiteDetail: React.FC = () => {
     }
   };
 
-  // "Lấy testcase": tạo execution UNTESTED cho user với các case REVIEWED chưa test
-  // (chưa có execution có test_case_id + created_by_id = user). Idempotent.
-  const handleTakeTestCases = async () => {
+  // Modal nhận test case / nhận lượt test mới
+  const [receiveModalConfig, setReceiveModalConfig] = useState<{
+    isOpen: boolean;
+    moduleName?: string;
+    testCaseCount: number;
+    isNewRound: boolean;
+    availableModules?: { name: string; count: number }[];
+  }>({
+    isOpen: false,
+    testCaseCount: 0,
+    isNewRound: false,
+  });
+
+  // Danh sách các module cùng số lượng test case trong suite
+  const availableModulesList = useMemo(() => {
+    const map = new Map<string, number>();
+    testCases.forEach((tc) => {
+      const mod = tc.module?.trim() || 'Chưa phân loại';
+      map.set(mod, (map.get(mod) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
+  }, [testCases]);
+
+  // Mở modal nhận các test case chưa nhận (toàn bộ suite)
+  const handleOpenTakeModal = () => {
+    setReceiveModalConfig({
+      isOpen: true,
+      testCaseCount: unreceivedTestCases.length,
+      isNewRound: false,
+    });
+  };
+
+  // Mở modal nhận test case theo nhóm chức năng (module)
+  const handleOpenReceiveModuleModal = (moduleName: string, count: number) => {
+    setReceiveModalConfig({
+      isOpen: true,
+      moduleName,
+      testCaseCount: count,
+      isNewRound: false,
+    });
+  };
+
+  // Mở modal nhận lượt test mới (cho toàn bộ suite hoặc theo module)
+  const handleOpenNewRoundModal = (targetModule?: string) => {
+    let count = testCases.length;
+    if (targetModule) {
+      count = testCases.filter((tc) => tc.module === targetModule).length;
+    }
+    setReceiveModalConfig({
+      isOpen: true,
+      moduleName: targetModule,
+      testCaseCount: count,
+      isNewRound: true,
+      availableModules: targetModule ? undefined : availableModulesList,
+    });
+  };
+
+  // Thực hiện nhận test case sau khi xác nhận trong modal
+  const handleConfirmReceive = async (selectedWatcherIds: string[], targetModule?: string) => {
     if (!id || taking) return;
     setTaking(true);
     try {
-      await testCaseApi.takeTestCases(id);
+      await testCaseApi.takeTestCases(id, {
+        module: targetModule,
+        newRound: receiveModalConfig.isNewRound,
+        watcherIds: selectedWatcherIds,
+      });
       await fetchSuiteDetails();
+      setReceiveModalConfig((prev) => ({ ...prev, isOpen: false }));
     } catch (err: any) {
-      console.error('Error taking test cases:', err);
-      alert(err?.response?.data?.message || 'Lỗi khi lấy Test Case');
+      console.error('Lỗi khi nhận test case:', err);
+      alert(err?.response?.data?.message || 'Lỗi khi nhận Test Case');
     } finally {
       setTaking(false);
     }
@@ -240,22 +302,6 @@ export const SuiteDetail: React.FC = () => {
     setIsDrawerOpen(true);
   };
 
-  // Nhận & bắt đầu theo nhóm chức năng: tạo execution UNTESTED cho tất cả test case
-  // (REVIEWED, chưa được user nhận) thuộc cùng một module.
-  const handleReceiveModule = async (moduleName: string) => {
-    if (!id || taking) return;
-    setTaking(true);
-    try {
-      await testCaseApi.takeTestCases(id, { module: moduleName });
-      await fetchSuiteDetails();
-    } catch (err: any) {
-      console.error('Lỗi nhận test case theo nhóm:', err);
-      alert(err?.response?.data?.message || 'Lỗi khi lấy Test Case theo nhóm');
-    } finally {
-      setTaking(false);
-    }
-  };
-
   // Gom nhóm test case chưa nhận theo chức năng (module)
   const groupedUnreceived = useMemo(() => {
     const map = new Map<string, UnreceivedTestCase[]>();
@@ -267,6 +313,32 @@ export const SuiteDetail: React.FC = () => {
     return Array.from(map.entries()).map(([module, items]) => ({ module, items }));
   }, [unreceivedTestCases]);
 
+  // Gom nhóm test case đã nhận (có latestExecution) theo chức năng (module)
+  const groupedReceived = useMemo(() => {
+    const map = new Map<string, TestCase[]>();
+    for (const tc of testCases) {
+      if (!tc.latestExecution) continue;
+      const key = tc.module?.trim() || 'Chưa phân loại';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(tc);
+    }
+    return Array.from(map.entries()).map(([module, items]) => {
+      const statusCounts = { untested: 0, passed: 0, failed: 0, blocked: 0, retest: 0 };
+      let maxRounds = 0;
+      items.forEach((tc) => {
+        const s = tc.latestExecution?.status || 'UNTESTED';
+        if (s === 'PASSED') statusCounts.passed++;
+        else if (s === 'FAILED') statusCounts.failed++;
+        else if (s === 'BLOCKED') statusCounts.blocked++;
+        else if (s === 'RETEST') statusCounts.retest++;
+        else statusCounts.untested++;
+        const execCount = tc.executions?.length || 0;
+        if (execCount > maxRounds) maxRounds = execCount;
+      });
+      return { module, items, statusCounts, roundCount: maxRounds };
+    });
+  }, [testCases]);
+
   // Mặc định các nhóm chức năng ở trạng thái thu gọn, bấm để xổ ra
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const toggleGroup = (module: string) => {
@@ -277,6 +349,10 @@ export const SuiteDetail: React.FC = () => {
       return next;
     });
   };
+
+  // Trạng thái thu gọn/mở rộng cho 2 thẻ
+  const [unreceivedCardCollapsed, setUnreceivedCardCollapsed] = useState(false);
+  const [receivedCardCollapsed, setReceivedCardCollapsed] = useState(false);
 
   const getLatestExecutionsByUser = (executions?: TestExecution[]) => {
     if (!executions || executions.length === 0) return [];
@@ -677,19 +753,36 @@ export const SuiteDetail: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           {canExecuteTestCase && (
-            <button
-              onClick={handleTakeTestCases}
-              disabled={taking}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Tạo các Test Case (REVIEWED) mà bạn chưa test vào danh sách của bạn"
-            >
-              {taking ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Inbox className="w-4 h-4" />
+            <>
+              {unreceivedTestCases.length > 0 && (
+                <button
+                  onClick={handleOpenTakeModal}
+                  disabled={taking}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+                  title="Cấp phát các Test Case (REVIEWED) mà bạn chưa test vào danh sách của bạn"
+                >
+                  {taking ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Inbox className="w-4 h-4" />
+                  )}
+                  Lấy testcase ({unreceivedTestCases.length})
+                </button>
               )}
-              Lấy testcase{unreceivedTestCases.length > 0 ? ` (${unreceivedTestCases.length})` : ''}
-            </button>
+              <button
+                onClick={() => handleOpenNewRoundModal()}
+                disabled={taking || testCases.length === 0}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg shadow-sm shadow-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105"
+                title="Tạo một lượt kiểm thử mới (Round tiếp theo) cho toàn bộ Suite hoặc từng chức năng"
+              >
+                {taking ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="w-4 h-4" />
+                )}
+                Nhận lượt test mới
+              </button>
+            </>
           )}
           {canExport && (
             <>
@@ -991,66 +1084,194 @@ export const SuiteDetail: React.FC = () => {
 
       {/* Test case chưa nhận: Đã kiểm duyệt nhưng user chưa có execution nào, gom theo chức năng */}
       {canExecuteTestCase && unreceivedTestCases.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm space-y-3">
-          <div className="flex items-center gap-2">
-            <Inbox className="w-4 h-4 text-slate-500" />
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
-              Test case chưa nhận ({unreceivedTestCases.length})
-            </h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {groupedUnreceived.map(({ module, items }) => {
-              const isOpen = expandedGroups.has(module);
-              return (
-                <div
-                  key={module}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
-                >
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/60">
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(module)}
-                      className="flex items-center gap-2 min-w-0 text-left"
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setUnreceivedCardCollapsed((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 p-4 text-left hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors rounded-xl"
+          >
+            <div className="flex items-center gap-2">
+              <Inbox className="w-4 h-4 text-blue-500" />
+              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                Test case chưa nhận ({unreceivedTestCases.length})
+              </h3>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${unreceivedCardCollapsed ? '-rotate-90' : ''}`} />
+          </button>
+          {!unreceivedCardCollapsed && (
+            <div className="px-4 pb-4 pt-0 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {groupedUnreceived.map(({ module, items }) => {
+                  const isOpen = expandedGroups.has(module);
+                  return (
+                    <div
+                      key={module}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
                     >
-                      {isOpen ? (
-                        <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
-                          {module}
-                        </p>
-                        <p className="text-[11px] text-slate-400">{items.length} test case chưa nhận</p>
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/60">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(module)}
+                          className="flex items-center gap-2 min-w-0 text-left"
+                        >
+                          {isOpen ? (
+                            <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
+                              {module}
+                            </p>
+                            <p className="text-[11px] text-slate-400">{items.length} test case chưa nhận</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenReceiveModuleModal(module, items.length)}
+                          disabled={taking}
+                          className="shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Nhận &amp; bắt đầu
+                        </button>
                       </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleReceiveModule(module)}
-                      disabled={taking}
-                      className="shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm shadow-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      {isOpen && (
+                        <ul className="divide-y divide-slate-100 dark:divide-slate-800 px-3">
+                          {items.map((tc) => (
+                            <li key={tc.id} className="py-1.5 flex items-center gap-2">
+                              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                                {tc.testCaseCode}
+                              </span>
+                              <span className="text-sm text-slate-700 dark:text-slate-200 truncate">
+                                {tc.title}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Test case đã nhận: Các chức năng mà user đã có execution, gom theo module */}
+      {canExecuteTestCase && groupedReceived.length > 0 && (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setReceivedCardCollapsed((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 p-4 text-left hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors rounded-xl"
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                Testcase đã nhận ({testCases.filter((tc) => tc.latestExecution).length})
+              </h3>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${receivedCardCollapsed ? '-rotate-90' : ''}`} />
+          </button>
+          {!receivedCardCollapsed && (
+            <div className="px-4 pb-4 pt-0 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {groupedReceived.map(({ module, items, statusCounts, roundCount }) => {
+                  const isOpen = expandedGroups.has(`received_${module}`);
+                  return (
+                    <div
+                      key={module}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden"
                     >
-                      Nhận &amp; bắt đầu
-                    </button>
-                  </div>
-                  {isOpen && (
-                    <ul className="divide-y divide-slate-100 dark:divide-slate-800 px-3">
-                      {items.map((tc) => (
-                        <li key={tc.id} className="py-1.5 flex items-center gap-2">
-                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">
-                            {tc.testCaseCode}
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-800/60">
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(`received_${module}`)}
+                          className="flex items-center gap-2 min-w-0 text-left"
+                        >
+                          {isOpen ? (
+                            <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
+                                {module}
+                              </p>
+                              {roundCount > 0 && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800 shrink-0">
+                                  <RotateCcw className="w-2.5 h-2.5" />
+                                  {roundCount} lượt
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-400">{items.length} test case đã nhận</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {statusCounts.passed > 0 && (
+                                <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">✓ {statusCounts.passed}</span>
+                              )}
+                              {statusCounts.failed > 0 && (
+                                <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">✗ {statusCounts.failed}</span>
+                              )}
+                              {statusCounts.blocked > 0 && (
+                                <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">⊘ {statusCounts.blocked}</span>
+                              )}
+                              {statusCounts.retest > 0 && (
+                                <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400">↻ {statusCounts.retest}</span>
+                              )}
+                              {statusCounts.untested > 0 && (
+                                <span className="text-[10px] font-semibold text-slate-400">○ {statusCounts.untested}</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNewRoundModal(module)}
+                          disabled={taking}
+                          className="shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-lg shadow-sm shadow-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Tạo lượt kiểm thử mới cho chức năng này"
+                        >
+                          <span className="flex items-center gap-1">
+                            <RotateCcw className="w-3 h-3" />
+                            Lượt mới
                           </span>
-                          <span className="text-sm text-slate-700 dark:text-slate-200 truncate">
-                            {tc.title}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                        </button>
+                      </div>
+                      {isOpen && (
+                        <ul className="divide-y divide-slate-100 dark:divide-slate-800 px-3">
+                          {items.map((tc) => {
+                            const s = tc.latestExecution?.status || 'UNTESTED';
+                            const statusColor =
+                              s === 'PASSED' ? 'text-emerald-600 dark:text-emerald-400' :
+                              s === 'FAILED' ? 'text-red-600 dark:text-red-400' :
+                              s === 'BLOCKED' ? 'text-amber-600 dark:text-amber-400' :
+                              s === 'RETEST' ? 'text-blue-600 dark:text-blue-400' :
+                              'text-slate-400';
+                            const statusIcon =
+                              s === 'PASSED' ? '✓' : s === 'FAILED' ? '✗' : s === 'BLOCKED' ? '⊘' : s === 'RETEST' ? '↻' : '○';
+                            return (
+                              <li key={tc.id} className="py-1.5 flex items-center gap-2">
+                                <span className={`text-[11px] font-bold shrink-0 ${statusColor}`}>{statusIcon}</span>
+                                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+                                  {tc.testCaseCode}
+                                </span>
+                                <span className="text-sm text-slate-700 dark:text-slate-200 truncate">
+                                  {tc.title}
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1820,6 +2041,19 @@ export const SuiteDetail: React.FC = () => {
         initialIndex={lightboxIndex}
         isOpen={isLightboxOpen}
         onClose={() => setIsLightboxOpen(false)}
+      />
+
+      {/* Modal nhận test case / nhận lượt test mới */}
+      <ReceiveTestCasesModal
+        isOpen={receiveModalConfig.isOpen}
+        onClose={() => setReceiveModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={handleConfirmReceive}
+        suiteName={suite?.name || ''}
+        moduleName={receiveModalConfig.moduleName}
+        testCaseCount={receiveModalConfig.testCaseCount}
+        isNewRound={receiveModalConfig.isNewRound}
+        submitting={taking}
+        availableModules={receiveModalConfig.availableModules}
       />
 
       {/* Test Case Evidence Gallery Modal */}

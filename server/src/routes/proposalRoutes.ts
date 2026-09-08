@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { ProposalController } from '../controllers/proposalController';
 import { authenticate } from '../middleware/auth';
+import { requirePermission } from '../middleware/rbac';
 
 const router = Router();
 
@@ -18,8 +19,8 @@ router.delete('/:id', ProposalController.deleteProposal);
 // Luồng phê duyệt
 router.post('/:id/submit', ProposalController.submitProposal);
 router.post('/:id/cancel', ProposalController.cancelProposal);
-router.post('/:id/approve', ProposalController.approveProposal);
-router.post('/:id/reject', ProposalController.rejectProposal);
+router.post('/:id/approve', requirePermission('proposal:approve'), ProposalController.approveProposal);
+router.post('/:id/reject', requirePermission('proposal:reject'), ProposalController.rejectProposal);
 
 // Workflow engine
 router.post('/:id/start-workflow', ProposalController.startWorkflow);
