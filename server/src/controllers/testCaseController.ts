@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { parseDocument } from '../services/documentParser';
 import { AIService } from '../services/ai/aiService';
 import { canViewAllExecutionHistory, canViewAllUserTestStats, canViewUserTestStats, canReviewTestCase, hasPermission } from '../services/permissionService';
+import { NotificationService } from '../services/notificationService';
 
 // Resolve the "latest execution" to display for a test case based on the viewer's permission:
 // - read-all (canViewAll): overall latest execution (most recent across all users)
@@ -837,6 +838,13 @@ export class TestCaseController {
       }
 
       const userExec = pickLatestVisibleExecution(updated.executions, currentUserId, canViewAll);
+
+      // Gửi thông báo realtime Test Case được cập nhật
+      if (currentUserId) {
+        NotificationService.onTestCaseUpdated(id, currentUserId).catch((err) =>
+          console.error('Error sending onTestCaseUpdated notification:', err)
+        );
+      }
       return res.json({
         message: 'Cập nhật Test Case thành công',
         testCase: {
@@ -1054,6 +1062,13 @@ export class TestCaseController {
         },
       });
 
+      // Gửi thông báo realtime Test Case đã được kiểm duyệt
+      if (currentUserId) {
+        NotificationService.onTestCaseReviewed(id, currentUserId).catch((err) =>
+          console.error('Error sending onTestCaseReviewed notification:', err)
+        );
+      }
+
       return res.json({
         message: 'Đã kiểm duyệt Test Case thành công',
         testCase: {
@@ -1140,6 +1155,13 @@ export class TestCaseController {
           reviewedAt: new Date(),
         },
       });
+
+      // Gửi thông báo realtime kiểm duyệt hàng loạt Test Case
+      if (currentUserId && safeIds.length > 0) {
+        NotificationService.onTestCaseBulkReviewed(safeIds, currentUserId).catch((err) =>
+          console.error('Error sending onTestCaseBulkReviewed notification:', err)
+        );
+      }
 
       return res.json({
         message: `Đã kiểm duyệt ${result.count} Test Case thành công`,

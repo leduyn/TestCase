@@ -66,9 +66,17 @@ export const Login: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Mật khẩu
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Mật khẩu
+              </label>
+              <Link
+                to="/forgot-password"
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium hover:underline"
+              >
+                Quên mật khẩu?
+              </Link>
+            </div>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input

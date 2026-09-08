@@ -140,11 +140,14 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async getFileStream(storagePath: string): Promise<{ stream: Readable; mimeType: string } | null> {
-    const fullPath = path.join(this.basePath, storagePath);
+    const sanitized = storagePath.replace(/^(\/|\\)?uploads(\/|\\)/i, '').replace(/^(\/|\\)+/, '');
+    const fullPath = path.resolve(this.basePath, sanitized);
+    if (!fullPath.startsWith(this.basePath)) return null;
     if (!fs.existsSync(fullPath)) return null;
 
     const ext = path.extname(fullPath).toLowerCase();
     const mimeMap: Record<string, string> = {
+      // Images
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
       '.png': 'image/png',
@@ -152,7 +155,8 @@ export class LocalStorageProvider implements StorageProvider {
       '.webp': 'image/webp',
       '.bmp': 'image/bmp',
       '.svg': 'image/svg+xml',
-      // Video formats
+      '.ico': 'image/x-icon',
+      // Videos
       '.mp4': 'video/mp4',
       '.webm': 'video/webm',
       '.ogg': 'video/ogg',
@@ -160,6 +164,26 @@ export class LocalStorageProvider implements StorageProvider {
       '.mov': 'video/quicktime',
       '.avi': 'video/x-msvideo',
       '.mkv': 'video/x-matroska',
+      // Documents & Text
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain; charset=utf-8',
+      '.log': 'text/plain; charset=utf-8',
+      '.json': 'application/json',
+      '.csv': 'text/csv; charset=utf-8',
+      '.xml': 'application/xml',
+      // Archives
+      '.zip': 'application/zip',
+      '.rar': 'application/x-rar-compressed',
+      '.7z': 'application/x-7z-compressed',
+      '.tar': 'application/x-tar',
+      '.gz': 'application/gzip',
+      // Office docs
+      '.doc': 'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xls': 'application/vnd.ms-excel',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      '.ppt': 'application/vnd.ms-powerpoint',
+      '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     };
     const mimeType = mimeMap[ext] || 'application/octet-stream';
     const stream = fs.createReadStream(fullPath);

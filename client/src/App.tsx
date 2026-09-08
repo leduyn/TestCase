@@ -9,6 +9,8 @@ import { SuiteDetail } from './pages/SuiteDetail';
 import { TestCaseDetail } from './pages/TestCaseDetail';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { Settings } from './pages/Settings';
 import UserManagement from './pages/UserManagement';
 import { TestCaseManagement } from './pages/TestCaseManagement';
@@ -17,6 +19,11 @@ import { WorkflowDashboard } from './pages/Workflow/WorkflowDashboard';
 import { ProcessList } from './pages/Workflow/ProcessList';
 import { TaskList } from './pages/Workflow/TaskList';
 import { TaskDetail } from './pages/Workflow/TaskDetail';
+import { ProposalTypesManagement } from './pages/Proposals/ProposalTypesManagement';
+import { ProposalCreate } from './pages/Proposals/ProposalCreate';
+import { ProposalHub } from './pages/Proposals/ProposalHub';
+import { ProposalDetail } from './pages/Proposals/ProposalDetail';
+import { ProposalReports } from './pages/Proposals/ProposalReports';
 import { setupApi } from './services/api';
 import { Loader2 } from 'lucide-react';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -51,7 +58,12 @@ const AppContent: React.FC = () => {
             if (location.pathname === '/setup') {
               navigate('/', { replace: true });
             }
-            if (location.pathname !== '/login' && location.pathname !== '/register') {
+            if (
+              location.pathname !== '/login' &&
+              location.pathname !== '/register' &&
+              location.pathname !== '/forgot-password' &&
+              location.pathname !== '/reset-password'
+            ) {
               navigate('/login', { replace: true });
             }
           }
@@ -82,7 +94,14 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (checkingSetup && location.pathname !== '/setup' && location.pathname !== '/login' && location.pathname !== '/register') {
+  if (
+    checkingSetup &&
+    location.pathname !== '/setup' &&
+    location.pathname !== '/login' &&
+    location.pathname !== '/register' &&
+    location.pathname !== '/forgot-password' &&
+    location.pathname !== '/reset-password'
+  ) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
         <div className="flex flex-col items-center gap-3">
@@ -122,6 +141,8 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/login" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Login />} />
           <Route path="/register" element={isSetupRequired ? <Navigate to="/setup" replace /> : <Register />} />
+          <Route path="/forgot-password" element={isSetupRequired ? <Navigate to="/setup" replace /> : <ForgotPassword />} />
+          <Route path="/reset-password" element={isSetupRequired ? <Navigate to="/setup" replace /> : <ResetPassword />} />
           <Route path="/settings" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : (
               <ProtectedRoute permissions={['settings:ai:read', 'settings:prompt:read', 'settings:env:read']} mode="any"><Settings /></ProtectedRoute>
@@ -145,6 +166,42 @@ const AppContent: React.FC = () => {
           } />
           <Route path="/workflow/tasks/:id" element={
             isSetupRequired ? <Navigate to="/setup" replace /> : <TaskDetail />
+          } />
+          {/* Proposal & Request Management Routes */}
+          <Route path="/proposals" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalHub /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/reports" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalReports /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/types" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalTypesManagement /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/settings" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalTypesManagement /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/new" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalCreate /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/create" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalCreate /></ProtectedRoute>
+            )
+          } />
+          <Route path="/proposals/:id" element={
+            isSetupRequired ? <Navigate to="/setup" replace /> : (
+              <ProtectedRoute><ProposalDetail /></ProtectedRoute>
+            )
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -72,6 +72,8 @@ export const SuiteDetail: React.FC = () => {
   const [taking, setTaking] = useState(false);
   const [configuredServers, setConfiguredServers] = useState<string[]>([]);
   const [configuredOsList, setConfiguredOsList] = useState<string[]>([]);
+  const [defaultServer, setDefaultServer] = useState<string>('STAGING');
+  const [defaultOs, setDefaultOs] = useState<string>('Windows 11');
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -209,6 +211,8 @@ export const SuiteDetail: React.FC = () => {
         const res = await environmentApi.getEnvironments();
         if (res.data.servers) setConfiguredServers(res.data.servers);
         if (res.data.osList) setConfiguredOsList(res.data.osList);
+        if (res.data.defaultServer) setDefaultServer(res.data.defaultServer);
+        if (res.data.defaultOs) setDefaultOs(res.data.defaultOs);
       } catch (err) {
         console.warn('Error loading environment options:', err);
       }
@@ -1068,8 +1072,8 @@ export const SuiteDetail: React.FC = () => {
             setIsEvidenceModalOpen(true);
           }}
           getEvidenceStats={getTestCaseEvidenceStats}
-          defaultServer={configuredServers[0] || 'STAGING'}
-          defaultOs={configuredOsList[0] || 'Windows 11'}
+          defaultServer={defaultServer || configuredServers[0] || 'STAGING'}
+          defaultOs={defaultOs || configuredOsList[0] || 'Windows 11'}
         />
       ) : (
         /* Test Cases Table */
