@@ -7,6 +7,8 @@ import type {
   TestExecutionImage,
   TestExecutionHistory,
   TestExecutionWatcher,
+  TestExecutionComment,
+  ExecutionCommentAttachment,
   TestCaseReviewStatus,
   StorageConfig,
   AIProviderInfo,
@@ -100,6 +102,14 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     api.post<{ message: string; token: string; user: User }>('/auth/login', data),
   getMe: () => api.get<{ user: User }>('/auth/me'),
+  forgotPassword: (data: { email: string }) =>
+    api.post<{ message: string; resetUrl?: string; token?: string }>('/auth/forgot-password', data),
+  verifyResetToken: (token: string) =>
+    api.get<{ valid: boolean; email?: string; fullName?: string; message?: string }>('/auth/verify-reset-token', {
+      params: { token },
+    }),
+  resetPassword: (data: { token: string; newPassword: string }) =>
+    api.post<{ message: string }>('/auth/reset-password', data),
 };
 
 // AI API
@@ -211,6 +221,7 @@ export const executionApi = {
       notes?: string;
       executedById?: string;
       viewerIds?: string[];
+      imageIds?: string[];
     }
   ) =>
     api.post<{ message: string; execution: TestExecution }>(
@@ -228,6 +239,7 @@ export const executionApi = {
       notes?: string;
       executedById?: string;
       viewerIds?: string[];
+      imageIds?: string[];
     }
   ) =>
     api.put<{ message: string; execution: TestExecution }>(
@@ -249,6 +261,61 @@ export const executionApi = {
       `/executions/${executionId}/watchers`,
       { userIds }
     ),
+};
+
+// Execution Comment API
+export const executionCommentApi = {
+  getComments: (executionId: string) =>
+    api.get<{ comments: TestExecutionComment[] }>(`/executions/${executionId}/comments`),
+  addComment: (
+    executionId: string,
+    data: {
+      content: string;
+      attachments?: ExecutionCommentAttachment[];
+    }
+  ) =>
+    api.post<{ message: string; comment: TestExecutionComment }>(
+      `/executions/${executionId}/comments`,
+      data
+    ),
+  deleteComment: (executionId: string, commentId: string) =>
+    api.delete<{ message: string }>(`/executions/${executionId}/comments/${commentId}`),
+};
+
+// Execution Upload API (workflow/general upload endpoint)
+export const executionUploadApi = {
+  uploadFiles: (files: File[]) => {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+    return api.post<{
+      message: string;
+      files: {
+        originalName: string;
+        filename: string;
+        storagePath: string;
+        storageType: string;
+        publicUrl: string | null;
+        mimeType: string;
+        size: number;
+        uploadedAt: string;
+      }[];
+    }>('/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  getFileViewUrl: (storagePath: string, filename?: string, isDownload?: boolean) => {
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+    const params = new URLSearchParams();
+    const cleanPath = storagePath.replace(/^(\/|\\)?uploads(\/|\\)/i, '').replace(/^(\/|\\)+/, '');
+    params.set('storagePath', cleanPath);
+    if (filename) params.set('filename', filename);
+    if (isDownload) params.set('download', 'true');
+    if (token) params.set('token', token);
+    const base = API_BASE_URL.replace(/\/$/, '');
+    return `${base}/upload/view?${params.toString()}`;
+  },
 };
 
 // Export API
@@ -273,12 +340,22 @@ export const exportApi = {
 // Environment Settings API
 export const environmentApi = {
   getEnvironments: () =>
-    api.get<{ servers: string[]; osList: string[] }>('/settings/environments'),
-  saveEnvironments: (data: { servers: string[]; osList: string[] }) =>
-    api.post<{ message: string; servers: string[]; osList: string[] }>(
-      '/settings/environments',
-      data
+    api.get<{ servers: string[]; osList: string[]; defaultServer?: string; defaultOs?: string }>(
+      '/settings/environments'
     ),
+  saveEnvironments: (data: {
+    servers: string[];
+    osList: string[];
+    defaultServer?: string;
+    defaultOs?: string;
+  }) =>
+    api.post<{
+      message: string;
+      servers: string[];
+      osList: string[];
+      defaultServer?: string;
+      defaultOs?: string;
+    }>('/settings/environments', data),
 };
 
 // --- User Management API ---
@@ -295,6 +372,7 @@ export interface UserTableRow {
 
 export const userApi = {
   getUsers: () => api.get<User[]>('/users'),
+  getDirectory: () => api.get<User[]>('/users/directory'),
   getUser: (id: string) => api.get<User>(`/users/${id}`),
   createUser: (data: { email: string; password: string; fullName: string; role: string }) =>
     api.post<User>('/users', data),
@@ -302,6 +380,14 @@ export const userApi = {
     api.put<User>(`/users/${id}`, data),
   deleteUser: (id: string) => api.delete<{ message: string }>(`/users/${id}`),
   toggleStatus: (id: string) => api.post<{ message: string; user: User }>(`/users/${id}/toggle-status`),
+  adminResetPassword: (
+    id: string,
+    data: { newPassword?: string; type?: 'manual' | 'generate_link' }
+  ) =>
+    api.post<{ message: string; resetUrl?: string; resetToken?: string }>(
+      `/users/${id}/reset-password`,
+      data
+    ),
 };
 
 // Permission API

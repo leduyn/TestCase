@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import type { TestCase } from '../types';
 import { testCaseApi } from '../services/api';
@@ -9,6 +9,8 @@ import { TestCaseModal } from '../components/TestCaseModal';
 export const TestCaseDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightExecutionId = searchParams.get('executionId') || undefined;
 
   const [testCase, setTestCase] = useState<TestCase | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,6 +84,7 @@ export const TestCaseDetail: React.FC = () => {
           testCase={testCase}
           isOpen={true}
           fullPage
+          highlightExecutionId={highlightExecutionId}
           onClose={() => navigate(-1)}
           onSaved={handleSaved}
           onEditTestCase={handleEditTestCase}
