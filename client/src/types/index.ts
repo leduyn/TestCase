@@ -50,7 +50,7 @@ export interface TestExecutionImage {
 export interface TestExecutionWatcher {
   id: string;
   userId: string;
-  user: {
+  user?: {
     id: string;
     fullName: string;
     email: string;

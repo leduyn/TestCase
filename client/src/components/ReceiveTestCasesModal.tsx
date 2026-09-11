@@ -3,12 +3,10 @@ import {
   X,
   Play,
   RotateCcw,
-  Users,
   Eye,
   Search,
   Check,
   Layers,
-  Sparkles,
   Info,
   CheckCircle2,
   RefreshCw,
@@ -155,11 +153,10 @@ export const ReceiveTestCasesModal: React.FC<ReceiveTestCasesModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
           <div className="flex items-center gap-2.5">
             <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md ${
-                isNewRound
+              className={`w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-md ${isNewRound
                   ? 'bg-gradient-to-tr from-purple-600 to-indigo-600 shadow-purple-500/20'
                   : 'bg-gradient-to-tr from-blue-600 to-sky-600 shadow-blue-500/20'
-              }`}
+                }`}
             >
               {isNewRound ? <RotateCcw className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
             </div>
@@ -298,19 +295,17 @@ export const ReceiveTestCasesModal: React.FC<ReceiveTestCasesModalProps> = ({
                     <div
                       key={user.id}
                       onClick={() => toggleWatcher(user.id)}
-                      className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs ${
-                        isChecked
+                      className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors text-xs ${isChecked
                           ? 'bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <div
-                          className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${
-                            isChecked
+                          className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${isChecked
                               ? 'bg-blue-600 text-white'
                               : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                          }`}
+                            }`}
                         >
                           {(user.fullName || user.email || 'U').charAt(0).toUpperCase()}
                         </div>
@@ -324,11 +319,10 @@ export const ReceiveTestCasesModal: React.FC<ReceiveTestCasesModalProps> = ({
                         </div>
                       </div>
                       <div
-                        className={`w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0 ${
-                          isChecked
+                        className={`w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0 ${isChecked
                             ? 'bg-blue-600 border-blue-600 text-white'
                             : 'border-slate-300 dark:border-slate-600'
-                        }`}
+                          }`}
                       >
                         {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                       </div>
@@ -357,11 +351,10 @@ export const ReceiveTestCasesModal: React.FC<ReceiveTestCasesModalProps> = ({
             type="button"
             onClick={handleConfirm}
             disabled={submitting}
-            className={`flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-              isNewRound
+            className={`flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isNewRound
                 ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/25'
                 : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/25'
-            }`}
+              }`}
           >
             {submitting ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
