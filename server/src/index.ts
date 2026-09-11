@@ -3,7 +3,7 @@ import http from 'http';
 import cors from 'cors';
 import compression from 'compression';
 const timeout = require('express-timeout') as any;
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import { initSocket } from './socket';
 import path from 'path';
 import authRoutes from './routes/authRoutes';
@@ -41,7 +41,7 @@ import { errorHandler, notFoundHandler, requestIdMiddleware, responseTimeMiddlew
 import { ensureDefaultAdmin } from './services/adminSeed';
 import { CronService } from './services/cronService';
 
-dotenv.config();
+//dotenv.config();
 
 const app = express();
 const server = http.createServer(app);

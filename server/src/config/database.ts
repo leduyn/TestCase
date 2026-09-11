@@ -21,6 +21,7 @@ pgDefaults.connectionTimeoutMillis = pgPoolConfig.connectionTimeoutMillis;
 const monitorPool = new Pool({
   ...pgPoolConfig,
   max: 5,
+  connectionString: process.env.DATABASE_URL,
 });
 
 let prismaInstance: PrismaClient = new PrismaClient({
