@@ -40,11 +40,14 @@ import { useAuth } from '../context/AuthContext';
 import { usePermissions } from '../hooks/usePermissions';
 import { normalizeSearch } from '../utils/diacritics';
 
-// Strip HTML tags to plain text (used for expectedResult preview/tooltip/search since it may now contain rich-text HTML)
+// Strip HTML tags to plain text (regex-based: cheap, no DOMParser per keystroke)
 const stripHtml = (html: string): string => {
   if (!html) return '';
-  const doc = new DOMParser().parseFromString(html, 'text/html');
-  return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 export const SuiteDetail: React.FC = () => {
@@ -77,6 +80,7 @@ export const SuiteDetail: React.FC = () => {
   const [defaultOs, setDefaultOs] = useState<string>('Windows 11');
 
   // Filters & Search
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL'); // 'ALL' | 'UNTESTED' | 'PASSED' | 'FAILED' | 'BLOCKED' | 'RETEST'
   const [unreceivedTestCases, setUnreceivedTestCases] = useState<UnreceivedTestCase[]>([]);
@@ -101,6 +105,12 @@ export const SuiteDetail: React.FC = () => {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  // Debounce search input -> searchQuery (tránh filter nặng mỗi ký tự)
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput), 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // Selected Test Case for Execution Drawer
   const [selectedTestCase, setSelectedTestCase] = useState<TestCase | null>(null);
@@ -523,98 +533,112 @@ export const SuiteDetail: React.FC = () => {
     PASSED: 4,
   };
 
-  // Helper to extract the latest update timestamp of a TestCase
-  const getTestCaseUpdateTime = (tc: TestCase): number => {
-    const timestamps: number[] = [];
-    if (tc.latestExecution?.updatedAt) {
-      timestamps.push(new Date(tc.latestExecution.updatedAt).getTime());
+  // Precompute update-time once per testCases change (tránh new Date() trong comparator)
+  const updateTimeMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const tc of testCases) {
+      const timestamps: number[] = [];
+      const le = tc.latestExecution as any;
+      if (le?.updatedAt) timestamps.push(new Date(le.updatedAt).getTime());
+      if (le?.executedAt) timestamps.push(new Date(le.executedAt).getTime());
+      if ((tc as any).updatedAt) timestamps.push(new Date((tc as any).updatedAt).getTime());
+      if ((tc as any).createdAt) timestamps.push(new Date((tc as any).createdAt).getTime());
+      map.set(tc.id, timestamps.length > 0 ? Math.max(...timestamps) : 0);
     }
-    if (tc.latestExecution?.executedAt) {
-      timestamps.push(new Date(tc.latestExecution.executedAt).getTime());
-    }
-    if (tc.updatedAt) {
-      timestamps.push(new Date(tc.updatedAt).getTime());
-    }
-    if (tc.createdAt) {
-      timestamps.push(new Date(tc.createdAt).getTime());
-    }
-    return timestamps.length > 0 ? Math.max(...timestamps) : 0;
-  };
+    return map;
+  }, [testCases]);
 
   // Apply sort by status, then by latest update time (newest first within the same status)
-  const sortedCases = [...testCases].sort((a, b) => {
-    const aStatus = (a.latestExecution?.status || 'UNTESTED').toUpperCase();
-    const bStatus = (b.latestExecution?.status || 'UNTESTED').toUpperCase();
-    const statusDiff = (statusOrder[aStatus] ?? 6) - (statusOrder[bStatus] ?? 6);
+  const sortedCases = useMemo(() => {
+    return [...testCases].sort((a, b) => {
+      const aStatus = (a.latestExecution?.status || 'UNTESTED').toUpperCase();
+      const bStatus = (b.latestExecution?.status || 'UNTESTED').toUpperCase();
+      const statusDiff = (statusOrder[aStatus] ?? 6) - (statusOrder[bStatus] ?? 6);
 
-    if (statusDiff !== 0) {
-      return statusDiff;
+      if (statusDiff !== 0) {
+        return statusDiff;
+      }
+
+      // Within same status: prioritize newest update time first
+      const aTime = updateTimeMap.get(a.id) ?? 0;
+      const bTime = updateTimeMap.get(b.id) ?? 0;
+      if (bTime !== aTime) {
+        return bTime - aTime;
+      }
+
+      return (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
+    });
+  }, [testCases, updateTimeMap]);
+
+  // Precompute search index once per testCases change (normalize + stripHtml 1 lần)
+  const searchIndex = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const tc of sortedCases) {
+      const exec = tc.latestExecution as any;
+      map.set(
+        tc.id,
+        [
+          normalizeSearch(tc.testCaseCode || ''),
+          normalizeSearch(tc.title || ''),
+          normalizeSearch(tc.module || ''),
+          normalizeSearch(tc.steps || ''),
+          normalizeSearch(stripHtml(tc.expectedResult || '')),
+          normalizeSearch(exec?.actualResult || ''),
+          normalizeSearch(exec?.notes || ''),
+        ].join(' | ')
+      );
     }
+    return map;
+  }, [sortedCases]);
 
-    // Within same status: prioritize newest update time first
-    const aTime = getTestCaseUpdateTime(a);
-    const bTime = getTestCaseUpdateTime(b);
-    if (bTime !== aTime) {
-      return bTime - aTime;
-    }
-
-    return (a.orderIndex ?? 0) - (b.orderIndex ?? 0);
-  });
+  const normalizedQuery = useMemo(() => normalizeSearch(searchQuery.trim()), [searchQuery]);
 
   // Filter logic
-  const filteredCases = sortedCases.filter((tc) => {
-    const exec = tc.latestExecution;
-    const status = (exec?.status || 'UNTESTED').toUpperCase();
-    const platform = (tc.platform || '').toUpperCase();
-    const priority = (tc.priority || '').toLowerCase();
-    const testType = (tc.testType || '').toLowerCase();
-    const module = (tc.module || '');
-    const server = (exec?.server || '').toUpperCase();
-    const os = (exec?.os || '').toUpperCase();
+  const filteredCases = useMemo(() => {
+    return sortedCases.filter((tc) => {
+      const exec = tc.latestExecution;
+      const status = (exec?.status || 'UNTESTED').toUpperCase();
+      const platform = (tc.platform || '').toUpperCase();
+      const priority = (tc.priority || '').toLowerCase();
+      const testType = (tc.testType || '').toLowerCase();
+      const module = (tc.module || '');
+      const server = (exec?.server || '').toUpperCase();
+      const os = (exec?.os || '').toUpperCase();
 
-    // Status filter
-    if (selectedStatus !== 'ALL' && status !== selectedStatus) return false;
+      // Status filter
+      if (selectedStatus !== 'ALL' && status !== selectedStatus) return false;
 
-    // Platform filter
-    if (selectedPlatform !== 'ALL') {
-      if (selectedPlatform === 'App' && !platform.includes('APP')) return false;
-      if (selectedPlatform === 'CMS' && !platform.includes('CMS')) return false;
-      if (selectedPlatform === 'Web' && (!platform.includes('WEB') || platform.includes('CMS'))) return false;
-    }
-
-    // Priority filter
-    if (selectedPriority !== 'ALL' && priority !== selectedPriority.toLowerCase()) return false;
-
-    // Test Type filter
-    if (selectedTestType !== 'ALL' && testType !== selectedTestType.toLowerCase()) return false;
-
-    // Module (Chức năng) filter
-    if (selectedModule !== 'ALL' && module !== selectedModule) return false;
-
-    // Server filter
-    if (selectedServer !== 'ALL' && !server.includes(selectedServer.toUpperCase())) return false;
-
-    // OS filter
-    if (selectedOs !== 'ALL' && !os.includes(selectedOs.toUpperCase())) return false;
-
-    // Search query (không dấu)
-    if (searchQuery.trim()) {
-      const q = normalizeSearch(searchQuery);
-      const matchCode = normalizeSearch(tc.testCaseCode).includes(q);
-      const matchTitle = normalizeSearch(tc.title).includes(q);
-      const matchModule = normalizeSearch(tc.module).includes(q);
-      const matchSteps = normalizeSearch(tc.steps).includes(q);
-      const matchExpected = normalizeSearch(stripHtml(tc.expectedResult)).includes(q);
-      const matchActual = normalizeSearch(exec?.actualResult || '').includes(q);
-      const matchNotes = normalizeSearch(exec?.notes || '').includes(q);
-
-      if (!matchCode && !matchTitle && !matchModule && !matchSteps && !matchExpected && !matchActual && !matchNotes) {
-        return false;
+      // Platform filter
+      if (selectedPlatform !== 'ALL') {
+        if (selectedPlatform === 'App' && !platform.includes('APP')) return false;
+        if (selectedPlatform === 'CMS' && !platform.includes('CMS')) return false;
+        if (selectedPlatform === 'Web' && (!platform.includes('WEB') || platform.includes('CMS'))) return false;
       }
-    }
 
-    return true;
-  });
+      // Priority filter
+      if (selectedPriority !== 'ALL' && priority !== selectedPriority.toLowerCase()) return false;
+
+      // Test Type filter
+      if (selectedTestType !== 'ALL' && testType !== selectedTestType.toLowerCase()) return false;
+
+      // Module (Chức năng) filter
+      if (selectedModule !== 'ALL' && module !== selectedModule) return false;
+
+      // Server filter
+      if (selectedServer !== 'ALL' && !server.includes(selectedServer.toUpperCase())) return false;
+
+      // OS filter
+      if (selectedOs !== 'ALL' && !os.includes(selectedOs.toUpperCase())) return false;
+
+      // Search query (không dấu) — dùng index đã normalize sẵn
+      if (normalizedQuery) {
+        const haystack = searchIndex.get(tc.id) || '';
+        if (!haystack.includes(normalizedQuery)) return false;
+      }
+
+      return true;
+    });
+  }, [sortedCases, searchIndex, normalizedQuery, selectedStatus, selectedPlatform, selectedPriority, selectedTestType, selectedModule, selectedServer, selectedOs]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -642,45 +666,57 @@ export const SuiteDetail: React.FC = () => {
     return [1, '...', current - 1, current, current + 1, '...', total];
   };
 
-  // Calculate live stats
-  const total = testCases.length;
-  let untested = 0;
-  let passed = 0;
-  let failed = 0;
-  let blocked = 0;
-  let retest = 0;
+  // Calculate live stats (memo: chỉ tính lại khi testCases đổi)
+  const { total, untested, passed, failed, blocked, retest, passRate } = useMemo(() => {
+    const total = testCases.length;
+    let untested = 0;
+    let passed = 0;
+    let failed = 0;
+    let blocked = 0;
+    let retest = 0;
 
-  testCases.forEach((tc) => {
-    const s = tc.latestExecution?.status || 'UNTESTED';
-    if (s === 'PASSED') passed++;
-    else if (s === 'FAILED') failed++;
-    else if (s === 'BLOCKED') blocked++;
-    else if (s === 'RETEST') retest++;
-    else if (s === 'UNTESTED') untested++;
-  });
-  const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+    testCases.forEach((tc) => {
+      const s = tc.latestExecution?.status || 'UNTESTED';
+      if (s === 'PASSED') passed++;
+      else if (s === 'FAILED') failed++;
+      else if (s === 'BLOCKED') blocked++;
+      else if (s === 'RETEST') retest++;
+      else if (s === 'UNTESTED') untested++;
+    });
+    return { total, untested, passed, failed, blocked, retest, passRate: total > 0 ? Math.round((passed / total) * 100) : 0 };
+  }, [testCases]);
 
-  // Extract unique servers & OS for filters (merge configured ones with existing case values)
-  const availableServers = Array.from(
-    new Set([
-      ...configuredServers,
-      ...testCases.map((tc) => tc.latestExecution?.server).filter(Boolean),
-    ])
-  ) as string[];
-  const availableOs = Array.from(
-    new Set([
-      ...configuredOsList,
-      ...testCases.map((tc) => tc.latestExecution?.os).filter(Boolean),
-    ])
-  ) as string[];
+  // Extract unique servers & OS for filters (memo: chỉ tính lại khi testCases/config đổi)
+  const availableServers = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...configuredServers,
+          ...testCases.map((tc) => tc.latestExecution?.server).filter(Boolean),
+        ])
+      ) as string[],
+    [configuredServers, testCases]
+  );
+  const availableOs = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...configuredOsList,
+          ...testCases.map((tc) => tc.latestExecution?.os).filter(Boolean),
+        ])
+      ) as string[],
+    [configuredOsList, testCases]
+  );
 
-  // Extract unique test types & modules for filters
-  const availableTestTypes = Array.from(
-    new Set(testCases.map((tc) => tc.testType).filter(Boolean))
-  ) as string[];
-  const availableModules = Array.from(
-    new Set(testCases.map((tc) => tc.module).filter(Boolean))
-  ).sort() as string[];
+  // Extract unique test types & modules for filters (memo)
+  const availableTestTypes = useMemo(
+    () => Array.from(new Set(testCases.map((tc) => tc.testType).filter(Boolean))) as string[],
+    [testCases]
+  );
+  const availableModules = useMemo(
+    () => Array.from(new Set(testCases.map((tc) => tc.module).filter(Boolean))).sort() as string[],
+    [testCases]
+  );
 
   if (loading && !suite) {
     return (
@@ -973,8 +1009,8 @@ export const SuiteDetail: React.FC = () => {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Tìm theo Mã TC, tiêu đề, bước test..."
               className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
