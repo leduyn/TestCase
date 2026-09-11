@@ -1,6 +1,8 @@
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
+import compression from 'compression';
+const timeout = require('express-timeout') as any;
 import dotenv from 'dotenv';
 import { initSocket } from './socket';
 import path from 'path';
@@ -30,8 +32,11 @@ import myProposalRoutes from './routes/myProposalRoutes';
 import proposalReportRoutes from './routes/proposalReportRoutes';
 import proposalNotificationRoutes from './routes/proposalNotificationRoutes';
 import notificationRoutes from './routes/notificationRoutes';
-import { checkDatabaseConnection } from './config/database';
+import { checkDatabaseConnection, checkDatabasePoolHealth, getPrisma } from './config/database';
+import { getIO } from './socket';
 import { dbCheckMiddleware } from './controllers/setupController';
+import { apiLimiter, authLimiter, aiLimiter, exportLimiter } from './middleware/rateLimiter';
+import { errorHandler, notFoundHandler, requestIdMiddleware, responseTimeMiddleware } from './middleware/errorHandler';
 
 import { ensureDefaultAdmin } from './services/adminSeed';
 import { CronService } from './services/cronService';
@@ -53,17 +58,86 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Body limits: reduce from 50mb to 10mb to prevent DoS
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check (always available)
-app.get('/api/health', (_req, res) => {
-  res.json({
-    status: 'ok',
+// Upload routes use smaller body limit
+app.use('/api/upload', express.json({ limit: '2mb' }));
+app.use('/api/uploads', express.json({ limit: '2mb' }));
+app.use('/upload', express.json({ limit: '2mb' }));
+
+// Compression middleware
+app.use(compression());
+
+// Request timeout middleware (30s global)
+app.use(timeout('30s'));
+
+// Timeout error handler
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err && (err.code === 'ECONNRESET' || err.message === 'request timeout' || err.statusCode === 504)) {
+    return res.status(504).json({ message: 'Request timed out. Please try again.' });
+  }
+  next(err);
+});
+
+// Rate Limiters
+app.use('/api/auth', authLimiter);
+app.use('/api/ai', aiLimiter);
+app.use('/api/export', exportLimiter);
+app.use('/api', apiLimiter);
+
+// Health check — always available, checks DB connectivity
+app.get('/api/health', async (_req, res) => {
+  const health = {
+    status: 'ok' as const,
     message: 'AI Test Case Generator & Workflow API is running',
     timestamp: new Date().toISOString(),
-  });
+    uptime: process.uptime(),
+    checks: { database: false },
+  };
+
+  try {
+    const poolHealth = await checkDatabasePoolHealth();
+    health.checks.database = poolHealth.connected;
+  } catch {
+    health.checks.database = false;
+  }
+
+  if (!health.checks.database) {
+    res.status(503).json(health);
+    return;
+  }
+
+  res.json(health);
 });
+
+// Deep health check — detailed diagnostics
+app.get('/api/health/deep', async (_req, res) => {
+  const start = Date.now();
+  try {
+    const poolHealth = await checkDatabasePoolHealth();
+    const dbResult = await getPrisma().$queryRaw`SELECT 1`;
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      pool: poolHealth,
+      responseTime: `${Date.now() - start}ms`,
+      memory: process.memoryUsage(),
+      uptime: process.uptime(),
+    });
+  } catch (error: any) {
+    res.status(503).json({
+      status: 'error',
+      database: 'disconnected',
+      error: error.message,
+    });
+  }
+});
+
+// Request ID and response time middleware
+app.use(requestIdMiddleware);
+app.use(responseTimeMiddleware);
 
 // Setup Routes (always available, even without DB)
 app.use('/api/setup', setupRoutes);
@@ -111,16 +185,83 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/uploads', express.static(path.resolve('./uploads')));
 
 
+// 404 handler
+app.use(notFoundHandler);
+
 // Global error handler
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled Error:', err);
-  res.status(500).json({
-    message: 'Internal server error',
-    error: err.message || 'Unknown error',
-  });
-});
+app.use(errorHandler);
 
 // Start server and check DB
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`\n🔄 ${signal} received. Starting graceful shutdown...`);
+
+  // 1. Stop accepting new HTTP connections
+  server.close(async (err) => {
+    if (err) console.error('Error closing HTTP server:', err);
+    console.log('✅ HTTP server closed.');
+
+    // 2. Stop Socket.IO
+    try {
+      const io = getIO();
+      if (io) {
+        io.close();
+        console.log('✅ Socket.IO closed.');
+      }
+    } catch (err) {
+      console.error('Error closing Socket.IO:', err);
+    }
+
+    // 3. Disconnect Prisma
+    try {
+      await getPrisma().$disconnect();
+      console.log('✅ Prisma disconnected.');
+    } catch (err) {
+      console.error('Error disconnecting Prisma:', err);
+    }
+
+    // 4. Stop Cron Jobs
+    try {
+      CronService.stop();
+    } catch (err) {
+      console.error('Error stopping Cron:', err);
+    }
+
+    process.exit(0);
+  });
+
+  // Force exit after 10s
+  setTimeout(() => {
+    console.error('⚠️ Forced shutdown after 10s timeout.');
+    process.exit(1);
+  }, 10000);
+};
+
+// Register signal handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Process-level error handlers
+process.on('uncaughtException', (err) => {
+  console.error('💥 Uncaught Exception:', {
+    timestamp: new Date().toISOString(),
+    message: err.message,
+    stack: err.stack,
+  });
+  gracefulShutdown('uncaughtException');
+});
+
+process.on('unhandledRejection', (reason: any) => {
+  console.error('💥 Unhandled Rejection:', {
+    timestamp: new Date().toISOString(),
+    reason: reason?.message || reason,
+  });
+  gracefulShutdown('unhandledRejection');
+});
+
 server.listen(PORT, async () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);

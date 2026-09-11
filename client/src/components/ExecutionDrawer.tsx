@@ -111,13 +111,12 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   onSaved,
   onEditTestCase,
 }) => {
-  if (!isOpen || !testCase) return null;
-
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
+    if (!testCase?.id) return;
     const link = `${window.location.origin}/testcases/${testCase.id}`;
     try {
       await navigator.clipboard.writeText(link);
@@ -146,7 +145,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const [defaultOsVal, setDefaultOsVal] = useState<string>('Windows 11');
 
   // All execution history
-  const [allExecutions, setAllExecutions] = useState<TestExecution[]>(testCase.executions || []);
+  const [allExecutions, setAllExecutions] = useState<TestExecution[]>(testCase?.executions || []);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | undefined>();
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
@@ -592,6 +591,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
           images: retainedImages,
         };
       } else {
+        if (!testCase?.id) throw new Error('Missing testCase');
         // Create brand new execution milestone
         const res = await executionApi.executeTestCase(testCase.id, {
           server,
@@ -654,7 +654,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       }
 
       const updated: TestCase = {
-        ...testCase,
+        ...(testCase as TestCase),
         executions: updatedExecs,
         latestExecution: updatedExecs[0] || savedExec,
       };
@@ -703,28 +703,48 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   }, [isOpen]);
 
   // Tải lịch sử thay đổi (snapshots) của execution đang chọn
+  // Guard: chỉ reset selection khi execution thật sự đổi; fetch cũ không được xóa selection mới
+  const activeExecIdRef = useRef<string | undefined>(undefined);
+  const snapshotReqRef = useRef(0);
   useEffect(() => {
     const id = activeExecution?.id;
-    setSelectedSnapshot(null);
+    if (id === activeExecIdRef.current && snapshots.length > 0) return;
+    const prevId = activeExecIdRef.current;
+    activeExecIdRef.current = id;
+    if (prevId !== id) {
+      setSelectedSnapshot(null);
+    }
     if (!id) {
       setSnapshots([]);
       return;
     }
+    const reqId = ++snapshotReqRef.current;
     setSnapshotsLoading(true);
     executionApi
       .getSnapshots(id)
       .then((r) => {
+        if (snapshotReqRef.current !== reqId || activeExecIdRef.current !== id) return;
         const snapList = r.data.snapshots || [];
         setSnapshots(snapList);
-        if (snapList.length > 0) {
-          const lastSnap = snapList[snapList.length - 1];
-          if (lastSnap?.images && Array.isArray(lastSnap.images)) {
-            setImages(lastSnap.images);
+        // Chỉ nạp ảnh mốc mới nhất khi user chưa chọn mốc nào (tránh ghi đè lựa chọn lần 1)
+        setSelectedSnapshot((prevSelected) => {
+          if (!prevSelected && snapList.length > 0) {
+            const lastSnap = snapList[snapList.length - 1];
+            if (lastSnap?.images && Array.isArray(lastSnap.images)) {
+              setImages(lastSnap.images);
+            }
           }
-        }
+          return prevSelected;
+        });
       })
-      .catch(() => setSnapshots([]))
-      .finally(() => setSnapshotsLoading(false));
+      .catch(() => {
+        if (snapshotReqRef.current !== reqId || activeExecIdRef.current !== id) return;
+        setSnapshots([]);
+      })
+      .finally(() => {
+        if (snapshotReqRef.current !== reqId || activeExecIdRef.current !== id) return;
+        setSnapshotsLoading(false);
+      });
   }, [activeExecution?.id]);
 
   // Kiểm tra quyền quản lý người theo dõi (creator / executor / admin)
@@ -1020,6 +1040,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
   const selectedUserObj = userOptions.find((u) => u.id === selectedUserId);
 
+  if (!isOpen || !testCase) return null;
+
   return (
     <div className={fullPage ? 'relative flex-1 min-h-0 w-full' : 'fixed inset-0 z-50 overflow-hidden bg-slate-900/50 backdrop-blur-sm flex justify-end'}>
       <div className="w-full bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
@@ -1232,7 +1254,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
                             : 'bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800'
                         }`}
                       >
-                        {w.user.fullName || w.user.email}
+                        {w.user?.fullName || w.user?.email || w.userId}
                         {w.userId === currentUser?.id && <span className="text-[9px] opacity-70">(Tôi)</span>}
                         {(canManageWatchers || w.userId === currentUser?.id) && (
                           <button
