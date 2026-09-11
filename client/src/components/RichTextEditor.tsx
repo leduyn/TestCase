@@ -60,6 +60,94 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   const resizeTimerRef = useRef<number | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Caret đã lưu trước khi focus rời editor (bấm toolbar/menu) để restore khi chèn
+  const savedRangeRef = useRef<Range | null>(null);
+
+  const saveSelection = () => {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      if (editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
+        savedRangeRef.current = range.cloneRange();
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const restoreSelection = (): boolean => {
+    const editor = editorRef.current;
+    if (!editor) return false;
+    try {
+      editor.focus();
+      const sel = window.getSelection();
+      if (!sel) return false;
+      const saved = savedRangeRef.current;
+      if (saved) {
+        // Range cũ có thể đã bị detach sau khi DOM đổi — kiểm tra còn nằm trong editor
+        let valid = false;
+        try {
+          valid = !!editor.contains(saved.commonAncestorContainer);
+        } catch {
+          valid = false;
+        }
+        if (valid) {
+          sel.removeAllRanges();
+          sel.addRange(saved);
+          return true;
+        }
+      }
+      // Fallback: đặt caret cuối editor
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      savedRangeRef.current = range.cloneRange();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const insertHtmlRobust = (html: string): boolean => {
+    const editor = editorRef.current;
+    if (!editor || !html) return false;
+    restoreSelection();
+    let ok = false;
+    try {
+      ok = document.execCommand('insertHTML', false, html);
+    } catch {
+      ok = false;
+    }
+    if (!ok) {
+      // Fallback: chèn trực tiếp vào cuối editor khi execCommand thất bại (lần đầu chưa có caret)
+      try {
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html;
+        editor.appendChild(tpl.content);
+        // Đưa caret xuống cuối sau khi chèn
+        const sel = window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+        ok = true;
+      } catch {
+        ok = false;
+      }
+    }
+    if (ok) {
+      editor.focus();
+      handleInput();
+      saveSelection();
+    }
+    return ok;
+  };
 
   // Sync value from props to editor contentEditable
   useEffect(() => {
@@ -118,10 +206,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
   };
 
   const insertHtmlAtCursor = (html: string) => {
-    if (editorRef.current) {
-      editorRef.current.focus();
-    }
-    execCmd('insertHTML', html);
+    insertHtmlRobust(html);
   };
 
   const insertLink = () => {
@@ -213,7 +298,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       </table>
       <p></p>
     `;
-    execCmd('insertHTML', tableHtml);
+    insertHtmlRobust(tableHtml);
   };
 
   const applyColor = (color: string) => {
@@ -256,7 +341,7 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
       `;
     }
 
-    execCmd('insertHTML', tpl);
+    insertHtmlRobust(tpl);
     setShowTemplateMenu(false);
   };
 
@@ -600,7 +685,10 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
           <div className="relative">
             <button
               type="button"
-              onClick={() => setShowTemplateMenu(!showTemplateMenu)}
+              onClick={() => {
+                saveSelection();
+                setShowTemplateMenu(!showTemplateMenu);
+              }}
               className="flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded bg-blue-100/70 hover:bg-blue-200/80 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 transition-colors"
               title="Chèn mẫu nhanh kết quả kiểm thử"
             >
@@ -679,7 +767,12 @@ export const RichTextEditor: React.FC<RichTextEditorProps> = ({
             ref={editorRef}
             contentEditable
             onInput={handleInput}
-            onBlur={handleInput}
+            onBlur={() => {
+              saveSelection();
+              handleInput();
+            }}
+            onKeyUp={saveSelection}
+            onMouseUp={saveSelection}
             onPaste={handlePaste}
             style={{ minHeight }}
             data-placeholder={placeholder}
