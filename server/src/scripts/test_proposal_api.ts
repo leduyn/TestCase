@@ -197,8 +197,8 @@ async function runStep3Tests() {
   console.log(`- Đã thêm bình luận: ID = ${comment.id}, Nội dung = "${comment.content}"`);
 
   const comments = await ProposalService.getComments(proposalDraft.id);
-  console.log(`- Số lượng bình luận: ${comments.length}`);
-  if (comments.length !== 1) throw new Error('Số lượng bình luận không khớp');
+  console.log(`- Số lượng bình luận: ${comments.total}`);
+  if (comments.total !== 1) throw new Error('Số lượng bình luận không khớp');
 
   // Gửi duyệt (SUBMIT)
   const submitted = await ProposalWorkflowService.initializeApprovals(proposalDraft.id, testUser.id);
@@ -226,8 +226,8 @@ async function runStep3Tests() {
 
   // Kiểm tra lịch sử đề xuất
   const history = await ProposalService.getHistory(proposalDraft.id);
-  console.log(`- Số mốc lịch sử ghi nhận: ${history.length} mốc`);
-  if (history.length < 3) throw new Error('Lịch sử đề xuất phải ghi nhận >= 3 sự kiện (CREATED, SUBMITTED, APPROVED)');
+  console.log(`- Số mốc lịch sử ghi nhận: ${history.total} mốc`);
+  if (history.total < 3) throw new Error('Lịch sử đề xuất phải ghi nhận >= 3 sự kiện (CREATED, SUBMITTED, APPROVED)');
 
   // 5. Test ProposalReportService
   console.log('\n--- 5. Kiểm thử ProposalReportService (Báo cáo & Thống kê) ---');

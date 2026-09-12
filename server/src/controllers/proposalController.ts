@@ -3,6 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { ProposalService } from '../services/proposalService';
 import { ProposalWorkflowService } from '../services/proposalWorkflowService';
 import { ProposalStatus, ProposalPriority } from '@prisma/client';
+import { parsePagination, buildMeta } from '../utils/pagination';
 
 export class ProposalController {
   static async getProposals(req: AuthRequest, res: Response) {
@@ -222,8 +223,9 @@ export class ProposalController {
   static async getHistory(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
-      const history = await ProposalService.getHistory(id);
-      return res.json(history);
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+      const { history, total } = await ProposalService.getHistory(id, { skip, take: limit });
+      return res.json({ history, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       console.error('Error fetching proposal history:', error);
       return res.status(500).json({ message: error.message || 'Lỗi khi lấy lịch sử đề xuất' });
@@ -233,8 +235,9 @@ export class ProposalController {
   static async getComments(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
-      const comments = await ProposalService.getComments(id);
-      return res.json(comments);
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+      const { comments, total } = await ProposalService.getComments(id, { skip, take: limit });
+      return res.json({ comments, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       console.error('Error fetching proposal comments:', error);
       return res.status(500).json({ message: error.message || 'Lỗi khi lấy danh sách bình luận' });
@@ -265,8 +268,9 @@ export class ProposalController {
   static async getFollowers(req: AuthRequest, res: Response) {
     try {
       const { id } = req.params;
-      const followers = await ProposalService.getFollowers(id);
-      return res.json(followers);
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+      const { followers, total } = await ProposalService.getFollowers(id, { skip, take: limit });
+      return res.json({ followers, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       console.error('Error fetching followers:', error);
       return res.status(500).json({ message: error.message || 'Lỗi khi lấy danh sách người theo dõi' });

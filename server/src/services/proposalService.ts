@@ -462,19 +462,26 @@ export class ProposalService {
   /**
    * Lấy danh sách người theo dõi đề xuất
    */
-  static async getFollowers(proposalId: string) {
-    return prisma.proposalFollower.findMany({
-      where: { proposalId },
-      include: {
-        user: {
-          select: { id: true, fullName: true, email: true, department: true, role: true },
+  static async getFollowers(proposalId: string, options?: { skip?: number; take?: number }) {
+    const { skip, take } = options || {};
+    const [followers, total] = await Promise.all([
+      prisma.proposalFollower.findMany({
+        where: { proposalId },
+        include: {
+          user: {
+            select: { id: true, fullName: true, email: true, department: true, role: true },
+          },
+          addedBy: {
+            select: { id: true, fullName: true, email: true },
+          },
         },
-        addedBy: {
-          select: { id: true, fullName: true, email: true },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+        orderBy: { createdAt: 'asc' },
+        ...(skip !== undefined ? { skip } : {}),
+        ...(take !== undefined ? { take } : {}),
+      }),
+      prisma.proposalFollower.count({ where: { proposalId } }),
+    ]);
+    return { followers, total };
   }
 
   /**
@@ -654,26 +661,40 @@ export class ProposalService {
   /**
    * Lấy danh sách bình luận
    */
-  static async getComments(proposalId: string) {
-    return prisma.proposalComment.findMany({
-      where: { proposalId },
-      include: {
-        user: { select: { id: true, fullName: true, email: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+  static async getComments(proposalId: string, options?: { skip?: number; take?: number }) {
+    const { skip, take } = options || {};
+    const [comments, total] = await Promise.all([
+      prisma.proposalComment.findMany({
+        where: { proposalId },
+        include: {
+          user: { select: { id: true, fullName: true, email: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+        ...(skip !== undefined ? { skip } : {}),
+        ...(take !== undefined ? { take } : {}),
+      }),
+      prisma.proposalComment.count({ where: { proposalId } }),
+    ]);
+    return { comments, total };
   }
 
   /**
    * Lấy lịch sử đề xuất
    */
-  static async getHistory(proposalId: string) {
-    return prisma.proposalHistory.findMany({
-      where: { proposalId },
-      include: {
-        changedBy: { select: { id: true, fullName: true, email: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  static async getHistory(proposalId: string, options?: { skip?: number; take?: number }) {
+    const { skip, take } = options || {};
+    const [history, total] = await Promise.all([
+      prisma.proposalHistory.findMany({
+        where: { proposalId },
+        include: {
+          changedBy: { select: { id: true, fullName: true, email: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        ...(skip !== undefined ? { skip } : {}),
+        ...(take !== undefined ? { take } : {}),
+      }),
+      prisma.proposalHistory.count({ where: { proposalId } }),
+    ]);
+    return { history, total };
   }
 }

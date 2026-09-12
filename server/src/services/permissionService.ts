@@ -1,5 +1,11 @@
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
+import {
+  getRedisCache,
+  isRedisReady,
+  onPermissionInvalidated,
+  publishPermissionInvalidated,
+} from '../config/redis';
 
 interface PermissionCache {
   [userId: string]: {
@@ -11,12 +17,45 @@ interface PermissionCache {
 
 const permissionCache: PermissionCache = {};
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const REDIS_PERM_TTL_SEC = 300;
+const permKey = (userId: string) => `perm:${userId}`;
+
+function setLocalCache(userId: string, permissions: string[], role: string): void {
+  permissionCache[userId] = { permissions, role, expiresAt: Date.now() + CACHE_TTL };
+}
+
+function deleteLocalCache(userId?: string): void {
+  if (userId) {
+    delete permissionCache[userId];
+  } else {
+    Object.keys(permissionCache).forEach((key) => delete permissionCache[key]);
+  }
+}
+
+// Nhận invalidate từ instance khác qua Redis pub/sub
+onPermissionInvalidated((userId) => {
+  deleteLocalCache(userId === '*' ? undefined : userId);
+});
 
 export async function getUserEffectivePermissions(userId: string, role: string): Promise<string[]> {
   const now = Date.now();
   const cached = permissionCache[userId];
   if (cached && cached.expiresAt > now) {
     return cached.permissions;
+  }
+
+  // L2: Redis shared cache
+  if (isRedisReady()) {
+    try {
+      const raw = await getRedisCache()!.get(permKey(userId));
+      if (raw) {
+        const parsed = JSON.parse(raw) as { permissions: string[]; role: string };
+        setLocalCache(userId, parsed.permissions, parsed.role);
+        return parsed.permissions;
+      }
+    } catch (err: any) {
+      console.warn(`[PermCache] Redis read failed, fallback DB: ${err?.message || err}`);
+    }
   }
 
   // Get role permissions
@@ -51,12 +90,15 @@ export async function getUserEffectivePermissions(userId: string, role: string):
 
   const effective = Array.from(allowSet);
 
-  // Cache
-  permissionCache[userId] = {
-    permissions: effective,
-    role,
-    expiresAt: now + CACHE_TTL,
-  };
+  // Cache L1 (memory) + L2 (Redis shared)
+  setLocalCache(userId, effective, role);
+  if (isRedisReady()) {
+    try {
+      await getRedisCache()!.setex(permKey(userId), REDIS_PERM_TTL_SEC, JSON.stringify({ permissions: effective, role }));
+    } catch (err: any) {
+      console.warn(`[PermCache] Redis write failed: ${err?.message || err}`);
+    }
+  }
 
   return effective;
 }
@@ -93,11 +135,31 @@ export async function hasPermission(
 }
 
 export function clearPermissionCache(userId?: string) {
-  if (userId) {
-    delete permissionCache[userId];
-  } else {
-    Object.keys(permissionCache).forEach(key => delete permissionCache[key]);
+  deleteLocalCache(userId);
+  if (isRedisReady()) {
+    const cache = getRedisCache()!;
+    if (userId) {
+      cache.del(permKey(userId)).catch((err: any) =>
+        console.warn(`[PermCache] Redis del failed: ${err?.message || err}`)
+      );
+    } else {
+      // Xóa toàn bộ perm:* qua SCAN (tránh KEYS blocking)
+      (async () => {
+        try {
+          let cursor = '0';
+          do {
+            const [next, keys] = await cache.scan(cursor, 'MATCH', 'perm:*', 'COUNT', 500);
+            cursor = next;
+            if (keys.length > 0) await cache.del(...keys);
+          } while (cursor !== '0');
+        } catch (err: any) {
+          console.warn(`[PermCache] Redis clear-all failed: ${err?.message || err}`);
+        }
+      })();
+    }
   }
+  // Báo các instance khác xóa L1 của chúng
+  publishPermissionInvalidated(userId || '*').catch(() => {});
 }
 
 export async function getAllPermissions() {

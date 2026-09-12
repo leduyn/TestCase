@@ -46,16 +46,23 @@ export class CommentService {
   /**
    * Lấy danh sách bình luận của nhiệm vụ
    */
-  static async getCommentsByTaskId(taskId: string) {
-    return await prisma.taskComment.findMany({
-      where: { taskId },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        user: {
-          select: { id: true, fullName: true, email: true, role: true },
+  static async getCommentsByTaskId(taskId: string, options?: { skip?: number; take?: number }) {
+    const { skip, take } = options || {};
+    const [comments, total] = await Promise.all([
+      prisma.taskComment.findMany({
+        where: { taskId },
+        orderBy: { createdAt: 'asc' },
+        ...(skip !== undefined ? { skip } : {}),
+        ...(take !== undefined ? { take } : {}),
+        include: {
+          user: {
+            select: { id: true, fullName: true, email: true, role: true },
+          },
         },
-      },
-    });
+      }),
+      prisma.taskComment.count({ where: { taskId } }),
+    ]);
+    return { comments, total };
   }
 
   /**

@@ -5,6 +5,7 @@ import { TestExecutionStatus } from '@prisma/client';
 import { canViewAllExecutionHistory } from '../services/permissionService';
 import { isStatusHandler } from '../services/statusHandlerService';
 import { NotificationService } from '../services/notificationService';
+import { parsePagination, buildMeta } from '../utils/pagination';
 
 const STATUS_PERMISSION_PREFIX = 'execution:set-';
 
@@ -387,29 +388,47 @@ export class ExecutionController {
         ];
       }
 
-      const history = await prisma.testExecution.findMany({
-        where: whereClause,
-        orderBy: { executedAt: 'desc' },
-        include: {
-          executedBy: {
-            select: { fullName: true, email: true },
-          },
-          createdBy: {
-            select: { id: true, fullName: true, email: true },
-          },
-          beforeExecutedBy: {
-            select: { id: true, fullName: true, email: true },
-          },
-          watchers: {
-            include: { user: { select: { id: true, fullName: true, email: true } } },
-          },
-          images: {
-            orderBy: { uploadedAt: 'asc' },
-          },
-        },
-      });
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
 
-      return res.json({ history });
+      const [history, total] = await Promise.all([
+        prisma.testExecution.findMany({
+          where: whereClause,
+          orderBy: { executedAt: 'desc' },
+          skip,
+          take: limit,
+          include: {
+            executedBy: {
+              select: { id: true, fullName: true, email: true },
+            },
+            createdBy: {
+              select: { id: true, fullName: true, email: true },
+            },
+            beforeExecutedBy: {
+              select: { id: true, fullName: true, email: true },
+            },
+            watchers: {
+              select: { userId: true, user: { select: { id: true, fullName: true, email: true } } },
+            },
+            images: {
+              orderBy: { uploadedAt: 'asc' },
+              take: 20,
+              select: {
+                id: true,
+                filename: true,
+                publicUrl: true,
+                thumbnailPath: true,
+                mimeType: true,
+                fileSize: true,
+                uploadedAt: true,
+              },
+            },
+            _count: { select: { images: true } },
+          },
+        }),
+        prisma.testExecution.count({ where: whereClause }),
+      ]);
+
+      return res.json({ history, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       return res.status(500).json({ message: 'Lỗi tải lịch sử thực thi', error: error.message });
     }
@@ -461,31 +480,31 @@ export class ExecutionController {
         return res.status(403).json({ message: 'Bạn không có quyền xem lịch sử này' });
       }
 
-      let snapshots = await prisma.testExecutionHistory.findMany({
-        where: { executionId },
-        orderBy: { updatedAt: 'asc' },
-        include: {
-          executedBy: { select: { id: true, fullName: true, email: true } },
-          createdBy: { select: { id: true, fullName: true, email: true } },
-          beforeExecutedBy: { select: { id: true, fullName: true, email: true } },
-        },
-      });
+      const snapshotInclude = {
+        executedBy: { select: { id: true, fullName: true, email: true } },
+        createdBy: { select: { id: true, fullName: true, email: true } },
+        beforeExecutedBy: { select: { id: true, fullName: true, email: true } },
+      };
 
       // Nếu chưa có snapshot nào (ví dụ execution được tạo khi nhận test case trước đây), tự động ghi nhận snapshot khởi tạo
-      if (snapshots.length === 0) {
+      const existingCount = await prisma.testExecutionHistory.count({ where: { executionId } });
+      if (existingCount === 0) {
         await ExecutionController.snapshotExecution(execution.id);
-        snapshots = await prisma.testExecutionHistory.findMany({
-          where: { executionId },
-          orderBy: { updatedAt: 'asc' },
-          include: {
-            executedBy: { select: { id: true, fullName: true, email: true } },
-            createdBy: { select: { id: true, fullName: true, email: true } },
-            beforeExecutedBy: { select: { id: true, fullName: true, email: true } },
-          },
-        });
       }
 
-      return res.json({ snapshots });
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+      const [snapshots, total] = await Promise.all([
+        prisma.testExecutionHistory.findMany({
+          where: { executionId },
+          orderBy: { updatedAt: 'asc' },
+          skip,
+          take: limit,
+          include: snapshotInclude,
+        }),
+        prisma.testExecutionHistory.count({ where: { executionId } }),
+      ]);
+
+      return res.json({ snapshots, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       return res.status(500).json({ message: 'Lỗi tải lịch sử thay đổi', error: error.message });
     }

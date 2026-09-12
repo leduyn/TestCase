@@ -1,6 +1,8 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
 import jwt from 'jsonwebtoken';
+import { getRedisPubSub, onRedisReady } from './config/redis';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_testcase_ai_2026';
 
@@ -62,8 +64,35 @@ export function initSocket(server: HttpServer): Server {
     });
   });
 
+  attachRedisAdapter(io);
+
   console.log('✅ [Socket.IO] Server initialized successfully.');
   return io;
+}
+
+/**
+ * Gắn Redis adapter để rooms/events đồng bộ cross-instance (HA).
+ * Không có Redis (hoặc Redis down) thì chạy local như cũ — không chặn boot.
+ */
+function attachRedisAdapter(server: Server): void {
+  const tryAttach = () => {
+    const pubSub = getRedisPubSub();
+    if (!pubSub) return false;
+    try {
+      server.adapter(createAdapter(pubSub.pub, pubSub.sub));
+      console.log('✅ [Socket.IO] Redis adapter attached (cross-instance emit enabled).');
+      return true;
+    } catch (err: any) {
+      console.warn(`⚠️ [Socket.IO] Redis adapter attach failed, staying local: ${err?.message || err}`);
+      return false;
+    }
+  };
+
+  if (!tryAttach()) {
+    onRedisReady(() => {
+      tryAttach();
+    });
+  }
 }
 
 /**

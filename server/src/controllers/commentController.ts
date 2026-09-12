@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { CommentService } from '../services/commentService';
+import { parsePagination, buildMeta } from '../utils/pagination';
 
 export class CommentController {
   static async createComment(req: AuthRequest, res: Response) {
@@ -32,8 +33,9 @@ export class CommentController {
   static async getCommentsByTaskId(req: AuthRequest, res: Response) {
     try {
       const { taskId } = req.params;
-      const comments = await CommentService.getCommentsByTaskId(taskId);
-      return res.json(comments);
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+      const { comments, total } = await CommentService.getCommentsByTaskId(taskId, { skip, take: limit });
+      return res.json({ comments, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       console.error('Error fetching comments:', error);
       return res.status(500).json({ message: error.message || 'Lỗi khi lấy danh sách bình luận' });

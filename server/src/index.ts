@@ -33,6 +33,7 @@ import proposalReportRoutes from './routes/proposalReportRoutes';
 import proposalNotificationRoutes from './routes/proposalNotificationRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import { checkDatabaseConnection, checkDatabasePoolHealth, getPrisma } from './config/database';
+import { initRedis } from './config/redis';
 import { getIO } from './socket';
 import { dbCheckMiddleware } from './controllers/setupController';
 import { apiLimiter, authLimiter, aiLimiter, exportLimiter } from './middleware/rateLimiter';
@@ -46,6 +47,10 @@ import { CronService } from './services/cronService';
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3001;
+
+// Tin IP thật từ Nginx reverse proxy (X-Forwarded-For) để rate-limit/socket log đúng client.
+// Chỉ trust 1 hop (Nginx) — không dùng `true` để tránh IP giả mạo qua nhiều proxy.
+app.set('trust proxy', 1);
 
 // Khởi tạo Socket.IO Server
 initSocket(server);
@@ -265,6 +270,9 @@ process.on('unhandledRejection', (reason: any) => {
 server.listen(PORT, async () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+
+  // Kết nối Redis (không chặn boot — fallback memory nếu Redis down)
+  initRedis().catch((err) => console.warn(`⚠️ [Redis] init failed: ${err?.message || err}`));
 
   // Check database connection on startup
   const dbCheck = await checkDatabaseConnection();

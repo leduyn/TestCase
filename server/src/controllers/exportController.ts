@@ -18,13 +18,28 @@ export class ExportController {
         include: {
           testCases: {
             orderBy: { orderIndex: 'asc' },
-            include: {
+            select: {
+              testCaseCode: true,
+              module: true,
+              platform: true,
+              title: true,
+              testType: true,
+              preconditions: true,
+              steps: true,
+              expectedResult: true,
+              priority: true,
               executions: {
                 orderBy: { executedAt: 'desc' },
-                include: {
-                  executedBy: {
-                    select: { id: true, fullName: true },
-                  },
+                take: 5000,
+                select: {
+                  server: true,
+                  os: true,
+                  actualResult: true,
+                  status: true,
+                  notes: true,
+                  createdById: true,
+                  executedById: true,
+                  executedBy: { select: { id: true, fullName: true } },
                 },
               },
             },
@@ -39,9 +54,9 @@ export class ExportController {
        const testCaseItems: ExportTestCaseItem[] = [];
        suite.testCases.forEach((tc) => {
         const executions = (!canViewAll && userId)
-          ? tc.executions.filter((e) => e.createdById === userId || e.executedById === userId)
+          ? tc.executions.filter((e: any) => e.createdById === userId || e.executedById === userId)
           : tc.executions;
-        executions.forEach((exec) => {
+        executions.forEach((exec: any) => {
           testCaseItems.push({
             testCaseCode: tc.testCaseCode,
             module: tc.module,
@@ -84,8 +99,16 @@ export class ExportController {
         'Content-Disposition',
         `attachment; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`
       );
+      res.setHeader('Content-Length', String(buffer.length));
 
-      return res.send(buffer);
+      const CHUNK_SIZE = 64 * 1024;
+      for (let offset = 0; offset < buffer.length; offset += CHUNK_SIZE) {
+        const end = Math.min(offset + CHUNK_SIZE, buffer.length);
+        if (!res.write(buffer.subarray(offset, end))) {
+          await new Promise((resolve) => res.once('drain', resolve));
+        }
+      }
+      return res.end();
     } catch (error: any) {
       console.error('Export Excel error:', error);
       return res.status(500).json({ message: 'Lỗi khi xuất file Excel', error: error.message });
@@ -106,13 +129,26 @@ export class ExportController {
         include: {
           testCases: {
             orderBy: { orderIndex: 'asc' },
-            include: {
+            select: {
+              testCaseCode: true,
+              module: true,
+              platform: true,
+              title: true,
+              testType: true,
+              preconditions: true,
+              steps: true,
+              expectedResult: true,
+              priority: true,
               executions: {
                 orderBy: { executedAt: 'desc' },
-                include: {
-                  executedBy: {
-                    select: { id: true, fullName: true },
-                  },
+                take: 5000,
+                select: {
+                  executedAt: true,
+                  actualResult: true,
+                  status: true,
+                  createdById: true,
+                  executedById: true,
+                  executedBy: { select: { id: true, fullName: true } },
                 },
               },
             },
@@ -210,8 +246,16 @@ export class ExportController {
         'Content-Disposition',
         `attachment; filename="${safeFilename}"; filename*=UTF-8''${safeFilename}`
       );
+      res.setHeader('Content-Length', String(buffer.length));
 
-      return res.send(buffer);
+      const CHUNK_SIZE = 64 * 1024;
+      for (let offset = 0; offset < buffer.length; offset += CHUNK_SIZE) {
+        const end = Math.min(offset + CHUNK_SIZE, buffer.length);
+        if (!res.write(buffer.subarray(offset, end))) {
+          await new Promise((resolve) => res.once('drain', resolve));
+        }
+      }
+      return res.end();
     } catch (error: any) {
       console.error('Export Results Excel error:', error);
       return res.status(500).json({ message: 'Lỗi khi xuất file kết quả test', error: error.message });

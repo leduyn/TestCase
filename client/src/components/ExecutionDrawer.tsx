@@ -344,7 +344,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     const initData = async () => {
       let execs = testCase.executions || [];
       try {
-        const res = await executionApi.getHistory(testCase.id);
+        const res = await executionApi.getHistory(testCase.id, { limit: 100 });
         if (res.data.history && res.data.history.length > 0) {
           execs = res.data.history;
         }
@@ -402,7 +402,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
         // Lấy chính xác danh sách ảnh của snapshot gần nhất (mốc mới nhất)
         if (targetExecId) {
           try {
-            const snapRes = await executionApi.getSnapshots(targetExecId);
+            const snapRes = await executionApi.getSnapshots(targetExecId, { limit: 100 });
             const snapList = snapRes.data.snapshots || [];
             setSnapshots(snapList);
             if (snapList.length > 0) {
@@ -647,7 +647,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
 
       // Làm mới lịch sử thay đổi (snapshots) của execution vừa lưu
       try {
-        const snapRes = await executionApi.getSnapshots(savedExec.id);
+        const snapRes = await executionApi.getSnapshots(savedExec.id, { limit: 100 });
         setSnapshots(snapRes.data.snapshots || []);
       } catch {
         /* ignore */
@@ -721,7 +721,7 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
     const reqId = ++snapshotReqRef.current;
     setSnapshotsLoading(true);
     executionApi
-      .getSnapshots(id)
+      .getSnapshots(id, { limit: 100 })
       .then((r) => {
         if (snapshotReqRef.current !== reqId || activeExecIdRef.current !== id) return;
         const snapList = r.data.snapshots || [];
@@ -765,8 +765,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
   const handleCommentCountRefresh = async () => {
     if (!activeExecution?.id) return;
     try {
-      const res = await executionCommentApi.getComments(activeExecution.id);
-      setCommentCount(res.data.comments?.length || 0);
+      const res = await executionCommentApi.getComments(activeExecution.id, { limit: 100 });
+      setCommentCount(res.data.total ?? res.data.comments?.length ?? 0);
     } catch {
       // ignore
     }
@@ -778,8 +778,8 @@ export const ExecutionDrawer: React.FC<ExecutionDrawerProps> = ({
       return;
     }
     executionCommentApi
-      .getComments(activeExecution.id)
-      .then((res) => setCommentCount(res.data.comments?.length || 0))
+      .getComments(activeExecution.id, { limit: 1 })
+      .then((res) => setCommentCount(res.data.total ?? res.data.comments?.length ?? 0))
       .catch(() => {});
 
     // Lắng nghe sự kiện bình luận được thêm hoặc xóa trên execution này

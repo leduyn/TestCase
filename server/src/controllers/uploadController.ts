@@ -339,6 +339,7 @@ export class UploadController {
       const images = await prisma.testExecutionImage.findMany({
         where: { executionId },
         orderBy: { uploadedAt: 'asc' },
+        take: 200,
         include: {
           execution: {
             select: {
@@ -399,6 +400,7 @@ export class UploadController {
       const images = await prisma.testExecutionImage.findMany({
         where: { executionId: { in: executionIds } },
         orderBy: { uploadedAt: 'desc' },
+        take: 500,
         include: {
           execution: {
             select: {

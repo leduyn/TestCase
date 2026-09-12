@@ -114,17 +114,20 @@ export const proposalApi = {
   startWorkflow: (id: string) =>
     api.post<{ message: string; proposal: Proposal }>(`/proposals/${id}/start-workflow`),
 
-  getHistory: (id: string) => api.get<ProposalHistory[]>(`/proposals/${id}/history`),
+  getHistory: (id: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ history: ProposalHistory[]; total: number; page: number; limit: number; totalPages: number }>(`/proposals/${id}/history`, { params }),
 
-  getComments: (id: string) => api.get<ProposalComment[]>(`/proposals/${id}/comments`),
+  getComments: (id: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ comments: ProposalComment[]; total: number; page: number; limit: number; totalPages: number }>(`/proposals/${id}/comments`, { params }),
 
   addComment: (id: string, data: { content: string; attachments?: any[] }) =>
     api.post<{ message: string; comment: ProposalComment }>(`/proposals/${id}/comments`, data),
 
-  getFollowers: (id: string) => api.get<ProposalFollower[]>(`/proposals/${id}/followers`),
+  getFollowers: (id: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ followers: ProposalFollower[]; total: number; page: number; limit: number; totalPages: number }>(`/proposals/${id}/followers`, { params }),
 
   addFollowers: (id: string, userIds: string[]) =>
-    api.post<{ message: string; followers: ProposalFollower[] }>(`/proposals/${id}/followers`, { userIds }),
+    api.post<{ message: string; followers: { followers: ProposalFollower[]; total: number } }>(`/proposals/${id}/followers`, { userIds }),
 
   removeFollower: (id: string, userId: string) =>
     api.delete<{ success: boolean; message: string }>(`/proposals/${id}/followers/${userId}`),

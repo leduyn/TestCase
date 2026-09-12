@@ -159,12 +159,14 @@ export const testCaseApi = {
       message: string;
       testCase: { id: string; reviewStatus: TestCaseReviewStatus; reviewedById: string | null; reviewedAt: string | null };
     }>(`/testcases/${id}/review`),
-  listForReview: () => api.get<{ testCases: ReviewTestCaseItem[] }>('/testcases/review'),
+  listForReview: (params?: { page?: number; limit?: number; reviewStatus?: string; search?: string; module?: string; testType?: string; priority?: string; suiteName?: string }) =>
+    api.get<{ testCases: ReviewTestCaseItem[]; total: number; page: number; limit: number; totalPages: number }>('/testcases/review', { params }),
   bulkReview: (ids: string[]) =>
     api.post<{ message: string; updatedCount: number }>('/testcases/review-bulk', { ids }),
-  getSuites: () => api.get<{ suites: TestSuite[] }>('/testcases/suites'),
-  getSuiteById: (id: string) =>
-    api.get<SuiteDetailResponse>(`/testcases/suites/${id}`),
+  getSuites: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get<{ suites: TestSuite[]; total: number; page: number; limit: number; totalPages: number }>('/testcases/suites', { params }),
+  getSuiteById: (id: string, params?: { page?: number; limit?: number; search?: string; module?: string }) =>
+    api.get<SuiteDetailResponse>(`/testcases/suites/${id}`, { params }),
   takeTestCases: (
     id: string,
     data?: { module?: string; testCaseIds?: string[]; newRound?: boolean; watcherIds?: string[] }
@@ -207,8 +209,8 @@ export const testCaseApi = {
       skipped: Array<{ row: number; reason: string }>;
       testCases: TestCase[];
     }>('/testcases/import/json', data),
-  getUserExecutionStats: () =>
-    api.get<UserTestStatsResponse>('/testcases/stats/user-executions'),
+  getUserExecutionStats: (params?: { page?: number; limit?: number }) =>
+    api.get<UserTestStatsResponse>('/testcases/stats/user-executions', { params }),
 };
 
 // Execution API
@@ -249,11 +251,12 @@ export const executionApi = {
       `/executions/${executionId}`,
       data
     ),
-  getHistory: (testCaseId: string) =>
-    api.get<{ history: TestExecution[] }>(`/executions/${testCaseId}/history`),
-  getSnapshots: (executionId: string) =>
-    api.get<{ snapshots: TestExecutionHistory[] }>(
-      `/executions/${executionId}/snapshots`
+  getHistory: (testCaseId: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ history: TestExecution[]; total: number; page: number; limit: number; totalPages: number }>(`/executions/${testCaseId}/history`, { params }),
+  getSnapshots: (executionId: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ snapshots: TestExecutionHistory[]; total: number; page: number; limit: number; totalPages: number }>(
+      `/executions/${executionId}/snapshots`,
+      { params }
     ),
   getWatcherUsers: () =>
     api.get<{ users: { id: string; fullName: string; email: string }[] }>(
@@ -268,8 +271,8 @@ export const executionApi = {
 
 // Execution Comment API
 export const executionCommentApi = {
-  getComments: (executionId: string) =>
-    api.get<{ comments: TestExecutionComment[] }>(`/executions/${executionId}/comments`),
+  getComments: (executionId: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ comments: TestExecutionComment[]; total: number; page: number; limit: number; totalPages: number }>(`/executions/${executionId}/comments`, { params }),
   addComment: (
     executionId: string,
     data: {
@@ -432,9 +435,10 @@ export const statusHandlerApi = {
 
 // TestSuites API
 export const suiteApi = {
-  getSuites: () => api.get<{ suites: TestSuite[] }>('/testcases/suites'),
-  getSuiteById: (id: string) =>
-    api.get<SuiteDetailResponse>(`/testcases/suites/${id}`),
+  getSuites: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get<{ suites: TestSuite[]; total: number; page: number; limit: number; totalPages: number }>('/testcases/suites', { params }),
+  getSuiteById: (id: string, params?: { page?: number; limit?: number; search?: string; module?: string }) =>
+    api.get<SuiteDetailResponse>(`/testcases/suites/${id}`, { params }),
   updateTestSuite: (id: string, data: { name: string; moduleName: string; summary?: string; assumptions?: string }) =>
     api.put<{ message: string; testSuite: TestSuite }>(`/testcases/suites/${id}`, data),
   deleteTestSuite: (id: string) => api.delete<{ message: string }>(`/testcases/suites/${id}`),

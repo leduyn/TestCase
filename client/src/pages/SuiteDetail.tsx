@@ -176,7 +176,7 @@ export const SuiteDetail: React.FC = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await testCaseApi.getSuiteById(id);
+      const res = await testCaseApi.getSuiteById(id, { limit: 1000 });
       setSuite(res.data.suite);
       setUnreceivedTestCases(res.data.unreceivedTestCases || []);
       // Server already computes latestExecution based on permission:

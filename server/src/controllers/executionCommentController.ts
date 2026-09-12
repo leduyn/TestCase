@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import prisma from '../config/database';
 import { NotificationService } from '../services/notificationService';
+import { parsePagination, buildMeta } from '../utils/pagination';
 
 export class ExecutionCommentController {
   /**
@@ -37,17 +38,23 @@ export class ExecutionCommentController {
         }
       }
 
-      const comments = await prisma.testExecutionComment.findMany({
-        where: { executionId },
-        include: {
-          user: {
-            select: { id: true, fullName: true, email: true, role: true, department: true },
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+      const [comments, total] = await Promise.all([
+        prisma.testExecutionComment.findMany({
+          where: { executionId },
+          include: {
+            user: {
+              select: { id: true, fullName: true, email: true, role: true, department: true },
+            },
           },
-        },
-        orderBy: { createdAt: 'asc' },
-      });
+          orderBy: { createdAt: 'asc' },
+          skip,
+          take: limit,
+        }),
+        prisma.testExecutionComment.count({ where: { executionId } }),
+      ]);
 
-      return res.json({ comments });
+      return res.json({ comments, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       console.error('Error fetching execution comments:', error);
       return res.status(500).json({ message: 'Lỗi tải danh sách bình luận', error: error.message });

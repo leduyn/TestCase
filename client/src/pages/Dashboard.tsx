@@ -53,7 +53,7 @@ export const Dashboard: React.FC = () => {
   const fetchSuites = async () => {
     setLoading(true);
     try {
-      const res = await testCaseApi.getSuites();
+      const res = await testCaseApi.getSuites({ limit: 100 });
       setSuites(res.data.suites || []);
     } catch (err: any) {
       console.error('Error fetching suites:', err);
@@ -65,7 +65,7 @@ export const Dashboard: React.FC = () => {
   const fetchUserStats = async () => {
     setLoadingUserStats(true);
     try {
-      const res = await testCaseApi.getUserExecutionStats();
+      const res = await testCaseApi.getUserExecutionStats({ limit: 100 });
       setUserStats(res.data.userStats || []);
       setCanViewAllStats(res.data.canViewAll ?? false);
     } catch (err: any) {

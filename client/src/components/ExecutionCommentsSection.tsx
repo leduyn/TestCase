@@ -94,7 +94,7 @@ export const ExecutionCommentsSection: React.FC<ExecutionCommentsSectionProps> =
       setErrorMessage(null);
 
       try {
-        const res = await executionCommentApi.getComments(executionId);
+        const res = await executionCommentApi.getComments(executionId, { limit: 100 });
         const incoming = res.data.comments || [];
         setInternalComments(incoming);
       } catch (err: any) {

@@ -175,6 +175,7 @@ export class ProposalNotificationService {
    */
   static async checkDeadlines() {
     const now = new Date();
+    const batchSize = Number(process.env.CRON_BATCH_SIZE || 100);
 
     // 1. Xử lý đề xuất quá hạn (deadline < now)
     const expiredProposals = await prisma.proposal.findMany({
@@ -183,6 +184,8 @@ export class ProposalNotificationService {
         deadline: { lt: now },
       },
       include: { proposalType: true },
+      orderBy: { deadline: 'asc' },
+      take: batchSize,
     });
 
     for (const proposal of expiredProposals) {
@@ -238,6 +241,8 @@ export class ProposalNotificationService {
           orderBy: { order: 'asc' },
         },
       },
+      orderBy: { deadline: 'asc' },
+      take: batchSize * 2,
     });
 
     let remindersSent = 0;

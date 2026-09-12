@@ -80,7 +80,7 @@ export const Import: React.FC = () => {
   useEffect(() => {
     const loadSuites = async () => {
       try {
-        const res = await testCaseApi.getSuites();
+        const res = await testCaseApi.getSuites({ limit: 100 });
         setSuites(res.data.suites || []);
       } catch {
         /* ignore - import may work without listing */

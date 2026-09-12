@@ -5,6 +5,7 @@ import { parseDocument } from '../services/documentParser';
 import { AIService } from '../services/ai/aiService';
 import { canViewAllExecutionHistory, canViewAllUserTestStats, canViewUserTestStats, canReviewTestCase, hasPermission } from '../services/permissionService';
 import { NotificationService } from '../services/notificationService';
+import { parsePagination, buildMeta } from '../utils/pagination';
 
 // Resolve the "latest execution" to display for a test case based on the viewer's permission:
 // - Always prioritize the viewer's own latest execution (if logged in)
@@ -292,86 +293,62 @@ export class TestCaseController {
       const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
       const canExecute = await hasPermission(currentUserId || '', currentUserRole || '', 'testcase:execute');
 
-      const suites = await prisma.testSuite.findMany({
-        orderBy: { createdAt: 'desc' },
-        include: {
-          document: {
-            select: { filename: true, fileType: true, fileSize: true },
-          },
-          testCases: {
-            where: { reviewStatus: 'REVIEWED' },
-            include: {
-              executions: {
-                orderBy: { executedAt: 'desc' },
-                include: {
-                  executedBy: {
-                    select: { id: true, fullName: true, email: true },
-                  },
-                  beforeExecutedBy: {
-                    select: { id: true, fullName: true, email: true },
-                  },
-                  createdBy: {
-                    select: { id: true, fullName: true, email: true },
-                  },
-                  watchers: {
-                    select: { userId: true },
-                  },
-                  images: {
-                    orderBy: { uploadedAt: 'asc' },
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 20, maxLimit: 100 });
+      const { search } = req.query as Record<string, string | undefined>;
+      const where: any = {};
+      if (search && search.trim()) {
+        where.OR = [
+          { name: { contains: search.trim(), mode: 'insensitive' } },
+          { moduleName: { contains: search.trim(), mode: 'insensitive' } },
+        ];
+      }
+
+      const [suites, totalSuites] = await Promise.all([
+        prisma.testSuite.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+          include: {
+            document: {
+              select: { filename: true },
+            },
+            testCases: {
+              where: { reviewStatus: 'REVIEWED' },
+              select: {
+                id: true,
+                executions: {
+                  orderBy: { executedAt: 'desc' },
+                  select: {
+                    status: true,
+                    executedAt: true,
+                    createdById: true,
+                    executedById: true,
+                    watchers: { select: { userId: true } },
                   },
                 },
               },
             },
           },
-        },
-      });
+        }),
+        prisma.testSuite.count({ where }),
+      ]);
 
+      void canExecute;
       const formatted = suites.map((suite) => {
-        const allReviewed = suite.testCases;
-        const testCasesWithExtras = allReviewed
-          .map((tc) => {
-            let filteredExecutions = tc.executions;
-            if (!canViewAll && currentUserId) {
-              filteredExecutions = tc.executions.filter((e) => isExecutionVisibleTo(e, currentUserId));
-            }
+        const visible = suite.testCases
+          .map((tc) => pickLatestVisibleExecution(tc.executions as any[], currentUserId, canViewAll))
+          .filter((exec) => canViewAll || exec);
 
-            const userExec = pickLatestVisibleExecution(tc.executions, currentUserId, canViewAll);
-            return {
-              ...tc,
-              latestExecution: userExec ?? null,
-              results: filteredExecutions,
-            };
-          })
-          .filter((tc) => canViewAll || tc.latestExecution);
-
-        // Test case đã kiểm duyệt nhưng user chưa có execution nào (để "Nhận & bắt đầu")
-        const unreceivedTestCases = canExecute
-          ? allReviewed
-              .filter(
-                (tc) =>
-                  !tc.executions.some(
-                    (e) => e.createdById === currentUserId || e.executedById === currentUserId
-                  )
-              )
-              .map((tc) => ({
-                id: tc.id,
-                testCaseCode: tc.testCaseCode,
-                title: tc.title,
-                module: tc.module,
-                platform: tc.platform,
-                priority: tc.priority,
-              }))
-          : [];
-
-        const total = testCasesWithExtras.length;
+        const total = visible.length;
         let untested = 0;
         let passed = 0;
         let failed = 0;
         let blocked = 0;
         let retest = 0;
 
-        testCasesWithExtras.forEach((tc) => {
-          const status = tc.latestExecution?.status || 'UNTESTED';
+        visible.forEach((exec) => {
+          const status = (exec as any)?.status || 'UNTESTED';
           if (status === 'PASSED') passed++;
           else if (status === 'FAILED') failed++;
           else if (status === 'BLOCKED') blocked++;
@@ -388,8 +365,6 @@ export class TestCaseController {
           filename: suite.document?.filename || null,
           createdAt: suite.createdAt,
           updatedAt: suite.updatedAt,
-          testCases: testCasesWithExtras,
-          unreceivedTestCases,
           stats: {
             total,
             untested,
@@ -402,7 +377,7 @@ export class TestCaseController {
         };
       });
 
-      return res.json({ suites: formatted });
+      return res.json({ suites: formatted, ...buildMeta(totalSuites, page, limit) });
     } catch (error: any) {
       return res.status(500).json({ message: 'Lỗi tải danh sách Test Suites', error: error.message });
     }
@@ -416,36 +391,25 @@ export class TestCaseController {
       const canViewAll = await canViewAllExecutionHistory(currentUserId, currentUserRole);
       const canExecute = await hasPermission(currentUserId || '', currentUserRole || '', 'testcase:execute');
 
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 200, maxLimit: 1000 });
+      const { search, module } = req.query as Record<string, string | undefined>;
+      const testCaseWhere: any = { testSuiteId: id, reviewStatus: 'REVIEWED' };
+      if (module) testCaseWhere.module = { contains: module, mode: 'insensitive' };
+      if (search && search.trim()) {
+        testCaseWhere.AND = [
+          {
+            OR: [
+              { testCaseCode: { contains: search.trim(), mode: 'insensitive' } },
+              { title: { contains: search.trim(), mode: 'insensitive' } },
+            ],
+          },
+        ];
+      }
+
       const suite = await prisma.testSuite.findUnique({
         where: { id },
         include: {
-          document: true,
-          testCases: {
-            where: { reviewStatus: 'REVIEWED' },
-            orderBy: { orderIndex: 'asc' },
-            include: {
-              executions: {
-                orderBy: { executedAt: 'desc' },
-                include: {
-                  executedBy: {
-                    select: { id: true, fullName: true, email: true },
-                  },
-                  beforeExecutedBy: {
-                    select: { id: true, fullName: true, email: true },
-                  },
-                  createdBy: {
-                    select: { id: true, fullName: true, email: true },
-                  },
-                  watchers: {
-                    include: { user: { select: { id: true, fullName: true, email: true } } },
-                  },
-                  images: {
-                    orderBy: { uploadedAt: 'asc' },
-                  },
-                },
-              },
-            },
-          },
+          document: { select: { filename: true, fileType: true, fileSize: true } },
         },
       });
 
@@ -453,7 +417,50 @@ export class TestCaseController {
         return res.status(404).json({ message: 'Không tìm thấy bộ Test Suite' });
       }
 
-      const allReviewed = suite.testCases;
+      const [pageTestCases, totalTestCases] = await Promise.all([
+        prisma.testCase.findMany({
+          where: testCaseWhere,
+          orderBy: { orderIndex: 'asc' },
+          skip,
+          take: limit,
+          include: {
+            executions: {
+              orderBy: { executedAt: 'desc' },
+              include: {
+                executedBy: {
+                  select: { id: true, fullName: true, email: true },
+                },
+                beforeExecutedBy: {
+                  select: { id: true, fullName: true, email: true },
+                },
+                createdBy: {
+                  select: { id: true, fullName: true, email: true },
+                },
+                watchers: {
+                  select: { userId: true, user: { select: { id: true, fullName: true, email: true } } },
+                },
+                images: {
+                  orderBy: { uploadedAt: 'asc' },
+                  take: 20,
+                  select: {
+                    id: true,
+                    filename: true,
+                    publicUrl: true,
+                    thumbnailPath: true,
+                    mimeType: true,
+                    fileSize: true,
+                    uploadedAt: true,
+                  },
+                },
+                _count: { select: { images: true } },
+              },
+            },
+          },
+        }),
+        prisma.testCase.count({ where: testCaseWhere }),
+      ]);
+
+      const allReviewed = pageTestCases;
       const testCases = allReviewed
         .map((tc) => {
           let filteredExecutions = tc.executions;
@@ -521,19 +528,20 @@ export class TestCaseController {
       });
 
        return res.json({
-         suite: {
-           id: suite.id,
-           name: suite.name,
-           moduleName: suite.moduleName,
-           summary: suite.summary,
-           assumptions: suite.assumptions,
-           filename: suite.document?.filename || null,
-           createdAt: suite.createdAt,
-           updatedAt: suite.updatedAt,
-         },
-          testCases,
-          unreceivedTestCases,
-        });
+          suite: {
+            id: suite.id,
+            name: suite.name,
+            moduleName: suite.moduleName,
+            summary: suite.summary,
+            assumptions: suite.assumptions,
+            filename: suite.document?.filename || null,
+            createdAt: suite.createdAt,
+            updatedAt: suite.updatedAt,
+          },
+           testCases,
+           unreceivedTestCases,
+           ...buildMeta(totalTestCases, page, limit),
+         });
     } catch (error: any) {
       return res.status(500).json({ message: 'Lỗi tải chi tiết Test Suite', error: error.message });
     }
@@ -958,59 +966,67 @@ export class TestCaseController {
       // Total test cases in the system
       const totalTestCases = await prisma.testCase.count();
 
-      // Find target users
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+
+      // Find target users (paginated)
+      const userSelect = {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        status: true,
+        lastLogin: true,
+      };
       let targetUsers;
+      let totalUsers: number;
       if (canViewAll) {
-        targetUsers = await prisma.user.findMany({
-          where: {
-            role: { in: ['ADMIN', 'TESTER'] },
-          },
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true,
-            status: true,
-            lastLogin: true,
-          },
-          orderBy: [
-            { role: 'asc' },
-            { fullName: 'asc' },
-          ],
-        });
+        const where: { role: { in: ('ADMIN' | 'TESTER')[] } } = { role: { in: ['ADMIN', 'TESTER'] } };
+        [targetUsers, totalUsers] = await Promise.all([
+          prisma.user.findMany({
+            where,
+            select: userSelect,
+            orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
+            skip,
+            take: limit,
+          }),
+          prisma.user.count({ where }),
+        ]);
       } else {
-        targetUsers = await prisma.user.findMany({
-          where: { id: currentUserId },
-          select: {
-            id: true,
-            email: true,
-            fullName: true,
-            role: true,
-            status: true,
-            lastLogin: true,
-          },
-        });
+        [targetUsers, totalUsers] = await Promise.all([
+          prisma.user.findMany({
+            where: { id: currentUserId },
+            select: userSelect,
+          }),
+          prisma.user.count({ where: { id: currentUserId } }),
+        ]);
       }
 
-      // Calculate stats for each user
-      const userStats = await Promise.all(
-        targetUsers.map(async (user) => {
-          // Get all executions created or executed by this user
-          const executions = await prisma.testExecution.findMany({
-            where: {
-              OR: [{ executedById: user.id }, { createdById: user.id }],
-            },
-            select: {
-              testCaseId: true,
-              status: true,
-              executedAt: true,
-            },
-            orderBy: { executedAt: 'desc' },
-          });
+      // Single aggregate query for all target users (was N+1).
+      // Order desc so first occurrence per testCaseId is the latest.
+      const userIds = targetUsers.map((u) => u.id);
+      const allExecutions =
+        userIds.length > 0
+          ? await prisma.testExecution.findMany({
+              where: {
+                OR: [{ executedById: { in: userIds } }, { createdById: { in: userIds } }],
+              },
+              select: {
+                testCaseId: true,
+                status: true,
+                executedAt: true,
+                executedById: true,
+                createdById: true,
+              },
+              orderBy: { executedAt: 'desc' },
+            })
+          : [];
 
+      // Calculate stats for each user
+      const userStats = targetUsers.map((user) => {
           // Deduplicate to get latest execution status per testCaseId
           const latestStatusMap = new Map<string, string>();
-          for (const exec of executions) {
+          for (const exec of allExecutions) {
+            if (exec.executedById !== user.id && exec.createdById !== user.id) continue;
             if (!latestStatusMap.has(exec.testCaseId)) {
               latestStatusMap.set(exec.testCaseId, exec.status);
             }
@@ -1052,13 +1068,14 @@ export class TestCaseController {
             passRate,
             completionRate,
           };
-        })
+        }
       );
 
       return res.json({
         canViewAll,
         totalTestCases,
         userStats,
+        ...buildMeta(totalUsers, page, limit),
       });
     } catch (error: any) {
       console.error('Error fetching user execution stats:', error);
@@ -1122,20 +1139,44 @@ export class TestCaseController {
         return res.status(403).json({ message: 'Bạn không có quyền kiểm duyệt Test Case' });
       }
 
-      const cases = await prisma.testCase.findMany({
-        orderBy: [{ testSuiteId: 'asc' }, { orderIndex: 'asc' }],
-        include: {
-          testSuite: {
-            select: { id: true, name: true, moduleName: true },
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 20, maxLimit: 100 });
+      const { reviewStatus, search, module, testType, priority, suiteName } = req.query as Record<string, string | undefined>;
+
+      const where: any = {};
+      if (reviewStatus === 'REVIEWED' || reviewStatus === 'UNREVIEWED') {
+        where.reviewStatus = reviewStatus;
+      }
+      if (module) where.module = { contains: module, mode: 'insensitive' };
+      if (testType) where.testType = { contains: testType, mode: 'insensitive' };
+      if (priority) where.priority = { contains: priority, mode: 'insensitive' };
+      if (suiteName) where.testSuite = { name: { contains: suiteName, mode: 'insensitive' } };
+      if (search && search.trim()) {
+        where.OR = [
+          { testCaseCode: { contains: search.trim(), mode: 'insensitive' } },
+          { title: { contains: search.trim(), mode: 'insensitive' } },
+        ];
+      }
+
+      const [cases, total] = await Promise.all([
+        prisma.testCase.findMany({
+          where,
+          orderBy: [{ testSuiteId: 'asc' }, { orderIndex: 'asc' }],
+          skip,
+          take: limit,
+          include: {
+            testSuite: {
+              select: { id: true, name: true, moduleName: true },
+            },
+            reviewedBy: {
+              select: { id: true, fullName: true, email: true },
+            },
+            _count: {
+              select: { executions: true },
+            },
           },
-          reviewedBy: {
-            select: { id: true, fullName: true, email: true },
-          },
-          _count: {
-            select: { executions: true },
-          },
-        },
-      });
+        }),
+        prisma.testCase.count({ where }),
+      ]);
 
       const testCases = cases.map((c) => ({
         id: c.id,
@@ -1154,7 +1195,7 @@ export class TestCaseController {
         executionCount: c._count.executions,
       }));
 
-      return res.json({ testCases });
+      return res.json({ testCases, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       return res.status(500).json({ message: 'Lỗi tải danh sách kiểm duyệt', error: error.message });
     }

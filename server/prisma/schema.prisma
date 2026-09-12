@@ -129,229 +129,244 @@ model Permission {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  rolePermissions     RolePermission[]
-  userPermissions     UserPermission[]
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
 
   @@map("permissions")
 }
 
 model RolePermission {
-  id           String       @id @default(uuid())
+  id           String     @id @default(uuid())
   role         Role
-  permissionId String       @map("permission_id")
-  permission   Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-  grantedAt    DateTime     @default(now()) @map("granted_at")
-  grantedById  String?      @map("granted_by_id")
-  grantedBy    User?        @relation("GrantedRolePermissions", fields: [grantedById], references: [id], onDelete: SetNull)
+  permissionId String     @map("permission_id")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  grantedAt    DateTime   @default(now()) @map("granted_at")
+  grantedById  String?    @map("granted_by_id")
+  grantedBy    User?      @relation("GrantedRolePermissions", fields: [grantedById], references: [id], onDelete: SetNull)
 
   @@unique([role, permissionId])
   @@map("role_permissions")
 }
 
 model UserPermission {
-  id           String            @id @default(uuid())
-  userId       String            @map("user_id")
-  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permissionId String            @map("permission_id")
-  permission   Permission        @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-  effect       PermissionEffect  @default(ALLOW)
-  resourceType String?           @map("resource_type")
-  resourceId   String?           @map("resource_id")
-  createdAt    DateTime          @default(now()) @map("created_at")
+  id           String           @id @default(uuid())
+  userId       String           @map("user_id")
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionId String           @map("permission_id")
+  permission   Permission       @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  effect       PermissionEffect @default(ALLOW)
+  resourceType String?          @map("resource_type")
+  resourceId   String?          @map("resource_id")
+  createdAt    DateTime         @default(now()) @map("created_at")
 
   @@unique([userId, permissionId, resourceType, resourceId])
   @@map("user_permissions")
 }
 
 model User {
-  id                String            @id @default(uuid())
-  email             String            @unique
-  passwordHash      String            @map("password_hash")
-  fullName          String            @map("full_name")
-  role              Role              @default(TESTER)
-  status            UserStatus        @default(ACTIVE)
-  lastLogin         DateTime?         @map("last_login")
-  failedLoginAttempts Int             @default(0) @map("failed_login_attempts")
-  passwordExpiry    DateTime?         @map("password_expiry")
-  resetPasswordToken   String?           @map("reset_password_token")
-  resetPasswordExpires DateTime?         @map("reset_password_expires")
-  department        String?
-  managerId         String?           @map("manager_id")
-  manager           User?             @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
-  subordinates      User[]            @relation("UserManager")
-  
-  createdById       String?           @map("created_by")
-  createdBy         User?             @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdUsers      User[]            @relation("UserCreatedBy")
-  updatedById       String?           @map("updated_by")
-  updatedBy         User?             @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedUsers      User[]            @relation("UserUpdatedBy")
+  id                   String     @id @default(uuid())
+  email                String     @unique
+  passwordHash         String     @map("password_hash")
+  fullName             String     @map("full_name")
+  role                 Role       @default(TESTER)
+  status               UserStatus @default(ACTIVE)
+  lastLogin            DateTime?  @map("last_login")
+  failedLoginAttempts  Int        @default(0) @map("failed_login_attempts")
+  passwordExpiry       DateTime?  @map("password_expiry")
+  resetPasswordToken   String?    @map("reset_password_token")
+  resetPasswordExpires DateTime?  @map("reset_password_expires")
+  department           String?
+  managerId            String?    @map("manager_id")
+  manager              User?      @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates         User[]     @relation("UserManager")
 
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
+  createdById  String? @map("created_by")
+  createdBy    User?   @relation("UserCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdUsers User[]  @relation("UserCreatedBy")
+  updatedById  String? @map("updated_by")
+  updatedBy    User?   @relation("UserUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedUsers User[]  @relation("UserUpdatedBy")
 
-  documents             Document[]
-  executions            TestExecution[]
-  beforeExecutions      TestExecution[] @relation("BeforeExecution")
-  createdExecutions     TestExecution[] @relation("CreatedExecution")
-  reviewedTestCases     TestCase[] @relation("ReviewedBy")
-  aiConfigs             AiConfig[]
-  userPermissions       UserPermission[]
-  grantedRolePermissions RolePermission[] @relation("GrantedRolePermissions")
-  watchedExecutions      TestExecutionWatcher[]
-  historyExecutions      TestExecutionHistory[] @relation("HistoryExecutedBy")
-  historyBeforeExecutions TestExecutionHistory[] @relation("HistoryBeforeExecutedBy")
-  historyCreatedExecutions TestExecutionHistory[] @relation("HistoryCreatedBy")
-  statusHandlers         ExecutionStatusHandler[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  managedProcesses      Process[]         @relation("ManagedProcesses")
-  createdProcesses      Process[]         @relation("CreatedProcesses")
-  updatedProcesses      Process[]         @relation("UpdatedProcesses")
-  deletedProcesses      Process[]         @relation("DeletedProcesses")
-  createdProcessSteps   ProcessStep[]     @relation("CreatedProcessSteps")
-  updatedProcessSteps   ProcessStep[]     @relation("UpdatedProcessSteps")
-  createdTasks          Task[]            @relation("CreatedTasks")
-  updatedTasks          Task[]            @relation("UpdatedTasks")
-  previousExecutorTasks Task[]            @relation("TaskPreviousExecutor")
-  executedTodos         Todo[]            @relation("TodoExecutor")
-  createdTodos          Todo[]            @relation("CreatedTodos")
-  updatedTodos          Todo[]            @relation("UpdatedTodos")
-  taskComments          TaskComment[]     @relation("TaskCommentUser")
-  createdTaskComments   TaskComment[]     @relation("CreatedTaskComments")
-  updatedTaskComments   TaskComment[]     @relation("UpdatedTaskComments")
-  changedTaskHistories  TaskHistory[]     @relation("TaskHistoryChangedBy")
-  createdTaskHistories  TaskHistory[]     @relation("CreatedTaskHistories")
+  documents                Document[]
+  executions               TestExecution[]
+  beforeExecutions         TestExecution[]          @relation("BeforeExecution")
+  createdExecutions        TestExecution[]          @relation("CreatedExecution")
+  reviewedTestCases        TestCase[]               @relation("ReviewedBy")
+  aiConfigs                AiConfig[]
+  userPermissions          UserPermission[]
+  grantedRolePermissions   RolePermission[]         @relation("GrantedRolePermissions")
+  watchedExecutions        TestExecutionWatcher[]
+  historyExecutions        TestExecutionHistory[]   @relation("HistoryExecutedBy")
+  historyBeforeExecutions  TestExecutionHistory[]   @relation("HistoryBeforeExecutedBy")
+  historyCreatedExecutions TestExecutionHistory[]   @relation("HistoryCreatedBy")
+  statusHandlers           ExecutionStatusHandler[]
+
+  managedProcesses      Process[]     @relation("ManagedProcesses")
+  createdProcesses      Process[]     @relation("CreatedProcesses")
+  updatedProcesses      Process[]     @relation("UpdatedProcesses")
+  deletedProcesses      Process[]     @relation("DeletedProcesses")
+  createdProcessSteps   ProcessStep[] @relation("CreatedProcessSteps")
+  updatedProcessSteps   ProcessStep[] @relation("UpdatedProcessSteps")
+  createdTasks          Task[]        @relation("CreatedTasks")
+  updatedTasks          Task[]        @relation("UpdatedTasks")
+  previousExecutorTasks Task[]        @relation("TaskPreviousExecutor")
+  executedTodos         Todo[]        @relation("TodoExecutor")
+  createdTodos          Todo[]        @relation("CreatedTodos")
+  updatedTodos          Todo[]        @relation("UpdatedTodos")
+  taskComments          TaskComment[] @relation("TaskCommentUser")
+  createdTaskComments   TaskComment[] @relation("CreatedTaskComments")
+  updatedTaskComments   TaskComment[] @relation("UpdatedTaskComments")
+  changedTaskHistories  TaskHistory[] @relation("TaskHistoryChangedBy")
+  createdTaskHistories  TaskHistory[] @relation("CreatedTaskHistories")
 
   createdCustomFieldDefinitions CustomFieldDefinition[] @relation("CreatedCustomFieldDefinitions")
   updatedCustomFieldDefinitions CustomFieldDefinition[] @relation("UpdatedCustomFieldDefinitions")
   filledTaskCustomFields        TaskCustomFieldValue[]  @relation("FilledTaskCustomFields")
   updatedTaskCustomFields       TaskCustomFieldValue[]  @relation("UpdatedTaskCustomFields")
 
-  createdProposals              Proposal[]              @relation("CreatedProposals")
-  updatedProposals              Proposal[]              @relation("UpdatedProposals")
-  directManagerProposals        Proposal[]              @relation("DirectManagerProposals")
-  approverApprovals             ProposalApproval[]      @relation("ApproverApprovals")
-  createdProposalApprovals      ProposalApproval[]      @relation("CreatedProposalApprovals")
-  changedProposalHistories      ProposalHistory[]       @relation("ProposalHistoryChangedBy")
-  createdProposalHistories      ProposalHistory[]       @relation("CreatedProposalHistories")
-  userProposalComments          ProposalComment[]       @relation("ProposalCommentUser")
-  createdProposalComments       ProposalComment[]       @relation("CreatedProposalComments")
-  updatedProposalComments       ProposalComment[]       @relation("UpdatedProposalComments")
-  receivedProposalNotifications ProposalNotification[]  @relation("ProposalNotificationRecipient")
-  proposalFollowers             ProposalFollower[]      @relation("ProposalFollowerUser")
-  addedProposalFollowers        ProposalFollower[]      @relation("ProposalFollowerAddedBy")
-  createdProposalTypes          ProposalType[]          @relation("CreatedProposalTypes")
-  updatedProposalTypes          ProposalType[]          @relation("UpdatedProposalTypes")
-  deletedProposalTypes          ProposalType[]          @relation("DeletedProposalTypes")
-  createdFormTemplates          FormTemplate[]          @relation("CreatedFormTemplates")
-  updatedFormTemplates          FormTemplate[]          @relation("UpdatedFormTemplates")
-  createdFormFieldDefinitions   FormFieldDefinition[]   @relation("CreatedFormFieldDefinitions")
-  updatedFormFieldDefinitions   FormFieldDefinition[]   @relation("UpdatedFormFieldDefinitions")
-  executionComments             TestExecutionComment[]  @relation("TestExecutionCommentUser")
-  receivedNotifications         Notification[]          @relation("NotificationRecipient")
+  createdProposals              Proposal[]             @relation("CreatedProposals")
+  updatedProposals              Proposal[]             @relation("UpdatedProposals")
+  directManagerProposals        Proposal[]             @relation("DirectManagerProposals")
+  approverApprovals             ProposalApproval[]     @relation("ApproverApprovals")
+  createdProposalApprovals      ProposalApproval[]     @relation("CreatedProposalApprovals")
+  changedProposalHistories      ProposalHistory[]      @relation("ProposalHistoryChangedBy")
+  createdProposalHistories      ProposalHistory[]      @relation("CreatedProposalHistories")
+  userProposalComments          ProposalComment[]      @relation("ProposalCommentUser")
+  createdProposalComments       ProposalComment[]      @relation("CreatedProposalComments")
+  updatedProposalComments       ProposalComment[]      @relation("UpdatedProposalComments")
+  receivedProposalNotifications ProposalNotification[] @relation("ProposalNotificationRecipient")
+  proposalFollowers             ProposalFollower[]     @relation("ProposalFollowerUser")
+  addedProposalFollowers        ProposalFollower[]     @relation("ProposalFollowerAddedBy")
+  createdProposalTypes          ProposalType[]         @relation("CreatedProposalTypes")
+  updatedProposalTypes          ProposalType[]         @relation("UpdatedProposalTypes")
+  deletedProposalTypes          ProposalType[]         @relation("DeletedProposalTypes")
+  createdFormTemplates          FormTemplate[]         @relation("CreatedFormTemplates")
+  updatedFormTemplates          FormTemplate[]         @relation("UpdatedFormTemplates")
+  createdFormFieldDefinitions   FormFieldDefinition[]  @relation("CreatedFormFieldDefinitions")
+  updatedFormFieldDefinitions   FormFieldDefinition[]  @relation("UpdatedFormFieldDefinitions")
+  executionComments             TestExecutionComment[] @relation("TestExecutionCommentUser")
+  receivedNotifications         Notification[]         @relation("NotificationRecipient")
 
+  @@index([role])
+  @@index([status])
+  @@index([role, status])
   @@map("users")
 }
 
 model Document {
-  id          String      @id @default(uuid())
-  userId      String      @map("user_id")
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  filename    String
-  fileType    String      @map("file_type")
-  fileSize    Int         @default(0) @map("file_size")
-  rawContent  String      @db.Text @map("raw_content")
-  createdAt   DateTime    @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filename   String
+  fileType   String   @map("file_type")
+  fileSize   Int      @default(0) @map("file_size")
+  rawContent String   @map("raw_content") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
 
-  testSuites  TestSuite[]
+  testSuites TestSuite[]
 
   @@map("documents")
 }
 
 model TestSuite {
-  id          String      @id @default(uuid())
-  documentId  String?     @map("document_id")
-  document    Document?   @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  id          String    @id @default(uuid())
+  documentId  String?   @map("document_id")
+  document    Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   name        String
-  moduleName  String      @map("module_name")
-  summary     String?     @db.Text
-  assumptions String?     @db.Text
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  moduleName  String    @map("module_name")
+  summary     String?   @db.Text
+  assumptions String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  testCases   TestCase[]
+  testCases TestCase[]
 
+  @@index([createdAt])
+  @@index([documentId])
   @@map("test_suites")
 }
 
 model TestCase {
-  id             String          @id @default(uuid())
-  testSuiteId    String          @map("test_suite_id")
-  testSuite      TestSuite       @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
-  testCaseCode   String          @map("test_case_code") // e.g. TC_KH_001
+  id             String               @id @default(uuid())
+  testSuiteId    String               @map("test_suite_id")
+  testSuite      TestSuite            @relation(fields: [testSuiteId], references: [id], onDelete: Cascade)
+  testCaseCode   String               @map("test_case_code") // e.g. TC_KH_001
   module         String
-  platform       String          // App, CMS, Web, etc.
+  platform       String // App, CMS, Web, etc.
   title          String
-  testType       String          @map("test_type") // Luồng chuẩn, Luồng ngoại lệ, Giá trị biên
-  preconditions  String          @db.Text
-  steps          String          @db.Text
-  expectedResult String          @db.Text @map("expected_result")
-  priority       String          @default("Cao") // Cao, Trung bình, Thấp
-  orderIndex     Int             @default(0) @map("order_index")
+  testType       String               @map("test_type") // Luồng chuẩn, Luồng ngoại lệ, Giá trị biên
+  preconditions  String               @db.Text
+  steps          String               @db.Text
+  expectedResult String               @map("expected_result") @db.Text
+  priority       String               @default("Cao") // Cao, Trung bình, Thấp
+  orderIndex     Int                  @default(0) @map("order_index")
   reviewStatus   TestCaseReviewStatus @default(UNREVIEWED) @map("review_status")
-  reviewedById   String?         @map("reviewed_by_id")
-  reviewedBy     User?           @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt     DateTime?       @map("reviewed_at")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  reviewedById   String?              @map("reviewed_by_id")
+  reviewedBy     User?                @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?            @map("reviewed_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
 
-  executions     TestExecution[]
-  notifications  Notification[]  @relation("TestCaseNotifications")
+  executions    TestExecution[]
+  notifications Notification[]  @relation("TestCaseNotifications")
 
+  @@index([testSuiteId])
+  @@index([reviewStatus])
+  @@index([testSuiteId, reviewStatus])
   @@map("test_cases")
 }
 
 model TestExecution {
-  id           String              @id @default(uuid())
-  testCaseId   String              @map("test_case_id")
-  testCase     TestCase            @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-  executedById String?             @map("executed_by_id")
-  executedBy   User?               @relation(fields: [executedById], references: [id], onDelete: SetNull)
+  id           String   @id @default(uuid())
+  testCaseId   String   @map("test_case_id")
+  testCase     TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  executedById String?  @map("executed_by_id")
+  executedBy   User?    @relation(fields: [executedById], references: [id], onDelete: SetNull)
 
-  beforeExecutedId String?         @map("before_executed_id")
-  beforeExecutedBy User?               @relation("BeforeExecution", fields: [beforeExecutedId], references: [id], onDelete: SetNull)
+  beforeExecutedId String? @map("before_executed_id")
+  beforeExecutedBy User?   @relation("BeforeExecution", fields: [beforeExecutedId], references: [id], onDelete: SetNull)
 
-  createdById  String?            @map("created_by_id")
-  createdBy    User?              @relation("CreatedExecution", fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation("CreatedExecution", fields: [createdById], references: [id], onDelete: SetNull)
 
-  server       String?             // DEV, STAGING, UAT, PROD, IP...
-  os           String?             // Windows 11, macOS, Android 14, iOS 17...
+  server       String? // DEV, STAGING, UAT, PROD, IP...
+  os           String? // Windows 11, macOS, Android 14, iOS 17...
   status       TestExecutionStatus @default(UNTESTED)
-  actualResult String?             @db.Text @map("actual_result")
+  actualResult String?             @map("actual_result") @db.Text
   evaluation   String?             @db.Text
   notes        String?             @db.Text
-  
-  executedAt   DateTime            @default(now()) @map("executed_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
 
-  images       TestExecutionImage[]
+  executedAt DateTime @default(now()) @map("executed_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  images        TestExecutionImage[]
   watchers      TestExecutionWatcher[]
   history       TestExecutionHistory[]
   comments      TestExecutionComment[]
-  notifications Notification[]  @relation("ExecutionNotifications")
+  notifications Notification[]         @relation("ExecutionNotifications")
 
+  @@index([testCaseId])
+  @@index([testCaseId, executedAt])
+  @@index([executedById])
+  @@index([createdById])
+  @@index([status])
+  @@index([executedAt])
   @@map("test_executions")
 }
 
 model TestExecutionWatcher {
-  id           String        @id @default(uuid())
-  executionId  String        @map("execution_id")
-  execution    TestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  userId       String        @map("user_id")
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt    DateTime      @default(now()) @map("created_at")
+  id          String        @id @default(uuid())
+  executionId String        @map("execution_id")
+  execution   TestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  userId      String        @map("user_id")
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now()) @map("created_at")
 
   @@unique([executionId, userId])
+  @@index([userId])
   @@map("test_execution_watchers")
 }
 
@@ -369,13 +384,15 @@ model TestExecutionHistory {
   server           String?
   os               String?
   status           TestExecutionStatus @default(UNTESTED)
-  actualResult     String?             @db.Text @map("actual_result")
+  actualResult     String?             @map("actual_result") @db.Text
   evaluation       String?             @db.Text
   notes            String?             @db.Text
   images           Json?               @default("[]") @map("images")
   executedAt       DateTime            @map("executed_at")
-  updatedAt        DateTime            @map("updated_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
 
+  @@index([executionId])
+  @@index([testCaseId])
   @@map("test_execution_histories")
 }
 
@@ -394,18 +411,19 @@ model ExecutionStatusHandler {
 }
 
 model TestExecutionImage {
-  id              String        @id @default(uuid())
-  executionId     String        @map("execution_id")
-  execution       TestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  filename        String
-  storagePath     String        @map("storage_path")
-  storageType     String        @map("storage_type")  // local | smb | ftp | google_drive
-  mimeType        String        @map("mime_type")
-  fileSize        Int           @map("file_size")
-  publicUrl       String?       @map("public_url")
-  thumbnailPath   String?       @map("thumbnail_path")
-  uploadedAt      DateTime      @default(now()) @map("uploaded_at")
+  id            String        @id @default(uuid())
+  executionId   String        @map("execution_id")
+  execution     TestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  filename      String
+  storagePath   String        @map("storage_path")
+  storageType   String        @map("storage_type") // local | smb | ftp | google_drive
+  mimeType      String        @map("mime_type")
+  fileSize      Int           @map("file_size")
+  publicUrl     String?       @map("public_url")
+  thumbnailPath String?       @map("thumbnail_path")
+  uploadedAt    DateTime      @default(now()) @map("uploaded_at")
 
+  @@index([executionId])
   @@map("test_execution_images")
 }
 
@@ -420,20 +438,21 @@ model TestExecutionComment {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
+  @@index([executionId])
   @@map("test_execution_comments")
 }
 
 model AiConfig {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider   String   // gemini, openai, anthropic, deepseek, custom
-  apiKey     String   @map("api_key")
-  modelName  String   @map("model_name")
-  baseUrl    String?  @map("base_url")
-  isActive   Boolean  @default(false) @map("is_active")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider  String // gemini, openai, anthropic, deepseek, custom
+  apiKey    String   @map("api_key")
+  modelName String   @map("model_name")
+  baseUrl   String?  @map("base_url")
+  isActive  Boolean  @default(false) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("ai_configs")
 }
@@ -449,22 +468,22 @@ model SystemSetting {
 }
 
 model Process {
-  id          String        @id @default(uuid())
+  id          String  @id @default(uuid())
   name        String
-  description String?       @db.Text
-  managerId   String        @map("manager_id")
-  manager     User          @relation("ManagedProcesses", fields: [managerId], references: [id], onDelete: Restrict)
-  watcherIds  Json?         @default("[]") @map("watcher_ids")
+  description String? @db.Text
+  managerId   String  @map("manager_id")
+  manager     User    @relation("ManagedProcesses", fields: [managerId], references: [id], onDelete: Restrict)
+  watcherIds  Json?   @default("[]") @map("watcher_ids")
 
-  createdById String?       @map("created_by")
-  createdBy   User?         @relation("CreatedProcesses", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedById String?       @map("updated_by")
-  updatedBy   User?         @relation("UpdatedProcesses", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  deletedAt   DateTime?     @map("deleted_at")
-  deletedById String?       @map("deleted_by")
-  deletedBy   User?         @relation("DeletedProcesses", fields: [deletedById], references: [id], onDelete: SetNull)
+  createdById String?   @map("created_by")
+  createdBy   User?     @relation("CreatedProcesses", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedById String?   @map("updated_by")
+  updatedBy   User?     @relation("UpdatedProcesses", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by")
+  deletedBy   User?     @relation("DeletedProcesses", fields: [deletedById], references: [id], onDelete: SetNull)
 
   steps         ProcessStep[]
   tasks         Task[]
@@ -475,25 +494,25 @@ model Process {
 }
 
 model ProcessStep {
-  id             String    @id @default(uuid())
-  processId      String    @map("process_id")
-  process        Process   @relation(fields: [processId], references: [id], onDelete: Cascade)
+  id             String  @id @default(uuid())
+  processId      String  @map("process_id")
+  process        Process @relation(fields: [processId], references: [id], onDelete: Cascade)
   name           String
-  executorIds    Json?     @default("[]") @map("executor_ids")
-  timeLimitHours Int       @default(24) @map("time_limit_hours")
-  order          Int       @map("order")
-  instructions   String?   @db.Text @map("instructions")
+  executorIds    Json?   @default("[]") @map("executor_ids")
+  timeLimitHours Int     @default(24) @map("time_limit_hours")
+  order          Int     @map("order")
+  instructions   String? @map("instructions") @db.Text
 
-  createdById    String?   @map("created_by")
-  createdBy      User?     @relation("CreatedProcessSteps", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedById    String?   @map("updated_by")
-  updatedBy      User?     @relation("UpdatedProcessSteps", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedProcessSteps", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedProcessSteps", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tasks                  Task[]
-  customFields           CustomFieldDefinition[]
-  taskCustomFieldValues  TaskCustomFieldValue[]
+  tasks                 Task[]
+  customFields          CustomFieldDefinition[]
+  taskCustomFieldValues TaskCustomFieldValue[]
 
   @@map("process_steps")
 }
@@ -517,52 +536,57 @@ model CustomFieldDefinition {
   visibilityCondition Json?        @map("visibility_condition")
   validationRules     Json?        @map("validation_rules")
 
-  createdById         String?      @map("created_by")
-  createdBy           User?        @relation("CreatedCustomFieldDefinitions", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt           DateTime     @default(now()) @map("created_at")
-  updatedById         String?      @map("updated_by")
-  updatedBy           User?        @relation("UpdatedCustomFieldDefinitions", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt           DateTime     @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedCustomFieldDefinitions", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedCustomFieldDefinitions", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  taskValues          TaskCustomFieldValue[]
+  taskValues TaskCustomFieldValue[]
 
   @@unique([processId, fieldKey])
   @@map("custom_field_definitions")
 }
 
 model Task {
-  id                 String        @id @default(uuid())
-  processId          String        @map("process_id")
-  process            Process       @relation(fields: [processId], references: [id], onDelete: Cascade)
+  id                 String       @id @default(uuid())
+  processId          String       @map("process_id")
+  process            Process      @relation(fields: [processId], references: [id], onDelete: Cascade)
   name               String
-  content            String?       @db.Text @map("content")
-  customFields       Json?         @map("custom_fields")
-  currentStepId      String?       @map("current_step_id")
-  currentStep        ProcessStep?  @relation(fields: [currentStepId], references: [id], onDelete: SetNull)
-  executorIds        Json?         @default("[]") @map("executor_ids")
-  watcherIds         Json?         @default("[]") @map("watcher_ids")
-  previousExecutorId String?       @map("previous_executor_id")
-  previousExecutor   User?         @relation("TaskPreviousExecutor", fields: [previousExecutorId], references: [id], onDelete: SetNull)
-  startedAt          DateTime      @default(now()) @map("started_at")
-  deadline           DateTime      @map("deadline")
-  completedAt        DateTime?     @map("completed_at")
-  status             TaskStatus    @default(IN_PROGRESS) @map("status")
-  fileUploads        Json?         @default("[]") @map("file_uploads")
+  content            String?      @map("content") @db.Text
+  customFields       Json?        @map("custom_fields")
+  currentStepId      String?      @map("current_step_id")
+  currentStep        ProcessStep? @relation(fields: [currentStepId], references: [id], onDelete: SetNull)
+  executorIds        Json?        @default("[]") @map("executor_ids")
+  watcherIds         Json?        @default("[]") @map("watcher_ids")
+  previousExecutorId String?      @map("previous_executor_id")
+  previousExecutor   User?        @relation("TaskPreviousExecutor", fields: [previousExecutorId], references: [id], onDelete: SetNull)
+  startedAt          DateTime     @default(now()) @map("started_at")
+  deadline           DateTime     @map("deadline")
+  completedAt        DateTime?    @map("completed_at")
+  status             TaskStatus   @default(IN_PROGRESS) @map("status")
+  fileUploads        Json?        @default("[]") @map("file_uploads")
 
-  createdById        String?       @map("created_by")
-  createdBy          User?         @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt          DateTime      @default(now()) @map("created_at")
-  updatedById        String?       @map("updated_by")
-  updatedBy          User?         @relation("UpdatedTasks", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt          DateTime      @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedTasks", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedTasks", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  todos              Todo[]
-  comments           TaskComment[]
-  histories          TaskHistory[]
-  customFieldValues  TaskCustomFieldValue[]
-  proposals          Proposal[]
-  notifications      Notification[]  @relation("TaskNotifications")
+  todos             Todo[]
+  comments          TaskComment[]
+  histories         TaskHistory[]
+  customFieldValues TaskCustomFieldValue[]
+  proposals         Proposal[]
+  notifications     Notification[]         @relation("TaskNotifications")
 
+  @@index([status])
+  @@index([deadline])
+  @@index([status, deadline])
+  @@index([processId])
+  @@index([currentStepId])
   @@map("tasks")
 }
 
@@ -576,12 +600,12 @@ model TaskCustomFieldValue {
   stepId            String?               @map("step_id")
   step              ProcessStep?          @relation(fields: [stepId], references: [id], onDelete: SetNull)
 
-  filledById        String?               @map("filled_by_id")
-  filledBy          User?                 @relation("FilledTaskCustomFields", fields: [filledById], references: [id], onDelete: SetNull)
-  filledAt          DateTime              @default(now()) @map("filled_at")
-  updatedById       String?               @map("updated_by")
-  updatedBy         User?                 @relation("UpdatedTaskCustomFields", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt         DateTime              @updatedAt @map("updated_at")
+  filledById  String?  @map("filled_by_id")
+  filledBy    User?    @relation("FilledTaskCustomFields", fields: [filledById], references: [id], onDelete: SetNull)
+  filledAt    DateTime @default(now()) @map("filled_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedTaskCustomFields", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@unique([taskId, fieldDefinitionId])
   @@map("task_custom_field_values")
@@ -600,24 +624,25 @@ model Todo {
   isCompleted Boolean   @default(false) @map("is_completed")
   completedAt DateTime? @map("completed_at")
 
-  createdById String?   @map("created_by")
-  createdBy   User?     @relation("CreatedTodos", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedById String?   @map("updated_by")
-  updatedBy   User?     @relation("UpdatedTodos", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedTodos", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedTodos", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@index([taskId])
   @@map("todos")
 }
 
 model TaskComment {
-  id          String   @id @default(uuid())
-  taskId      String   @map("task_id")
-  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  userId      String   @map("user_id")
-  user        User     @relation("TaskCommentUser", fields: [userId], references: [id], onDelete: Cascade)
-  content     String   @db.Text
-  files       Json?    @default("[]") @map("files")
+  id      String @id @default(uuid())
+  taskId  String @map("task_id")
+  task    Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId  String @map("user_id")
+  user    User   @relation("TaskCommentUser", fields: [userId], references: [id], onDelete: Cascade)
+  content String @db.Text
+  files   Json?  @default("[]") @map("files")
 
   createdById String?  @map("created_by")
   createdBy   User?    @relation("CreatedTaskComments", fields: [createdById], references: [id], onDelete: SetNull)
@@ -626,6 +651,7 @@ model TaskComment {
   updatedBy   User?    @relation("UpdatedTaskComments", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@index([taskId])
   @@map("task_comments")
 }
 
@@ -637,13 +663,14 @@ model TaskHistory {
   changedById       String?               @map("changed_by")
   changedBy         User?                 @relation("TaskHistoryChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
   changeType        TaskHistoryChangeType @map("change_type")
-  changeDescription String?               @db.Text @map("change_description")
+  changeDescription String?               @map("change_description") @db.Text
   snapshot          Json                  @map("snapshot")
 
-  createdById       String?               @map("created_by")
-  createdBy         User?                 @relation("CreatedTaskHistories", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt         DateTime              @default(now()) @map("created_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedTaskHistories", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
 
+  @@index([taskId])
   @@map("task_histories")
 }
 
@@ -673,40 +700,40 @@ model ProposalType {
   allowCancel            Boolean              @default(true) @map("allow_cancel")
   allowEditAfterSubmit   Boolean              @default(false) @map("allow_edit_after_submit")
 
-  createdById            String?              @map("created_by")
-  createdBy              User?                @relation("CreatedProposalTypes", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt              DateTime             @default(now()) @map("created_at")
-  updatedById            String?              @map("updated_by")
-  updatedBy              User?                @relation("UpdatedProposalTypes", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt              DateTime             @updatedAt @map("updated_at")
-  deletedAt              DateTime?            @map("deleted_at")
-  deletedById            String?              @map("deleted_by")
-  deletedBy              User?                @relation("DeletedProposalTypes", fields: [deletedById], references: [id], onDelete: SetNull)
+  createdById String?   @map("created_by")
+  createdBy   User?     @relation("CreatedProposalTypes", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedById String?   @map("updated_by")
+  updatedBy   User?     @relation("UpdatedProposalTypes", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by")
+  deletedBy   User?     @relation("DeletedProposalTypes", fields: [deletedById], references: [id], onDelete: SetNull)
 
-  proposals              Proposal[]
-  formTemplates          FormTemplate[]       @relation("ProposalTypeFormTemplates")
+  proposals     Proposal[]
+  formTemplates FormTemplate[] @relation("ProposalTypeFormTemplates")
 
   @@map("proposal_types")
 }
 
 model FormTemplate {
-  id                     String                @id @default(uuid())
-  name                   String
-  description            String?               @db.Text
-  proposalTypeId         String?               @map("proposal_type_id")
-  proposalType           ProposalType?         @relation("ProposalTypeFormTemplates", fields: [proposalTypeId], references: [id], onDelete: SetNull)
-  isDefault              Boolean               @default(false) @map("is_default")
-  formStructure          Json?                 @default("{}") @map("form_structure")
+  id             String        @id @default(uuid())
+  name           String
+  description    String?       @db.Text
+  proposalTypeId String?       @map("proposal_type_id")
+  proposalType   ProposalType? @relation("ProposalTypeFormTemplates", fields: [proposalTypeId], references: [id], onDelete: SetNull)
+  isDefault      Boolean       @default(false) @map("is_default")
+  formStructure  Json?         @default("{}") @map("form_structure")
 
-  createdById            String?               @map("created_by")
-  createdBy              User?                 @relation("CreatedFormTemplates", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt              DateTime              @default(now()) @map("created_at")
-  updatedById            String?               @map("updated_by")
-  updatedBy              User?                 @relation("UpdatedFormTemplates", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt              DateTime              @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedFormTemplates", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedFormTemplates", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  fields                 FormFieldDefinition[]
-  selectedByProposalTypes ProposalType[]       @relation("ProposalTypeSelectedFormTemplate")
+  fields                  FormFieldDefinition[]
+  selectedByProposalTypes ProposalType[]        @relation("ProposalTypeSelectedFormTemplate")
 
   @@map("form_templates")
 }
@@ -729,12 +756,12 @@ model FormFieldDefinition {
   validationRules     Json?        @map("validation_rules")
   sectionId           String?      @map("section_id")
 
-  createdById         String?      @map("created_by")
-  createdBy           User?        @relation("CreatedFormFieldDefinitions", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt           DateTime     @default(now()) @map("created_at")
-  updatedById         String?      @map("updated_by")
-  updatedBy           User?        @relation("UpdatedFormFieldDefinitions", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt           DateTime     @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedFormFieldDefinitions", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedFormFieldDefinitions", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@unique([formTemplateId, fieldKey])
   @@map("form_field_definitions")
@@ -766,19 +793,24 @@ model Proposal {
   attachments       Json?            @default("[]") @map("attachments")
   tags              Json?            @default("[]") @map("tags")
 
-  createdById       String?          @map("created_by")
-  createdAt         DateTime         @default(now()) @map("created_at")
-  updatedById       String?          @map("updated_by")
-  updatedBy         User?            @relation("UpdatedProposals", fields: [updatedById], references: [id], onDelete: SetNull)
-  updatedAt         DateTime         @updatedAt @map("updated_at")
+  createdById String?  @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedById String?  @map("updated_by")
+  updatedBy   User?    @relation("UpdatedProposals", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  approvals         ProposalApproval[]
-  histories         ProposalHistory[]
-  comments          ProposalComment[]
-  notifications     ProposalNotification[]
-  followers         ProposalFollower[]
-  unifiedNotifications Notification[] @relation("ProposalNotifications")
+  approvals            ProposalApproval[]
+  histories            ProposalHistory[]
+  comments             ProposalComment[]
+  notifications        ProposalNotification[]
+  followers            ProposalFollower[]
+  unifiedNotifications Notification[]         @relation("ProposalNotifications")
 
+  @@index([status])
+  @@index([deadline])
+  @@index([status, deadline])
+  @@index([creatorId])
+  @@index([proposalTypeId])
   @@map("proposals")
 }
 
@@ -790,16 +822,19 @@ model ProposalApproval {
   approver       User           @relation("ApproverApprovals", fields: [approverId], references: [id], onDelete: Restrict)
   order          Int            @default(1) @map("order")
   action         ApprovalAction @default(PENDING) @map("action")
-  comment        String?        @db.Text @map("comment")
+  comment        String?        @map("comment") @db.Text
   attachments    Json?          @default("[]") @map("attachments")
   decidedAt      DateTime?      @map("decided_at")
   reminderSentAt DateTime?      @map("reminder_sent_at")
   reminderCount  Int            @default(0) @map("reminder_count")
 
-  createdById    String?        @map("created_by")
-  createdBy      User?          @relation("CreatedProposalApprovals", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt      DateTime       @default(now()) @map("created_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedProposalApprovals", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
 
+  @@index([proposalId])
+  @@index([approverId])
+  @@index([proposalId, action])
   @@map("proposal_approvals")
 }
 
@@ -811,13 +846,14 @@ model ProposalHistory {
   changedById       String?             @map("changed_by")
   changedBy         User?               @relation("ProposalHistoryChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
   changeType        ProposalHistoryType @map("change_type")
-  changeDescription String?             @db.Text @map("change_description")
+  changeDescription String?             @map("change_description") @db.Text
   snapshot          Json?               @map("snapshot")
 
-  createdById       String?             @map("created_by")
-  createdBy         User?               @relation("CreatedProposalHistories", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt         DateTime            @default(now()) @map("created_at")
+  createdById String?  @map("created_by")
+  createdBy   User?    @relation("CreatedProposalHistories", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at")
 
+  @@index([proposalId])
   @@map("proposal_histories")
 }
 
@@ -837,6 +873,7 @@ model ProposalComment {
   updatedBy   User?    @relation("UpdatedProposalComments", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  @@index([proposalId])
   @@map("proposal_comments")
 }
 
@@ -853,18 +890,20 @@ model ProposalNotification {
   readAt      DateTime?                @map("read_at")
   createdAt   DateTime                 @default(now()) @map("created_at")
 
+  @@index([recipientId, isRead])
+  @@index([proposalId])
   @@map("proposal_notifications")
 }
 
 model ProposalFollower {
-  id          String   @id @default(uuid())
-  proposalId  String   @map("proposal_id")
-  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
-  userId      String   @map("user_id")
-  user        User     @relation("ProposalFollowerUser", fields: [userId], references: [id], onDelete: Cascade)
-  addedById   String?  @map("added_by_id")
-  addedBy     User?    @relation("ProposalFollowerAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  proposalId String   @map("proposal_id")
+  proposal   Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  userId     String   @map("user_id")
+  user       User     @relation("ProposalFollowerUser", fields: [userId], references: [id], onDelete: Cascade)
+  addedById  String?  @map("added_by_id")
+  addedBy    User?    @relation("ProposalFollowerAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@unique([proposalId, userId])
   @@map("proposal_followers")
@@ -906,23 +945,22 @@ model Notification {
   readAt      DateTime?        @map("read_at")
 
   // Polymorphic References
-  testCaseId  String?          @map("test_case_id")
-  testCase    TestCase?        @relation("TestCaseNotifications", fields: [testCaseId], references: [id], onDelete: Cascade)
+  testCaseId String?   @map("test_case_id")
+  testCase   TestCase? @relation("TestCaseNotifications", fields: [testCaseId], references: [id], onDelete: Cascade)
 
-  executionId String?          @map("execution_id")
-  execution   TestExecution?   @relation("ExecutionNotifications", fields: [executionId], references: [id], onDelete: Cascade)
+  executionId String?        @map("execution_id")
+  execution   TestExecution? @relation("ExecutionNotifications", fields: [executionId], references: [id], onDelete: Cascade)
 
-  taskId      String?          @map("task_id")
-  task        Task?            @relation("TaskNotifications", fields: [taskId], references: [id], onDelete: Cascade)
+  taskId String? @map("task_id")
+  task   Task?   @relation("TaskNotifications", fields: [taskId], references: [id], onDelete: Cascade)
 
-  proposalId  String?          @map("proposal_id")
-  proposal    Proposal?        @relation("ProposalNotifications", fields: [proposalId], references: [id], onDelete: Cascade)
+  proposalId String?   @map("proposal_id")
+  proposal   Proposal? @relation("ProposalNotifications", fields: [proposalId], references: [id], onDelete: Cascade)
 
-  metadata    Json?            @default("{}")
-  createdAt   DateTime         @default(now()) @map("created_at")
+  metadata  Json?    @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([recipientId, isRead])
   @@index([recipientId, createdAt])
   @@map("notifications")
 }
-

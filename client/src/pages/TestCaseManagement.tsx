@@ -30,13 +30,25 @@ export const TestCaseManagement: React.FC = () => {
   const [bulkReviewing, setBulkReviewing] = useState(false);
   const [pageSize, setPageSize] = useState(25);
   const [currentPage, setCurrentPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
-  const load = async () => {
+  const load = async (page = currentPage, limit = pageSize) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await testCaseApi.listForReview();
+      const res = await testCaseApi.listForReview({
+        page,
+        limit,
+        reviewStatus: filterStatus !== 'ALL' ? filterStatus : undefined,
+        module: filterModule !== 'ALL' ? filterModule : undefined,
+        suiteName: filterSuite !== 'ALL' ? filterSuite : undefined,
+        testType: filterType !== 'ALL' ? filterType : undefined,
+        priority: filterPriority !== 'ALL' ? filterPriority : undefined,
+      });
       setItems(res.data.testCases || []);
+      setTotal(res.data.total ?? 0);
+      setTotalPages(res.data.totalPages ?? 1);
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Lỗi tải danh sách kiểm duyệt');
     } finally {
@@ -45,8 +57,15 @@ export const TestCaseManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    load();
-  }, []);
+    load(1, pageSize);
+    setCurrentPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterStatus, filterModule, filterSuite, filterType, filterPriority]);
+
+  useEffect(() => {
+    load(currentPage, pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, pageSize]);
 
   const moduleOptions = useMemo(
     () => Array.from(new Set(items.map((i) => i.module).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -65,16 +84,7 @@ export const TestCaseManagement: React.FC = () => {
     [items]
   );
 
-  const filtered = useMemo(() => {
-    return items.filter((it) => {
-      if (filterStatus !== 'ALL' && it.reviewStatus !== filterStatus) return false;
-      if (filterModule !== 'ALL' && it.module !== filterModule) return false;
-      if (filterSuite !== 'ALL' && it.suiteName !== filterSuite) return false;
-      if (filterType !== 'ALL' && it.testType !== filterType) return false;
-      if (filterPriority !== 'ALL' && it.priority !== filterPriority) return false;
-      return true;
-    });
-  }, [items, filterStatus, filterModule, filterSuite, filterType, filterPriority]);
+  const filtered = items;
 
   const selectableFiltered = useMemo(
     () => filtered.filter((it) => it.reviewStatus === 'UNREVIEWED'),
@@ -127,23 +137,18 @@ export const TestCaseManagement: React.FC = () => {
     setFilterPriority('ALL');
   };
 
-  const totalFiltered = filtered.length;
-  const totalPages = pageSize === -1 ? 1 : Math.max(1, Math.ceil(totalFiltered / pageSize));
-  const safePage = Math.min(currentPage, totalPages);
+  const totalFiltered = total;
+  const safePage = currentPage;
   const startIndex = (safePage - 1) * pageSize;
-  const paginated = pageSize === -1 ? filtered : filtered.slice(startIndex, startIndex + pageSize);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filtered]);
+  const paginated = filtered;
 
   const counts = useMemo(
     () => ({
-      all: items.length,
+      all: total,
       unreviewed: items.filter((i) => i.reviewStatus === 'UNREVIEWED').length,
       reviewed: items.filter((i) => i.reviewStatus === 'REVIEWED').length,
     }),
-    [items]
+    [items, total]
   );
 
   const handleReview = async (id: string) => {

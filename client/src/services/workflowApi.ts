@@ -149,7 +149,8 @@ export const taskApi = {
 // ─── Todo API ───────────────────────────────────────────────────────────────
 
 export const todoApi = {
-  getTodos: (taskId: string) => api.get<Todo[]>(`/tasks/${taskId}/todos`),
+  getTodos: (taskId: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ todos: Todo[]; total: number; page: number; limit: number; totalPages: number }>(`/tasks/${taskId}/todos`, { params }),
 
   createTodo: (
     taskId: string,
@@ -182,7 +183,8 @@ export const todoApi = {
 // ─── Comment API ────────────────────────────────────────────────────────────
 
 export const commentApi = {
-  getComments: (taskId: string) => api.get<TaskComment[]>(`/tasks/${taskId}/comments`),
+  getComments: (taskId: string, params?: { page?: number; limit?: number }) =>
+    api.get<{ comments: TaskComment[]; total: number; page: number; limit: number; totalPages: number }>(`/tasks/${taskId}/comments`, { params }),
 
   createComment: (taskId: string, data: { content: string; files?: any[] }) =>
     api.post<{ message: string; comment: TaskComment }>(`/tasks/${taskId}/comments`, data),

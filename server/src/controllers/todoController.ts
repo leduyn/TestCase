@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { TodoService } from '../services/todoService';
+import { parsePagination, buildMeta } from '../utils/pagination';
 
 export class TodoController {
   static async createTodo(req: AuthRequest, res: Response) {
@@ -32,8 +33,9 @@ export class TodoController {
   static async getTodosByTaskId(req: AuthRequest, res: Response) {
     try {
       const { taskId } = req.params;
-      const todos = await TodoService.getTodosByTaskId(taskId);
-      return res.json(todos);
+      const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 100 });
+      const { todos, total } = await TodoService.getTodosByTaskId(taskId, { skip, take: limit });
+      return res.json({ todos, ...buildMeta(total, page, limit) });
     } catch (error: any) {
       console.error('Error fetching todos:', error);
       return res.status(500).json({ message: error.message || 'Lỗi khi lấy danh sách đầu việc' });

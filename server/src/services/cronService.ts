@@ -35,71 +35,67 @@ export class CronService {
   static async checkOverdueTasks() {
     try {
       const now = new Date();
+      const batchSize = Number(process.env.CRON_BATCH_SIZE || 100);
+      const concurrency = Number(process.env.CRON_CONCURRENCY || 10);
+      const startedAt = Date.now();
 
       const overdueTasks = await prisma.task.findMany({
         where: {
           status: TaskStatus.IN_PROGRESS,
           deadline: { lt: now },
         },
-        include: {
-          histories: { orderBy: { version: 'desc' }, take: 1 },
+        select: {
+          id: true,
+          name: true,
+          deadline: true,
+          processId: true,
+          currentStepId: true,
+          histories: { orderBy: { version: 'desc' }, take: 1, select: { version: true } },
           process: { select: { id: true, name: true } },
-          currentStep: true,
-          todos: true,
-          comments: true,
+          currentStep: { select: { id: true, name: true } },
         },
+        orderBy: { deadline: 'asc' },
+        take: batchSize,
       });
 
       if (overdueTasks.length === 0) {
         return;
       }
 
-      console.log(`🔍 Cron: Tìm thấy ${overdueTasks.length} nhiệm vụ quá hạn, đang xử lý...`);
+      console.log(`🔍 Cron: Tìm thấy ${overdueTasks.length} nhiệm vụ quá hạn, xử lý theo batch (concurrency=${concurrency})...`);
 
-      for (const task of overdueTasks) {
-        const nextVersion = (task.histories[0]?.version || 1) + 1;
-
-        await prisma.$transaction(async (tx) => {
-          // 1. Cập nhật trạng thái Task sang OVERDUE
-          const updated = await tx.task.update({
-            where: { id: task.id },
-            data: {
-              status: TaskStatus.OVERDUE,
-            },
-          });
-
-          // 2. Tạo Snapshot
-          const fullTask = await tx.task.findUnique({
-            where: { id: task.id },
-            include: {
-              process: { select: { id: true, name: true } },
-              currentStep: true,
-              todos: true,
-              comments: true,
-            },
-          });
-
-          const snapshot = fullTask ? JSON.parse(JSON.stringify(fullTask)) : {};
-
-          // 3. Ghi log TaskHistory
-          await tx.taskHistory.create({
-            data: {
-              taskId: task.id,
-              version: nextVersion,
-              changeType: TaskHistoryChangeType.UPDATED,
-              changeDescription: `Hệ thống tự động chuyển trạng thái sang QUÁ HẠN (Hạn chót: ${new Date(
-                task.deadline
-              ).toLocaleString('vi-VN')})`,
-              snapshot,
-              createdById: null,
-            },
-          });
-        });
-
-        console.log(`⚠️ Đã đánh dấu quá hạn nhiệm vụ: [${task.id}] ${task.name}`);
+      for (let i = 0; i < overdueTasks.length; i += concurrency) {
+        const chunk = overdueTasks.slice(i, i + concurrency);
+        await Promise.allSettled(
+          chunk.map(async (task) => {
+            const nextVersion = (task.histories[0]?.version || 0) + 1;
+            const snapshot = JSON.parse(JSON.stringify(task));
+            await prisma.$transaction(async (tx) => {
+              await tx.task.update({
+                where: { id: task.id },
+                data: { status: TaskStatus.OVERDUE },
+              });
+              await tx.taskHistory.create({
+                data: {
+                  taskId: task.id,
+                  version: nextVersion,
+                  changeType: TaskHistoryChangeType.UPDATED,
+                  changeDescription: `Hệ thống tự động chuyển trạng thái sang QUÁ HẠN (Hạn chót: ${new Date(
+                    task.deadline
+                  ).toLocaleString('vi-VN')})`,
+                  snapshot,
+                  createdById: null,
+                },
+              });
+            });
+            console.log(`⚠️ Đã đánh dấu quá hạn nhiệm vụ: [${task.id}] ${task.name}`);
+          })
+        );
       }
 
-      console.log(`✅ Cron: Đã hoàn tất cập nhật ${overdueTasks.length} nhiệm vụ quá hạn.`);
+      console.log(
+        `✅ Cron: Đã hoàn tất cập nhật ${overdueTasks.length} nhiệm vụ quá hạn trong ${Date.now() - startedAt}ms.`
+      );
     } catch (error) {
       console.error('❌ Lỗi trong Cron Job checkOverdueTasks:', error);
     }

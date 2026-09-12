@@ -205,6 +205,10 @@ export interface SuiteDetailResponse {
   suite: TestSuite;
   testCases: TestCase[];
   unreceivedTestCases: UnreceivedTestCase[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface ReviewTestCaseItem {
@@ -336,6 +340,10 @@ export interface UserTestStatsResponse {
   canViewAll: boolean;
   totalTestCases: number;
   userStats: UserTestStat[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface StorageConfig {

@@ -53,16 +53,23 @@ export class TodoService {
   /**
    * Danh sách Todos của nhiệm vụ
    */
-  static async getTodosByTaskId(taskId: string) {
-    return await prisma.todo.findMany({
-      where: { taskId },
-      orderBy: { createdAt: 'asc' },
-      include: {
-        executor: {
-          select: { id: true, fullName: true, email: true },
+  static async getTodosByTaskId(taskId: string, options?: { skip?: number; take?: number }) {
+    const { skip, take } = options || {};
+    const [todos, total] = await Promise.all([
+      prisma.todo.findMany({
+        where: { taskId },
+        orderBy: { createdAt: 'asc' },
+        ...(skip !== undefined ? { skip } : {}),
+        ...(take !== undefined ? { take } : {}),
+        include: {
+          executor: {
+            select: { id: true, fullName: true, email: true },
+          },
         },
-      },
-    });
+      }),
+      prisma.todo.count({ where: { taskId } }),
+    ]);
+    return { todos, total };
   }
 
   /**
